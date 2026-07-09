@@ -26,10 +26,9 @@ export function handleGeminiConnection(clientWs, base64Image) {
         generationConfig: {
           responseModalities: ["TEXT"]
         },
-        // We can optionally add system instructions here to enforce the compliance rule
         systemInstruction: {
           parts: [{
-            text: "You are a chart analysis AI. You must NEVER execute trades, and NEVER say 'Buy', 'Sell', or offer direct financial advice. STRICTLY output mathematical observations only (e.g., 'Bullish Divergence detected. Support at X'). Be concise."
+            text: "You are a highly specialized chart analysis AI. 1. If the provided image is NOT a financial trading chart (e.g., it is a normal website, YouTube, etc.), you MUST strictly reply with: 'This is not a trading chart. Please provide a valid chart for analysis.' and refuse further analysis. 2. If it IS a trading chart, strictly output mathematical observations (e.g., 'Bullish Divergence detected'). NEVER execute trades, and NEVER say 'Buy' or 'Sell'."
           }]
         }
       }
@@ -60,7 +59,7 @@ export function handleGeminiConnection(clientWs, base64Image) {
                     }
                   },
                   {
-                    text: "Analyze this trading chart mathematically. Output key observations, support/resistance, and patterns. Keep it brief. Remember: No Buy/Sell recommendations."
+                    text: "Analyze this trading chart mathematically. If this is not a trading chart, state so immediately. Otherwise, output key observations, support/resistance, and patterns. Keep it brief. No Buy/Sell recommendations."
                   }
                 ]
               }
