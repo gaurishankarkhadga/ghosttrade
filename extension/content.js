@@ -11,7 +11,24 @@ const escapeHTML = (str) => {
 let hasStartedStreaming = false;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'START_ANALYSIS') {
+  if (message.type === 'INIT_UI') {
+    initUI();
+    const ui = shadowRoot.getElementById('ghosttrade-ui');
+    if (ui) {
+      ui.classList.remove('hidden');
+      // Trigger transition
+      setTimeout(() => {
+        ui.classList.remove('scale-95', 'opacity-0');
+        ui.classList.add('scale-100', 'opacity-100');
+      }, 10);
+    }
+    const loadingIndicator = shadowRoot.getElementById('loading-indicator');
+    const loadingText = shadowRoot.getElementById('loading-text');
+    const content = shadowRoot.getElementById('content');
+    if (content) content.innerHTML = '';
+    if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+    if (loadingText) loadingText.innerText = 'Capturing matrix...';
+  } else if (message.type === 'START_ANALYSIS') {
     startAnalysis(message.image);
   } else if (message.type === 'WS_OPEN') {
     if (!shadowRoot) return;
