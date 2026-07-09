@@ -50,8 +50,20 @@
     </div>
 
     <!-- AI Output Stream -->
-    <div id="content" class="text-[13px] leading-relaxed text-gray-300 space-y-4 pb-24 hidden opacity-0 transition-opacity duration-300">
+    <div id="content" class="text-[13px] leading-relaxed text-gray-300 space-y-4 pb-4 hidden opacity-0 transition-opacity duration-300">
       <!-- Content will stream here -->
+    </div>
+
+    <!-- Deep Reasoning Toggle -->
+    <div id="reasoning-container" class="hidden mt-4 pb-24 flex-col gap-3">
+      <button id="toggle-reasoning-btn" class="w-full py-2.5 bg-[#111] hover:bg-[#1A1A1A] border border-white/10 rounded text-xs font-semibold tracking-wide text-emerald-400 uppercase transition-all flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+        View Deep Reasoning
+      </button>
+      
+      <div id="reasoning-content" class="hidden p-4 bg-[#0A0A0A] border border-white/5 rounded-lg text-[12.5px] leading-relaxed text-gray-400 space-y-3 shadow-inner">
+        <!-- Module 4 will stream here -->
+      </div>
     </div>
 
   </main>

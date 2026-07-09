@@ -11,6 +11,25 @@ const escapeHTML = (str) => {
 
 document.addEventListener('DOMContentLoaded', () => {
   startProcess();
+  
+  // Toggle reasoning panel
+  document.getElementById('toggle-reasoning-btn').addEventListener('click', () => {
+    const reasoningContent = document.getElementById('reasoning-content');
+    const btn = document.getElementById('toggle-reasoning-btn');
+    if (reasoningContent.classList.contains('hidden')) {
+      reasoningContent.classList.remove('hidden');
+      btn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+        Hide Deep Reasoning
+      `;
+    } else {
+      reasoningContent.classList.add('hidden');
+      btn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+        View Deep Reasoning
+      `;
+    }
+  });
 });
 
 function startProcess() {
@@ -18,11 +37,17 @@ function startProcess() {
   const loadingText = document.getElementById('loading-text');
   const content = document.getElementById('content');
   const actionCard = document.getElementById('action-card');
+  const reasoningContainer = document.getElementById('reasoning-container');
+  const reasoningContent = document.getElementById('reasoning-content');
 
   loadingIndicator.classList.remove('hidden');
   content.classList.add('hidden');
   content.classList.remove('opacity-100');
   actionCard.classList.remove('show-action-card');
+  reasoningContainer.classList.add('hidden');
+  reasoningContainer.style.display = '';
+  reasoningContent.classList.add('hidden');
+  reasoningContent.innerHTML = '';
   
   loadingText.innerText = 'Extracting chart data...';
   cumulativeText = "";
@@ -159,8 +184,21 @@ function handleWebSocketMessage(messageData) {
       const safeText = escapeHTML(data.text || '');
       cumulativeText += safeText;
       
-      // Update main content
-      content.innerHTML = formatText(cumulativeText);
+      // Update main content and reasoning panel
+      // The em dash (—) gets escaped to &mdash; by escapeHTML, so search for the escaped version
+      const module4Marker = 'MODULE 4';
+      const splitIndex = cumulativeText.indexOf(module4Marker);
+      if (splitIndex !== -1) {
+        const mainText = cumulativeText.substring(0, splitIndex);
+        const reasoningText = cumulativeText.substring(splitIndex);
+        content.innerHTML = formatText(mainText);
+        document.getElementById('reasoning-content').innerHTML = formatText(reasoningText);
+        const rc = document.getElementById('reasoning-container');
+        rc.classList.remove('hidden');
+        rc.style.display = 'flex';
+      } else {
+        content.innerHTML = formatText(cumulativeText);
+      }
       
       // Extract Probabilities for Action Card
       const bullMatch = cumulativeText.match(/BULLISH Probability: (\d+)%/);
@@ -187,9 +225,24 @@ function handleWebSocketMessage(messageData) {
       statusPing.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
       
       // Final extraction for summary
-      const summaryMatch = cumulativeText.match(/MODULE 11 — BEGINNER DECODER[\s\S]*?(?:<br>|\n)+([\s\S]*)$/i);
-      if (summaryMatch && summaryMatch[1]) {
-        document.getElementById('action-summary').innerHTML = formatText(summaryMatch[1].trim());
+      const scenarioMarker = 'SCENARIO A';
+      const scenarioIdx = cumulativeText.indexOf(scenarioMarker);
+      if (scenarioIdx !== -1) {
+        // Extract from SCENARIO A up to SCENARIO B or MODULE 3
+        let endIdx = cumulativeText.indexOf('SCENARIO B', scenarioIdx);
+        if (endIdx === -1) endIdx = cumulativeText.indexOf('MODULE 3', scenarioIdx);
+        if (endIdx === -1) endIdx = cumulativeText.length;
+        let txt = cumulativeText.substring(scenarioIdx, endIdx);
+        // Remove the header line
+        txt = txt.replace(/SCENARIO A[^\n]*/i, '').trim();
+        txt = txt.replace(/^"|"$/g, '');
+        if (txt) {
+          document.getElementById('action-summary').innerHTML = formatText(txt);
+        } else {
+          document.getElementById('action-summary').innerText = 'Prediction ready.';
+        }
+      } else {
+        document.getElementById('action-summary').innerText = 'Prediction ready.';
       }
     }
   } catch (e) {
