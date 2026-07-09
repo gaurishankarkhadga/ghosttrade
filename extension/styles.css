@@ -1,0 +1,16 @@
+/* Tailwind is loaded via local file in content.js */
+
+/* Custom scrollbar and minor tweaks for the Shadow DOM UI */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
