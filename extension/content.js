@@ -133,7 +133,7 @@ function startAnalysis(dataUrl) {
   }
 
   chrome.storage.sync.get(['wsUrl'], (result) => {
-    const wsUrl = result.wsUrl || 'ws://localhost:5000/stream';
+    const wsUrl = result.wsUrl || 'wss://ghosttrade-test1.onrender.com/stream';
     socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
