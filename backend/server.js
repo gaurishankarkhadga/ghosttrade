@@ -44,10 +44,25 @@ const server = app.listen(PORT, () => {
   console.log(`Unbreakable Gateway listening on port ${PORT}`);
 });
 
-const wss = new WebSocketServer({ server, path: '/stream' });
+const wss = new WebSocketServer({ 
+  server, 
+  path: '/stream',
+  maxPayload: 10 * 1024 * 1024, // 10MB DoS protection limit
+  verifyClient: (info, callback) => {
+    const origin = info.origin || info.req.headers.origin;
+    // Strictly allow only Chrome Extensions or Localhost
+    if (!origin || origin.startsWith('chrome-extension://') || origin.startsWith('http://localhost')) {
+      callback(true);
+    } else {
+      console.warn(`[SECURITY] Blocked unauthorized WS connection from origin: ${origin}`);
+      callback(false, 403, 'Forbidden');
+    }
+  }
+});
 
 wss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress || 'unknown';
+  // Read from Render's load balancer forwarded header to prevent IP spoofing
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
   
   console.log(`[WS] Client connected from ${ip}`);
 

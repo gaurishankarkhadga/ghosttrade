@@ -143,12 +143,24 @@ function startAnalysis(dataUrl) {
 
     let hasStartedStreaming = false;
 
+    // Sanitize incoming data to prevent DOM-based XSS
+    const escapeHTML = (str) => {
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+      }[tag] || tag));
+    };
+
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.status === 'error') {
           loadingIndicator.classList.add('hidden');
-          content.innerHTML += `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[SYSTEM FAULT] ${data.message}</div>`;
+          const safeMessage = escapeHTML(data.message || '');
+          content.innerHTML += `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[SYSTEM FAULT] ${safeMessage}</div>`;
         } else if (data.status === 'update') {
           if (!hasStartedStreaming) {
             loadingIndicator.classList.add('hidden');
@@ -158,8 +170,9 @@ function startAnalysis(dataUrl) {
           
           // Use marked.js or basic parsing if needed, or just append formatted
           const textSpan = document.createElement('span');
+          const safeText = escapeHTML(data.text || '');
           // Handle basic bold syntax from gemini: **text**
-          let formattedText = data.text.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
+          let formattedText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
           textSpan.innerHTML = formattedText;
           content.appendChild(textSpan);
           content.parentElement.scrollTop = content.parentElement.scrollHeight;
