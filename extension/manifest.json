@@ -5,7 +5,6 @@
   "description": "Invisible on-demand UI overlay.",
   "permissions": [
     "activeTab",
-    "scripting",
     "storage"
   ],
   "host_permissions": [
@@ -19,6 +18,7 @@
   "options_page": "options.html",
   "action": {
     "default_title": "Analyze Chart",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -27,17 +27,5 @@
   },
   "background": {
     "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"]
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["styles.css", "tailwind.min.css"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }
