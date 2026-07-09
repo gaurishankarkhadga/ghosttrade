@@ -8,11 +8,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function initUI() {
-  if (document.getElementById('sotix-overlay-container')) {
+  if (document.getElementById('ghosttrade-overlay-container')) {
     return;
   }
   const container = document.createElement('div');
-  container.id = 'sotix-overlay-container';
+  container.id = 'ghosttrade-overlay-container';
   container.style.position = 'fixed';
   container.style.top = '20px';
   container.style.right = '20px';
@@ -33,7 +33,7 @@ function initUI() {
   shadowRoot.appendChild(link);
   
   const ui = document.createElement('div');
-  ui.id = 'sotix-ui';
+  ui.id = 'ghosttrade-ui';
   ui.className = 'hidden flex flex-col gap-4 p-5 rounded-2xl bg-gray-900 bg-opacity-80 backdrop-blur-xl border border-gray-700/50 text-white shadow-[0_8px_30px_rgb(0,0,0,0.4)] w-[360px] font-sans pointer-events-auto transition-all duration-300 transform scale-95 opacity-0';
   ui.style.position = 'absolute';
   ui.style.top = '0px';
@@ -45,7 +45,7 @@ function initUI() {
         <div class="relative flex items-center justify-center w-6 h-6 rounded-full bg-gray-800 border border-gray-600">
           <div class="absolute w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></div>
         </div>
-        <h2 class="text-[17px] font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent tracking-wide">Sotix AI Nexus</h2>
+        <h2 class="text-[17px] font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent tracking-wide">Ghosttrade</h2>
       </div>
       <button id="close-btn" class="p-1 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-gray-500">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -110,7 +110,7 @@ function initUI() {
 
 function startAnalysis(dataUrl) {
   initUI();
-  const ui = shadowRoot.getElementById('sotix-ui');
+  const ui = shadowRoot.getElementById('ghosttrade-ui');
   const content = shadowRoot.getElementById('content');
   const loadingIndicator = shadowRoot.getElementById('loading-indicator');
   const loadingText = shadowRoot.getElementById('loading-text');
