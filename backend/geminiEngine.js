@@ -6,9 +6,7 @@ export async function handleGeminiConnection(clientWs, base64Image) {
     return;
   }
 
-  // Use Gemini 2.5 Pro for maximum reasoning depth — the most powerful model available
-  const modelName = 'models/gemini-2.5-pro';
-  const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:streamGenerateContent?key=${API_KEY}&alt=sse`;
+  // We will define the models to try dynamically below.
 
   const SYSTEM_PROMPT = `You are GHOSTTRADE ENGINE v3.0 — the world's most advanced AI-powered quantitative trading intelligence system. You operate at the level of a Goldman Sachs / Citadel quantitative strategist with 25+ years of live market experience across equities, derivatives, forex, and crypto. Your analysis is so precise that a person who has NEVER traded before can read your output and operate with the confidence of a 10-year veteran trader.
 
@@ -219,17 +217,43 @@ Use analogies if needed. Example:
     ]
   };
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+  let response = null;
+  let errorText = '';
+  const modelsToTry = ['models/gemini-2.5-pro', 'models/gemini-1.5-pro'];
 
-    if (!response.ok) {
-      const errorText = await response.text();
+  try {
+    for (const model of modelsToTry) {
+      const targetUrl = `https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${API_KEY}&alt=sse`;
+      
+      response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        break; // Success, proceed to stream parsing
+      }
+
+      errorText = await response.text();
+      
+      if (response.status === 429) {
+        console.warn(`[GEMINI] 429 Rate Limit or Quota Exceeded for ${model}. Trying next model...`);
+        continue;
+      } else {
+        break; // Not a rate limit error, break out
+      }
+    }
+
+    if (!response || !response.ok) {
       console.error('[GEMINI] API Error:', errorText);
-      clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion or invalid request.' }));
+      
+      let errorMessage = 'API Congestion or invalid request.';
+      if (response && response.status === 429) {
+        errorMessage = 'AI Quota Exceeded. The daily free limit for AI requests has been reached. Please try again later or upgrade your plan.';
+      }
+      
+      clientWs.send(JSON.stringify({ status: 'error', message: errorMessage }));
       return;
     }
 
