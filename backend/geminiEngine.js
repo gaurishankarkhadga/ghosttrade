@@ -216,10 +216,9 @@ Use analogies if needed. Example:
       }
     ]
   };
-
   let response = null;
   let errorText = '';
-  const modelsToTry = ['models/gemini-2.5-pro', 'models/gemini-1.5-pro'];
+  const modelsToTry = ['models/gemini-2.5-pro', 'models/gemini-2.5-flash'];
 
   try {
     for (const model of modelsToTry) {
