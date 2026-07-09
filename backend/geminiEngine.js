@@ -1,10 +1,4 @@
-import WebSocket from 'ws';
-
-const GEMINI_HOST = 'generativelanguage.googleapis.com';
-const GEMINI_PATH = '/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const MODEL = 'models/gemini-2.0-flash-exp'; // Required model for Multimodal Live API (bidiGenerateContent)
-
-export function handleGeminiConnection(clientWs, base64Image) {
+export async function handleGeminiConnection(clientWs, base64Image) {
   const API_KEY = process.env.GEMINI_API_KEY;
 
   if (!API_KEY) {
@@ -12,104 +6,102 @@ export function handleGeminiConnection(clientWs, base64Image) {
     return;
   }
 
-  const geminiWsUrl = `wss://${GEMINI_HOST}${GEMINI_PATH}?key=${API_KEY}`;
+  const modelName = 'models/gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:streamGenerateContent?key=${API_KEY}&alt=sse`;
 
-  const geminiWs = new WebSocket(geminiWsUrl);
-
-  geminiWs.on('open', () => {
-    console.log('[GEMINI] WebSocket Connection Opened. Sending setup message...');
-
-   
-    const setupMessage = {
-      setup: {
-        model: MODEL,
-        generationConfig: {
-          responseModalities: ["TEXT"]
-        },
-        systemInstruction: {
-          parts: [{
-            text: "You are a highly specialized chart analysis AI. 1. If the provided image is NOT a financial trading chart (e.g., it is a normal website, YouTube, etc.), you MUST strictly reply with: 'This is not a trading chart. Please provide a valid chart for analysis.' and refuse further analysis. 2. If it IS a trading chart, strictly output mathematical observations (e.g., 'Bullish Divergence detected'). NEVER execute trades, and NEVER say 'Buy' or 'Sell'."
-          }]
-        }
+  const payload = {
+    systemInstruction: {
+      parts: [{
+        text: "You are a highly specialized chart analysis AI. 1. If the provided image is NOT a financial trading chart (e.g., it is a normal website, YouTube, etc.), you MUST strictly reply with: 'This is not a trading chart. Please provide a valid chart for analysis.' and refuse further analysis. 2. If it IS a trading chart, strictly output mathematical observations (e.g., 'Bullish Divergence detected'). NEVER execute trades, and NEVER say 'Buy' or 'Sell'."
+      }]
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Image
+            }
+          },
+          {
+            text: "Analyze this trading chart mathematically. If this is not a trading chart, state so immediately. Otherwise, output key observations, support/resistance, and patterns. Keep it brief. No Buy/Sell recommendations."
+          }
+        ]
       }
-    };
+    ]
+  };
 
-    geminiWs.send(JSON.stringify(setupMessage));
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  geminiWs.on('message', (data) => {
-    try {
-      const response = JSON.parse(data.toString());
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[GEMINI] API Error:', errorText);
+      clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion or invalid request.' }));
+      return;
+    }
 
-      // Wait for setupComplete
-      if (response.setupComplete) {
-        console.log('[GEMINI] Setup complete. Sending image payload...');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
 
-        // Send the chart payload wrapped in realtimeInput schema
-        const clientContent = {
-          clientContent: {
-            turns: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: "image/jpeg",
-                      data: base64Image
-                    }
-                  },
-                  {
-                    text: "Analyze this trading chart mathematically. If this is not a trading chart, state so immediately. Otherwise, output key observations, support/resistance, and patterns. Keep it brief. No Buy/Sell recommendations."
-                  }
-                ]
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line in buffer
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.trim().slice(6);
+          if (dataStr === '[DONE]') continue;
+          if (!dataStr) continue;
+          
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+              for (const part of data.candidates[0].content.parts) {
+                if (part.text) {
+                  clientWs.send(JSON.stringify({ status: 'update', text: part.text }));
+                }
               }
-            ],
-            turnComplete: true
-          }
-        };
-
-        geminiWs.send(JSON.stringify(clientContent));
-        return;
-      }
-
-      // Handle server content chunks
-      if (response.serverContent && response.serverContent.modelTurn) {
-        const parts = response.serverContent.modelTurn.parts;
-        for (const part of parts) {
-          if (part.text) {
-            clientWs.send(JSON.stringify({ status: 'update', text: part.text }));
+            }
+          } catch (e) {
+            console.error('[GEMINI] Parse error on chunk:', e, 'Data string:', dataStr);
           }
         }
-
-        if (response.serverContent.turnComplete) {
-          clientWs.send(JSON.stringify({ status: 'complete' }));
-          // We can close the gemini connection if it's a one-shot analysis per click
-          geminiWs.close(1000, "Analysis complete");
-        }
       }
-    } catch (e) {
-      console.error('[GEMINI] Failed to parse message', e, data.toString());
     }
-  });
-
-  geminiWs.on('close', (code, reason) => {
-    console.log(`[GEMINI] Connection closed: ${code} ${reason}`);
-    // If it's not a normal closure, it could be a 1006 or similar
-    if (code !== 1000) {
-      clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion or disconnected. Retrying later.' }));
+    
+    // Process any remaining buffer
+    if (buffer.startsWith('data: ')) {
+       const dataStr = buffer.trim().slice(6);
+       if (dataStr && dataStr !== '[DONE]') {
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+              for (const part of data.candidates[0].content.parts) {
+                if (part.text) {
+                  clientWs.send(JSON.stringify({ status: 'update', text: part.text }));
+                }
+              }
+            }
+          } catch(e) {}
+       }
     }
-  });
 
-  geminiWs.on('error', (error) => {
-    console.error('[GEMINI] Error:', error);
-    // Self-healing error boundary
+    clientWs.send(JSON.stringify({ status: 'complete' }));
+
+  } catch (error) {
+    console.error('[GEMINI] Stream connection error:', error);
     clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion. Retrying...' }));
-  });
-
-  // Cleanup if the client disconnects before Gemini finishes
-  clientWs.on('close', () => {
-    if (geminiWs.readyState === WebSocket.OPEN) {
-      geminiWs.close(1000, "Client disconnected");
-    }
-  });
+  }
 }
