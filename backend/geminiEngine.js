@@ -24,13 +24,13 @@ export function handleGeminiConnection(clientWs, base64Image) {
       setup: {
         model: MODEL,
         generationConfig: {
-          responseModalities: ["TEXT"],
-          // We can optionally add system instructions here to enforce the compliance rule
-          systemInstruction: {
-            parts: [{
-              text: "You are a chart analysis AI. You must NEVER execute trades, and NEVER say 'Buy', 'Sell', or offer direct financial advice. STRICTLY output mathematical observations only (e.g., 'Bullish Divergence detected. Support at X'). Be concise."
-            }]
-          }
+          responseModalities: ["TEXT"]
+        },
+        // We can optionally add system instructions here to enforce the compliance rule
+        systemInstruction: {
+          parts: [{
+            text: "You are a chart analysis AI. You must NEVER execute trades, and NEVER say 'Buy', 'Sell', or offer direct financial advice. STRICTLY output mathematical observations only (e.g., 'Bullish Divergence detected. Support at X'). Be concise."
+          }]
         }
       }
     };

@@ -6,19 +6,21 @@ chrome.action.onClicked.addListener((tab) => {
   // Show UI instantly to eliminate perceived lag
   chrome.tabs.sendMessage(tab.id, { type: 'INIT_UI' }).catch(() => {});
 
-  // Capture the visible tab invisibly at the V8 engine level (lower quality for faster encoding)
-  chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 50 }, (dataUrl) => {
-    if (chrome.runtime.lastError) {
-      console.error('Stealth Capture Error:', chrome.runtime.lastError);
-      return;
-    }
+  // Wait 100ms to allow the INIT_UI message to be processed and render before the V8 thread locks up capturing the screen
+  setTimeout(() => {
+    chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 50 }, (dataUrl) => {
+      if (chrome.runtime.lastError) {
+        console.error('Stealth Capture Error:', chrome.runtime.lastError);
+        return;
+      }
 
-    // Send the captured image to the isolated UI injector
-    chrome.tabs.sendMessage(tab.id, {
-      type: 'START_ANALYSIS',
-      image: dataUrl
-    }).catch(() => {});
-  });
+      // Send the captured image to the isolated UI injector
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'START_ANALYSIS',
+        image: dataUrl
+      }).catch(() => {});
+    });
+  }, 100);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
