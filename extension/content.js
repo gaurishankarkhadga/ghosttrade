@@ -1,9 +1,66 @@
 let shadowRoot = null;
 let socket = null;
 
+// Sanitize incoming data to prevent DOM-based XSS
+const escapeHTML = (str) => {
+  return str.replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[tag] || tag));
+};
+
+let hasStartedStreaming = false;
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'START_ANALYSIS') {
     startAnalysis(message.image);
+  } else if (message.type === 'WS_OPEN') {
+    if (!shadowRoot) return;
+    const loadingText = shadowRoot.getElementById('loading-text');
+    if (loadingText) loadingText.innerText = 'Secure Channel Established. Analyzing Matrix...';
+  } else if (message.type === 'WS_MESSAGE') {
+    if (!shadowRoot) return;
+    const content = shadowRoot.getElementById('content');
+    const loadingIndicator = shadowRoot.getElementById('loading-indicator');
+    
+    try {
+      const data = JSON.parse(message.data);
+      if (data.status === 'error') {
+        if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        const safeMessage = escapeHTML(data.message || '');
+        if (content) content.innerHTML += `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[SYSTEM FAULT] ${safeMessage}</div>`;
+      } else if (data.status === 'update') {
+        if (!hasStartedStreaming) {
+          if (loadingIndicator) loadingIndicator.classList.add('hidden');
+          hasStartedStreaming = true;
+          if (content) content.innerHTML = '<div class="font-mono text-emerald-400 text-xs mb-2 opacity-75">>> INCOMING STREAM: DECRYPTED</div>';
+        }
+        
+        if (content) {
+          const textSpan = document.createElement('span');
+          const safeText = escapeHTML(data.text || '');
+          let formattedText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
+          textSpan.innerHTML = formattedText;
+          content.appendChild(textSpan);
+          content.parentElement.scrollTop = content.parentElement.scrollHeight;
+        }
+      } else if (data.status === 'complete') {
+        if (content) content.innerHTML += '<div class="font-mono text-gray-500 text-xs mt-3 pt-2 border-t border-gray-700/30 opacity-75">>> STREAM TERMINATED</div>';
+      }
+    } catch (e) {
+      console.error('Failed to parse WS message', e);
+    }
+  } else if (message.type === 'WS_ERROR') {
+    if (!shadowRoot) return;
+    const loadingIndicator = shadowRoot.getElementById('loading-indicator');
+    const content = shadowRoot.getElementById('content');
+    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+    if (content) content.innerHTML = `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[ERROR] Core link severed. Verify backend sequence.</div>`;
+  } else if (message.type === 'WS_CLOSE') {
+    if (!shadowRoot) return;
+    const loadingIndicator = shadowRoot.getElementById('loading-indicator');
+    if (message.code !== 1000 && !hasStartedStreaming) {
+      if (loadingIndicator) loadingIndicator.classList.add('hidden');
+    }
   }
 });
 
@@ -101,10 +158,7 @@ function initUI() {
     setTimeout(() => {
       ui.classList.add('hidden');
     }, 300);
-    if (socket) {
-      socket.close();
-      socket = null;
-    }
+    chrome.runtime.sendMessage({ type: 'DISCONNECT_WS' });
   });
 }
 
@@ -128,72 +182,6 @@ function startAnalysis(dataUrl) {
 
   const base64Data = dataUrl.split(',')[1];
 
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.close();
-  }
-
-  chrome.storage.sync.get(['wsUrl'], (result) => {
-    const wsUrl = result.wsUrl || 'wss://ghosttrade-test1.onrender.com/stream';
-    socket = new WebSocket(wsUrl);
-
-    socket.onopen = () => {
-      loadingText.innerText = 'Secure Channel Established. Analyzing Matrix...';
-      socket.send(JSON.stringify({ type: 'image_payload', image: base64Data }));
-    };
-
-    let hasStartedStreaming = false;
-
-    // Sanitize incoming data to prevent DOM-based XSS
-    const escapeHTML = (str) => {
-      return str.replace(/[&<>'"]/g, tag => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        "'": '&#39;',
-        '"': '&quot;'
-      }[tag] || tag));
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.status === 'error') {
-          loadingIndicator.classList.add('hidden');
-          const safeMessage = escapeHTML(data.message || '');
-          content.innerHTML += `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[SYSTEM FAULT] ${safeMessage}</div>`;
-        } else if (data.status === 'update') {
-          if (!hasStartedStreaming) {
-            loadingIndicator.classList.add('hidden');
-            hasStartedStreaming = true;
-            content.innerHTML = '<div class="font-mono text-emerald-400 text-xs mb-2 opacity-75">>> INCOMING STREAM: DECRYPTED</div>';
-          }
-          
-          // Use marked.js or basic parsing if needed, or just append formatted
-          const textSpan = document.createElement('span');
-          const safeText = escapeHTML(data.text || '');
-          // Handle basic bold syntax from gemini: **text**
-          let formattedText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
-          textSpan.innerHTML = formattedText;
-          content.appendChild(textSpan);
-          content.parentElement.scrollTop = content.parentElement.scrollHeight;
-        } else if (data.status === 'complete') {
-          content.innerHTML += '<div class="font-mono text-gray-500 text-xs mt-3 pt-2 border-t border-gray-700/30 opacity-75">>> STREAM TERMINATED</div>';
-        }
-      } catch (e) {
-        console.error('Failed to parse WS message', e);
-      }
-    };
-
-    socket.onerror = (error) => {
-      loadingIndicator.classList.add('hidden');
-      content.innerHTML = `<div class="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 font-mono text-xs">\n[ERROR] Core link severed. Verify backend sequence.</div>`;
-    };
-
-    socket.onclose = (event) => {
-      if (event.code !== 1000) {
-        if (!hasStartedStreaming) loadingIndicator.classList.add('hidden');
-        // Connection closed unexpectedly
-      }
-    };
-  });
+  hasStartedStreaming = false;
+  chrome.runtime.sendMessage({ type: 'CONNECT_WS', image: base64Data });
 }
