@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 
 const GEMINI_HOST = 'generativelanguage.googleapis.com';
 const GEMINI_PATH = '/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const MODEL = 'models/gemini-2.5-flash'; // Or gemini-3.1-flash-live-preview if permitted
+const MODEL = 'models/gemini-2.0-flash-exp'; // Required model for Multimodal Live API (bidiGenerateContent)
 
 export function handleGeminiConnection(clientWs, base64Image) {
   const API_KEY = process.env.GEMINI_API_KEY;
