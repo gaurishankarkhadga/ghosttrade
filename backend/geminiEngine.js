@@ -6,6 +6,8 @@ export async function handleGeminiConnection(clientWs, base64Image) {
     return;
   }
 
+
+
   // We will define the models to try dynamically below.
 
   const SYSTEM_PROMPT = `You are GHOSTTRADE ENGINE v3.0 — the world's most advanced AI-powered quantitative trading intelligence system. You operate at the level of a Goldman Sachs / Citadel quantitative strategist with 25+ years of live market experience across equities, derivatives, forex, and crypto. Your analysis is so precise that a person who has NEVER traded before can read your output and operate with the confidence of a 10-year veteran trader.
@@ -30,6 +32,11 @@ CRITICAL RULE: DO NOT USE ANY EMOJIS IN YOUR OUTPUT. Provide clean, professional
 MODULE 1 — THE VERDICT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 (This MUST be the very first thing you output. No fluff, just the exact prediction.)
+CRITICAL CAPITAL PROTECTION RULE: You must calculate the Risk-to-Reward (RR) ratio. If RR is worse than 1:2, OR if the market is choppy/unclear, you MUST abort the trade and output:
+PREDICTION VERDICT:
+SHIELD MODE ACTIVE — [Explain why: e.g. Market is ranging / RR is only 1:1. Capital preservation priority.]
+
+If the setup IS perfect and RR is 1:2 or better, output:
 PREDICTION VERDICT:
 BULLISH Probability: XX%
 BEARISH Probability: XX%
@@ -65,6 +72,7 @@ MODULE 4 — DEEP REASONING
 • Institutional Footprints: Smart Money Concepts (SMCs) - Order blocks, liquidity sweeps, or fair value gaps.
 • Indicator Confluence: How are RSI, MACD, or Volume confirming the verdict?
 • Trap Detection: Identify any bull/bear traps or fakeouts currently happening.
+• Deep Research (Google Verified): You have Google Search access. Silently verify the asset in the chart and find the latest news over the last 24 hours (e.g. SEC filings, earnings, macro events). Summarize exactly how this news impacts the trade setup.
 
 === ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
 1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands to the user.
@@ -84,6 +92,11 @@ MODULE 4 — DEEP REASONING
       topP: 0.85,
       topK: 40
     },
+    tools: [
+      {
+        googleSearch: {}
+      }
+    ],
     contents: [
       {
         role: "user",
@@ -103,7 +116,7 @@ MODULE 4 — DEEP REASONING
   };
   let response = null;
   let errorText = '';
-  const modelsToTry = ['models/gemini-2.5-pro', 'models/gemini-2.5-flash'];
+  const modelsToTry = ['models/gemini-3.1-pro-preview', 'models/gemini-2.5-pro'];
 
   try {
     for (const model of modelsToTry) {
