@@ -23,6 +23,16 @@
       </span>
       <span class="gt-status-label" id="status-label">Standby</span>
     </div>
+    <!-- Phase 3 Calibration Button -->
+    <button id="calibration-btn" class="toolbar-btn" title="View Calibration History" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; margin-left: 10px; padding: 4px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+    </button>
   </header>
 
   <!-- Main Scrollable Content -->
@@ -36,6 +46,52 @@
         <div class="gt-loading-sub" id="loading-text">Extracting chart data...</div>
       </div>
     </div>
+
+    <!-- ========================================== -->
+  <!-- CALIBRATION HISTORY PANEL (PHASE 3)          -->
+  <!-- ========================================== -->
+  <div id="calibration-panel" class="side-panel hidden">
+    <div class="panel-header">
+      <h3 class="panel-title">System Calibration</h3>
+      <button class="close-panel-btn">✕</button>
+    </div>
+    
+    <div class="panel-body">
+      <p class="text-xs text-[var(--text-muted)] mb-4">
+        Ghosttrade tracks every prediction it makes and compares its stated confidence against actual market outcomes.
+      </p>
+
+      <div class="calibration-controls mb-4 flex justify-between items-center">
+        <span class="text-xs font-semibold text-[var(--text-main)]">Lookback Window</span>
+        <select id="calib-window-select" class="bg-[var(--bg-dark)] border border-[var(--border)] text-[var(--text-main)] text-xs rounded px-2 py-1 outline-none">
+          <option value="30">30 Days</option>
+          <option value="90" selected>90 Days</option>
+          <option value="365">365 Days</option>
+        </select>
+      </div>
+
+      <div id="calibration-summary" class="mb-4 bg-[var(--bg-card)] p-3 rounded border border-[var(--border)] hidden">
+        <div class="flex justify-between items-center">
+          <div class="text-xs text-[var(--text-muted)]">Total Signals</div>
+          <div id="calib-total-signals" class="text-sm font-mono text-[var(--text-main)]">0</div>
+        </div>
+        <div class="flex justify-between items-center mt-2">
+          <div class="text-xs text-[var(--text-muted)]">Mean Calibration Error</div>
+          <div id="calib-mean-error" class="text-sm font-mono text-[var(--text-main)]">0.0%</div>
+        </div>
+        <div id="calib-warning" class="mt-2 text-[10px] text-[var(--amber)] hidden"></div>
+      </div>
+
+      <div id="calibration-curve-container" class="space-y-3">
+        <!-- Curve rows injected here by popup.js -->
+        <div class="text-center text-xs text-[var(--text-muted)] py-4">Loading calibration data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- REASONING PANEL (SIDEBAR)                    -->
+  <!-- ========================================== -->
 
     <!-- AI Output Stream (Modules 1-3) -->
     <div id="content" class="gt-content hidden">
@@ -90,6 +146,57 @@
 
     <div class="gt-summary-box">
       <p id="action-summary">Analyzing market structure...</p>
+    </div>
+
+    <!-- §2.1 — Paper Trade Simulate Button -->
+    <button id="simulate-btn" class="gt-simulate-btn hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      <span>Simulate Setup</span>
+    </button>
+  </div>
+
+  <!-- §2.1 — Virtual Paper Trading Panel -->
+  <div id="paper-trade-panel" class="gt-paper-panel hidden">
+    <div class="gt-paper-header">
+      <div class="gt-paper-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>VIRTUAL EXECUTION</span>
+      </div>
+      <button id="close-paper-btn" class="gt-paper-close">&times;</button>
+    </div>
+    
+    <div class="gt-paper-grid">
+      <div class="gt-paper-field">
+        <span class="gt-paper-label">Direction</span>
+        <span id="paper-direction" class="gt-paper-value">—</span>
+      </div>
+      <div class="gt-paper-field">
+        <span class="gt-paper-label">Entry</span>
+        <span id="paper-entry" class="gt-paper-value">—</span>
+      </div>
+      <div class="gt-paper-field">
+        <span class="gt-paper-label">Stop-Loss</span>
+        <span id="paper-sl" class="gt-paper-value">—</span>
+      </div>
+      <div class="gt-paper-field">
+        <span class="gt-paper-label">Target</span>
+        <span id="paper-target" class="gt-paper-value">—</span>
+      </div>
+    </div>
+
+    <div class="gt-paper-status" id="paper-status">
+      Setup simulated. Track your discipline.
+    </div>
+
+    <!-- Discipline Index -->
+    <div class="gt-discipline-bar">
+      <div class="gt-discipline-header">
+        <span>Discipline Index</span>
+        <span id="discipline-score" class="gt-discipline-score">0/0</span>
+      </div>
+      <div class="gt-discipline-track">
+        <div id="discipline-fill" class="gt-discipline-fill" style="width: 0%"></div>
+      </div>
     </div>
   </div>
 

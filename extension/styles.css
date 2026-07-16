@@ -364,18 +364,11 @@ body {
   padding: 10px 12px;
   background: var(--bg-surface);
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--emerald);
+  border-left: 2px solid #334155;
   display: flex;
   align-items: flex-start;
   gap: 10px;
 }
-
-.reason-card.macro    { border-left-color: var(--blue); }
-.reason-card.candle   { border-left-color: var(--amber); }
-.reason-card.smart    { border-left-color: #8B5CF6; }
-.reason-card.indicator{ border-left-color: var(--emerald); }
-.reason-card.trap     { border-left-color: var(--red); }
-.reason-card.deep-research { border-left-color: #06b6d4; }
 
 .reason-icon {
   width: 28px;
@@ -385,14 +378,9 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
 }
-
-.reason-card.macro .reason-icon     { background: var(--blue-glow); color: var(--blue); }
-.reason-card.candle .reason-icon    { background: var(--amber-glow); color: var(--amber); }
-.reason-card.smart .reason-icon     { background: rgba(139, 92, 246, 0.12); color: #8B5CF6; }
-.reason-card.indicator .reason-icon { background: var(--emerald-glow); color: var(--emerald); }
-.reason-card.trap .reason-icon      { background: var(--red-glow); color: var(--red); }
-.reason-card.deep-research .reason-icon { color: #22d3ee; background: rgba(6, 182, 212, 0.1); }
 
 .reason-icon svg {
   width: 14px;
@@ -410,16 +398,11 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   margin-bottom: 3px;
+  color: var(--text-primary);
 }
 
-.reason-card.macro .reason-title     { color: var(--blue); }
-.reason-card.candle .reason-title    { color: var(--amber); }
-.reason-card.smart .reason-title     { color: #8B5CF6; }
-.reason-card.indicator .reason-title { color: var(--emerald); }
-.reason-card.trap .reason-title      { color: var(--red); }
-
 .reason-text {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--text-secondary);
 }
@@ -431,11 +414,11 @@ body {
   left: 0;
   width: 100%;
   background: linear-gradient(to top, rgba(15, 15, 20, 1) 40%, rgba(15, 15, 20, 0.95));
-  border-top: 1px solid var(--amber);
+  border-top: 1px solid var(--red);
   padding: 14px 16px;
   transform: translateY(100%);
   transition: transform var(--transition-smooth) cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(245, 158, 11, 0.15) inset;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(239, 68, 68, 0.15) inset;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -447,7 +430,7 @@ body {
 }
 
 .shield-header {
-  color: var(--amber);
+  color: var(--red);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 700;
@@ -459,8 +442,8 @@ body {
 }
 
 @keyframes shield-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 4px var(--amber)); }
-  50% { opacity: 0.7; transform: scale(1.1); filter: drop-shadow(0 0 10px var(--amber)); }
+  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 4px var(--red)); }
+  50% { opacity: 0.7; transform: scale(1.1); filter: drop-shadow(0 0 10px var(--red)); }
 }
 
 .shield-icon {
@@ -470,12 +453,12 @@ body {
 }
 
 .shield-reason {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-sm);
   padding: 12px;
   font-size: 13px;
-  color: #fcd34d;
+  color: var(--text-primary);
   line-height: 1.5;
   font-family: var(--font);
 }
@@ -593,3 +576,284 @@ body {
 
 /* === Utilities === */
 .hidden { display: none !important; }
+
+/* ============================================================
+   §2.1 — VIRTUAL PAPER TRADING ENGINE STYLES
+   ============================================================ */
+
+/* Simulate Button */
+.gt-simulate-btn {
+  width: 100%;
+  padding: 10px 14px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, var(--emerald-dim) 0%, rgba(16, 185, 129, 0.2) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--emerald);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all var(--transition-fast);
+}
+
+.gt-simulate-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gt-simulate-btn:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.15) 100%);
+  border-color: var(--emerald);
+  box-shadow: 0 0 20px var(--emerald-glow), inset 0 1px 0 rgba(255,255,255,0.06);
+  transform: translateY(-1px);
+}
+
+.gt-simulate-btn:active {
+  transform: translateY(0);
+}
+
+/* Paper Trading Panel */
+.gt-paper-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: linear-gradient(to top, var(--bg-base) 0%, var(--bg-surface) 100%);
+  border-top: 1px solid var(--emerald-dim);
+  padding: 14px 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: gt-slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6), 0 0 16px var(--emerald-glow) inset;
+}
+
+@keyframes gt-slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.gt-paper-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gt-paper-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--emerald);
+}
+
+.gt-paper-title svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gt-paper-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.gt-paper-close:hover {
+  color: var(--text-primary);
+}
+
+/* Paper Trade Grid */
+.gt-paper-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.gt-paper-field {
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gt-paper-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gt-paper-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gt-paper-value.bullish-val { color: var(--emerald); }
+.gt-paper-value.bearish-val { color: var(--red); }
+
+/* Paper Status */
+.gt-paper-status {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* Discipline Index */
+.gt-discipline-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gt-discipline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gt-discipline-score {
+  color: var(--emerald);
+  font-weight: 700;
+}
+
+.gt-discipline-track {
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.gt-discipline-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--emerald-dim) 0%, var(--emerald) 100%);
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--emerald-glow);
+}
+
+/* =====================================================
+   PHASE 3: Calibration Panel Styles
+   ===================================================== */
+.side-panel {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 100%;
+  height: calc(100% - 50px);
+  background: var(--bg-surface);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(0);
+  border-left: 1px solid var(--border-medium);
+}
+
+.side-panel.hidden {
+  transform: translateX(100%);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-medium);
+  background: var(--bg-surface);
+}
+
+.panel-title {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.close-panel-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.close-panel-btn:hover {
+  color: var(--text-primary);
+}
+
+.panel-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Fix dropdown options being white in Chrome */
+.side-panel select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.flex { display: flex; }
+.justify-between { justify-content: space-between; }
+.items-center { align-items: center; }
+.space-x-2 > * + * { margin-left: 0.5rem; }
+.space-y-3 > * + * { margin-top: 0.75rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.p-2 { padding: 0.5rem; }
+.p-3 { padding: 0.75rem; }
+.w-1\/3 { width: 33.333333%; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-xs { font-size: 0.75rem; line-height: 1rem; }
+.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+.text-\[10px\] { font-size: 10px; }
+.font-semibold { font-weight: 600; }
+.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.rounded { border-radius: 0.25rem; }
+.border { border-width: 1px; }
+.outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+
+.bg-\[var\(--bg-dark\)\] { background-color: var(--bg-surface); }
+.bg-\[var\(--bg-card\)\] { background-color: var(--bg-elevated); }
+.border-\[var\(--border\)\] { border-color: var(--border-medium); }
+.text-\[var\(--text-main\)\] { color: var(--text-primary); }
+.text-\[var\(--text-muted\)\] { color: var(--text-muted); }
+.text-\[var\(--amber\)\] { color: var(--amber); }
+.text-\[var\(--red\)\] { color: var(--red); }
+.text-\[var\(--emerald\)\] { color: var(--emerald); }

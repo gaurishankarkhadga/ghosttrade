@@ -29,7 +29,92 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.remove('open');
     }
   });
+
+  // Phase 3: Calibration Panel Logic
+  const calibBtn = document.getElementById('calibration-btn');
+  const calibPanel = document.getElementById('calibration-panel');
+  const closeCalibBtn = calibPanel.querySelector('.close-panel-btn');
+  const windowSelect = document.getElementById('calib-window-select');
+
+  if (calibBtn) {
+    calibBtn.addEventListener('click', () => {
+      calibPanel.classList.remove('hidden');
+      loadCalibrationData();
+    });
+  }
+
+  if (closeCalibBtn) {
+    closeCalibBtn.addEventListener('click', () => {
+      calibPanel.classList.add('hidden');
+    });
+  }
+
+  if (windowSelect) {
+    windowSelect.addEventListener('change', () => {
+      loadCalibrationData();
+    });
+  }
 });
+
+async function loadCalibrationData() {
+  const container = document.getElementById('calibration-curve-container');
+  const windowDays = document.getElementById('calib-window-select').value;
+  const summaryBox = document.getElementById('calibration-summary');
+  
+  container.innerHTML = '<div class="text-center text-xs text-[var(--text-muted)] py-4">Loading calibration data...</div>';
+  
+  try {
+    const backendUrl = IS_EXTENSION ? 'http://localhost:5000' : 'http://localhost:5000';
+    const res = await fetch(`${backendUrl}/api/calibration?days=${windowDays}`);
+    const data = await res.json();
+    
+    if (data.error) throw new Error(data.message);
+
+    // Update Summary Box
+    document.getElementById('calib-total-signals').innerText = data.totalSignals;
+    document.getElementById('calib-mean-error').innerText = data.overallCalibrationError !== null ? `${data.overallCalibrationError}%` : 'N/A';
+    
+    const warningEl = document.getElementById('calib-warning');
+    if (data.earlyDataWarning) {
+      warningEl.innerText = data.earlyDataWarning;
+      warningEl.classList.remove('hidden');
+    } else {
+      warningEl.classList.add('hidden');
+    }
+    
+    summaryBox.classList.remove('hidden');
+
+    // Render Curve
+    container.innerHTML = '';
+    data.curve.forEach(bucket => {
+      const isNull = bucket.actual === null;
+      const actualText = isNull ? '--%' : `${bucket.actual}%`;
+      const errorText = isNull ? '' : `Error: ${bucket.error}%`;
+      const dotColor = isNull ? 'var(--text-muted)' : (bucket.error <= 10 ? 'var(--emerald)' : (bucket.error <= 20 ? 'var(--amber)' : 'var(--red)'));
+      
+      const html = `
+        <div class="bg-[var(--bg-card)] border border-[var(--border)] rounded p-2 text-xs flex justify-between items-center">
+          <div class="w-1/3">
+            <div class="text-[var(--text-muted)]">Predicted</div>
+            <div class="font-mono text-[var(--text-main)]">${bucket.bucket}</div>
+          </div>
+          <div class="w-1/3 text-center">
+            <div class="text-[var(--text-muted)]">Actual</div>
+            <div class="font-mono text-[var(--text-main)]" style="color: ${dotColor}">${actualText}</div>
+          </div>
+          <div class="w-1/3 text-right">
+            <div class="text-[var(--text-muted)]">Signals: ${bucket.n}</div>
+            <div class="font-mono ${bucket.isEarlyData ? 'text-[var(--amber)]' : 'text-[var(--text-muted)]'} text-[10px]">${errorText}</div>
+          </div>
+        </div>
+      `;
+      container.innerHTML += html;
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div class="text-center text-xs text-[var(--red)] py-4">Failed to load calibration data:<br>${escapeHTML(err.message)}</div>`;
+  }
+}
 
 function startProcess() {
   const loadingIndicator = document.getElementById('loading-indicator');
@@ -48,6 +133,12 @@ function startProcess() {
   reasoningContainer.classList.remove('visible');
   reasoningContent.classList.remove('visible');
   reasoningContent.innerHTML = '';
+
+  // Reset paper trading state
+  const simBtn = document.getElementById('simulate-btn');
+  if (simBtn) simBtn.classList.add('hidden');
+  const paperPanel = document.getElementById('paper-trade-panel');
+  if (paperPanel) paperPanel.classList.add('hidden');
 
   loadingText.innerText = 'Extracting chart data...';
   cumulativeText = "";
@@ -192,6 +283,24 @@ function formatText(text) {
   // Format Bold text
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="highlight-text">$1</strong>');
 
+  // Format Confluence Score line
+  html = html.replace(/CONFLUENCE SCORE: (\d)\/7/g, (match, score) => {
+    const s = parseInt(score);
+    const color = s >= 5 ? 'var(--emerald)' : s >= 4 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="data-point" style="margin-top:6px"><strong class="highlight-text" style="color:${color}">CONFLUENCE SCORE: ${score}/7</strong></div>`;
+  });
+
+  // Format Expected Value verdict
+  html = html.replace(/Verdict: (POSITIVE EDGE|NEGATIVE EDGE|NEUTRAL)/g, (match, verdict) => {
+    const color = verdict === 'POSITIVE EDGE' ? 'var(--emerald)' : verdict === 'NEGATIVE EDGE' ? 'var(--red)' : 'var(--amber)';
+    return `<strong class="highlight-text" style="color:${color}">Verdict: ${verdict}</strong>`;
+  });
+
+  // Format REGIME line
+  html = html.replace(/REGIME: (\S+)/g, (match, regime) => {
+    return `<strong class="highlight-text">REGIME: ${regime}</strong>`;
+  });
+
   // Format Bullets
   html = html.replace(/• (.*)/g, (match, content) => {
     return `<div class="data-point">${icons.bullet}<span>${content}</span></div>`;
@@ -226,7 +335,10 @@ function formatReasoningCards(rawText) {
     { key: 'Indicator', type: 'indicator', title: 'Indicator Confluence', icon: reasonIcons.indicator },
     { key: 'Trap', type: 'trap', title: 'Trap Detection', icon: reasonIcons.trap },
     { key: 'Fakeout', type: 'trap', title: 'Fakeout Alert', icon: reasonIcons.trap },
-    { key: 'Deep Research', type: 'deep-research', title: 'Live News Verification', icon: reasonIcons.research }
+    { key: 'Deep Research', type: 'deep-research', title: 'Live News Verification', icon: reasonIcons.research },
+    { key: 'strongest argument AGAINST', type: 'trap', title: 'Counter-Thesis', icon: reasonIcons.trap },
+    { key: 'What I might be missing', type: 'trap', title: 'Blind Spot Alert', icon: reasonIcons.trap },
+    { key: 'Confidence adjustment', type: 'indicator', title: 'Confidence Calibration', icon: reasonIcons.indicator }
   ];
 
   // Split on bullet points
@@ -309,14 +421,14 @@ function handleWebSocketMessage(messageData) {
       const safeText = escapeHTML(data.text || '');
       cumulativeText += safeText;
 
-      // Split Module 4 into reasoning panel
-      const module4Marker = 'MODULE 4';
-      const splitIndex = cumulativeText.indexOf(module4Marker);
+      // Split Module 10 (Deep Reasoning) + Module 11 (Counter-Thesis) into reasoning panel
+      const reasoningMarker = 'MODULE 10';
+      const splitIndex = cumulativeText.indexOf(reasoningMarker);
       if (splitIndex !== -1) {
         const mainText = cumulativeText.substring(0, splitIndex);
         const reasoningText = cumulativeText.substring(splitIndex);
         content.innerHTML = formatText(mainText);
-        // Render reasoning as visual cards
+        // Render reasoning + counter-thesis as visual cards
         document.getElementById('reasoning-content').innerHTML = formatReasoningCards(reasoningText);
         document.getElementById('reasoning-container').classList.add('visible');
       } else {
@@ -325,18 +437,25 @@ function handleWebSocketMessage(messageData) {
 
       // Extract Probabilities or Shield Mode for Action Card
       const shieldMatch = cumulativeText.match(/SHIELD MODE ACTIVE — (.*)/);
-      const bullMatch = cumulativeText.match(/BULLISH Probability: (\d+)%/);
-      const bearMatch = cumulativeText.match(/BEARISH Probability: (\d+)%/);
+      // Match both old format and new BASE CASE format
+      const bullMatch = cumulativeText.match(/(?:BULLISH|BASE CASE:\s*BULLISH)\s*(?:Probability:?)?\s*(\d+)%/);
+      const bearMatch = cumulativeText.match(/(?:BEARISH|BASE CASE:\s*BEARISH)\s*(?:Probability:?)?\s*(\d+)%/);
 
       if (shieldMatch) {
         document.getElementById('shield-reason').innerText = shieldMatch[1];
         document.getElementById('shield-card').classList.add('show-shield-card');
         document.getElementById('action-card').classList.remove('show-action-card');
+        // §2.1 — Hide simulate button during shield mode
+        const simBtn = document.getElementById('simulate-btn');
+        if (simBtn) simBtn.classList.add('hidden');
       } else if (bullMatch) {
         document.getElementById('bullish-prob').innerText = bullMatch[1] + '%';
         document.getElementById('action-card').classList.add('show-action-card');
         const shieldCard = document.getElementById('shield-card');
         if(shieldCard) shieldCard.classList.remove('show-shield-card');
+        // §2.1 — Show simulate button for actionable predictions
+        const simBtn = document.getElementById('simulate-btn');
+        if (simBtn) simBtn.classList.remove('hidden');
       }
       
       if (bearMatch) {
@@ -386,3 +505,170 @@ function showError(message) {
   content.classList.remove('hidden');
   content.classList.add('visible');
 }
+
+// =====================================================
+// §2.1 — VIRTUAL PAPER TRADING ENGINE
+// Zero-risk simulated execution feedback loop
+// =====================================================
+
+/**
+ * Extracts price levels from the cumulative AI analysis text.
+ * Returns { currentPrice, primaryTarget, invalidationLevel, direction }
+ */
+function extractTradeLevels(text) {
+  const currentPriceMatch = text.match(/Current Price[:\s]*\$?([\d,]+\.?\d*)/i);
+  const targetMatch = text.match(/Primary Target[:\s]*\$?([\d,]+\.?\d*)/i);
+  const invalidationMatch = text.match(/Invalidation Level[:\s]*\$?([\d,]+\.?\d*)/i);
+  const downRiskMatch = text.match(/Downside Risk[:\s]*\$?([\d,]+\.?\d*)/i);
+  const bullMatch = text.match(/BULLISH Probability:\s*(\d+)%/i);
+  const bearMatch = text.match(/BEARISH Probability:\s*(\d+)%/i);
+
+  const bullProb = bullMatch ? parseInt(bullMatch[1]) : 0;
+  const bearProb = bearMatch ? parseInt(bearMatch[1]) : 0;
+  
+  return {
+    currentPrice: currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null,
+    primaryTarget: targetMatch ? parseFloat(targetMatch[1].replace(/,/g, '')) : null,
+    invalidationLevel: invalidationMatch ? parseFloat(invalidationMatch[1].replace(/,/g, '')) : null,
+    downRisk: downRiskMatch ? parseFloat(downRiskMatch[1].replace(/,/g, '')) : null,
+    direction: bullProb > bearProb ? 'BULLISH' : 'BEARISH',
+    bullProb,
+    bearProb,
+  };
+}
+
+/**
+ * Loads the discipline index from chrome.storage.local
+ */
+function loadDisciplineIndex(callback) {
+  if (IS_EXTENSION) {
+    chrome.storage.local.get(['paperTrades', 'disciplineWins', 'disciplineTotal'], (result) => {
+      callback({
+        trades: result.paperTrades || [],
+        wins: result.disciplineWins || 0,
+        total: result.disciplineTotal || 0,
+      });
+    });
+  } else {
+    // Dev mode fallback — use localStorage
+    const wins = parseInt(localStorage.getItem('disciplineWins') || '0');
+    const total = parseInt(localStorage.getItem('disciplineTotal') || '0');
+    callback({ trades: [], wins, total });
+  }
+}
+
+/**
+ * Saves a new paper trade and updates discipline index
+ */
+function savePaperTrade(trade, callback) {
+  if (IS_EXTENSION) {
+    chrome.storage.local.get(['paperTrades', 'disciplineTotal'], (result) => {
+      const trades = result.paperTrades || [];
+      trades.push(trade);
+      // Keep only last 50 trades to prevent storage bloat
+      const trimmed = trades.slice(-50);
+      const newTotal = (result.disciplineTotal || 0) + 1;
+      chrome.storage.local.set({ 
+        paperTrades: trimmed, 
+        disciplineTotal: newTotal 
+      }, () => {
+        if (callback) callback(newTotal);
+      });
+    });
+  } else {
+    const total = parseInt(localStorage.getItem('disciplineTotal') || '0') + 1;
+    localStorage.setItem('disciplineTotal', String(total));
+    if (callback) callback(total);
+  }
+}
+
+/**
+ * Updates the discipline index display
+ */
+function updateDisciplineDisplay() {
+  loadDisciplineIndex((data) => {
+    const scoreEl = document.getElementById('discipline-score');
+    const fillEl = document.getElementById('discipline-fill');
+    if (scoreEl) scoreEl.textContent = `${data.wins}/${data.total}`;
+    if (fillEl) {
+      const percent = data.total > 0 ? Math.round((data.wins / data.total) * 100) : 0;
+      fillEl.style.width = `${percent}%`;
+    }
+  });
+}
+
+/**
+ * Shows the paper trading panel with extracted levels
+ */
+function showPaperTradePanel(levels) {
+  const panel = document.getElementById('paper-trade-panel');
+  const dirEl = document.getElementById('paper-direction');
+  const entryEl = document.getElementById('paper-entry');
+  const slEl = document.getElementById('paper-sl');
+  const targetEl = document.getElementById('paper-target');
+
+  if (!panel) return;
+
+  // Populate fields
+  dirEl.textContent = levels.direction;
+  dirEl.className = `gt-paper-value ${levels.direction === 'BULLISH' ? 'bullish-val' : 'bearish-val'}`;
+  
+  entryEl.textContent = levels.currentPrice ? `$${levels.currentPrice.toLocaleString()}` : '—';
+  
+  const slPrice = levels.invalidationLevel || levels.downRisk;
+  slEl.textContent = slPrice ? `$${slPrice.toLocaleString()}` : '—';
+  
+  targetEl.textContent = levels.primaryTarget ? `$${levels.primaryTarget.toLocaleString()}` : '—';
+
+  // Update discipline display
+  updateDisciplineDisplay();
+
+  // Show panel
+  panel.classList.remove('hidden');
+
+  // Log the paper trade
+  const trade = {
+    direction: levels.direction,
+    entry: levels.currentPrice,
+    stopLoss: slPrice,
+    target: levels.primaryTarget,
+    timestamp: new Date().toISOString(),
+    bullProb: levels.bullProb,
+    bearProb: levels.bearProb,
+  };
+
+  savePaperTrade(trade, () => {
+    updateDisciplineDisplay();
+    document.getElementById('paper-status').textContent = 
+      `Setup simulated at ${new Date().toLocaleTimeString()}. Track your discipline.`;
+  });
+}
+
+// === Wire up event listeners after DOM ready ===
+document.addEventListener('DOMContentLoaded', () => {
+  // Simulate Setup button
+  const simBtn = document.getElementById('simulate-btn');
+  if (simBtn) {
+    simBtn.addEventListener('click', () => {
+      const levels = extractTradeLevels(cumulativeText);
+      if (levels.currentPrice || levels.primaryTarget) {
+        showPaperTradePanel(levels);
+      } else {
+        document.getElementById('paper-status').textContent = 
+          'Could not extract price levels from analysis.';
+      }
+    });
+  }
+
+  // Close paper panel
+  const closeBtn = document.getElementById('close-paper-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      document.getElementById('paper-trade-panel').classList.add('hidden');
+    });
+  }
+
+  // Load discipline index on popup open
+  updateDisciplineDisplay();
+});
+

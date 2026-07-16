@@ -3,12 +3,26 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { WebSocketServer } from 'ws';
 import { handleGeminiConnection } from './geminiEngine.js';
+import { startAuditDaemon, stopAuditDaemon } from './auditDaemon.js';
+import { startRegimeMonitor, stopRegimeMonitor, registerClient } from './regimeMonitor.js';
+import { generateCalibrationReport } from './calibrationEngine.js';
+import { closeDb } from './mongoConfig.js';
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Phase 3: Calibration Endpoint
+app.get('/api/calibration', async (req, res) => {
+  const days = parseInt(req.query.days) || 90;
+  const report = await generateCalibrationReport(days);
+  if (report.error) {
+    return res.status(500).json(report);
+  }
+  res.json(report);
+});
 
 const PORT = process.env.PORT || 5000;
 
@@ -42,6 +56,12 @@ function checkRateLimit(ip) {
 
 const server = app.listen(PORT, () => {
   console.log(`Unbreakable Gateway listening on port ${PORT}`);
+  
+  // §1.2 — Start the Self-Healing Audit Daemon
+  startAuditDaemon();
+  
+  // Phase 3 — Start Real-time Regime Monitor
+  startRegimeMonitor();
 });
 
 const wss = new WebSocketServer({ 
@@ -85,7 +105,25 @@ wss.on('connection', (ws, req) => {
     }
   });
 
+  // Phase 3 — Register client for regime invalidation events
+  registerClient(ws);
+
   ws.on('close', () => {
     console.log(`[WS] Client disconnected (${ip})`);
   });
 });
+
+// === Graceful Shutdown ===
+async function gracefulShutdown(signal) {
+  console.log(`\n[SHUTDOWN] ${signal} received. Cleaning up...`);
+  stopAuditDaemon();
+  stopRegimeMonitor();
+  await closeDb();
+  server.close(() => {
+    console.log('[SHUTDOWN] Server closed');
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

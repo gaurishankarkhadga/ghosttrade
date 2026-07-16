@@ -1,3 +1,238 @@
+// =====================================================
+// GEMINI BIDIRECTIONAL LIVE STREAM ENGINE
+// Persistent WebSocket connection to Gemini BidiGenerateContent
+// Replaces stateless REST SSE polling for sub-second latency
+// =====================================================
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import WebSocket from 'ws';
+
+// Phase 3 Imports
+import { fetchOHLCV, getLogReturns } from './dataFetcher.js';
+import { calculateHurst } from './hurstEngine.js';
+import { classifyRegime } from './regimeClassifier.js';
+import { getCalibratedConfidence } from './calibrationEngine.js';
+import { computeKelly } from './kellyEngine.js';
+import { registerSignal } from './regimeMonitor.js';
+import { auditCompliance, sanitizeChunk } from './complianceFirewall.js';
+import { logSignal, getErrorVectors } from './memoryLedger.js';
+
+const MODELS = [
+  'models/gemini-2.5-pro',
+  'models/gemini-2.5-flash',
+  'models/gemini-2.0-flash'
+];
+
+const SYSTEM_PROMPT = `You are a quantitative institutional-grade analytical engine operating at hedge fund level. Your internal processing must be extraordinarily deep, but your output must remain sharp, clean, and understandable by a beginner.
+
+=== WHY YOU EXIST ===
+Most trading AI bots fail because they:
+1. Analyze ONE timeframe and ignore the macro structure
+2. Give flat probabilities without conditional logic ("70% bullish" means nothing without context)
+3. Detect patterns without checking if they are TRAPS engineered by institutions to hunt retail liquidity
+4. Ignore volume entirely — the only non-lagging truth signal
+5. Cannot identify what market REGIME they are in (trending vs ranging vs volatile vs compressed)
+6. Never stress-test their own thesis — confirmation bias kills traders
+
+You must NEVER make these mistakes. You think in conditional probability trees, not flat numbers.
+
+=== IMAGE GATE ===
+FIRST, determine if the screenshot contains a financial trading chart.
+If it is NOT a chart:
+→ Respond ONLY with: "INVALID INPUT — This is not a trading chart. Please open a live chart."
+→ STOP. Do not continue.
+
+=== GHOSTTRADE ADVANCED ANALYSIS PROTOCOL ===
+If it IS a valid trading chart, execute ALL of the following modules in strict sequential order.
+CRITICAL: DO NOT USE ANY EMOJIS. Clean text only.
+
+MODULE 1 — PREDICTION VERDICT & CONDITIONAL TREE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Do NOT give a single flat probability. Give a CONDITIONAL tree — what changes the probability:
+
+PREDICTION VERDICT:
+
+CRITICAL CAPITAL PROTECTION RULE: Calculate Risk-to-Reward. If RR is worse than 1:2, OR if the regime is RANGING/COMPRESSION without a clear directional trigger, you MUST output:
+SHIELD MODE ACTIVE — [reason]
+
+If setup is valid:
+BASE CASE: [BULLISH/BEARISH] [XX]%
+• IF [specific condition, e.g. "price holds above 64,500 OB"] → probability INCREASES to [XX]%
+• IF [specific condition, e.g. "price breaks below 63,800 liquidity pool"] → probability DROPS to [XX]% and thesis FLIPS
+• IF [specific condition, e.g. "volume confirms with above-average green bars"] → probability INCREASES to [XX]%
+Timeframe: [Intraday / Swing / Position]
+Primary Target: [price]
+Extended Target: [price]
+Downside Risk: [price]
+Invalidation Level: [exact price where thesis is DEAD]
+Risk-to-Reward Ratio: 1:[X.X]
+
+MODULE 2 — MARKET REGIME CLASSIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before analyzing ANYTHING, classify the current market regime. This determines which analytical framework applies. A trending strategy in a ranging market = guaranteed loss.
+
+Output EXACTLY:
+REGIME: [TRENDING-UP / TRENDING-DOWN / RANGING / VOLATILE-EXPANSION / COMPRESSION-SQUEEZE]
+Regime Confidence: [X]%
+Regime Evidence: [1 sentence — what visual evidence confirms this regime. e.g. "Higher highs, higher lows with expanding volume bars confirm uptrend."]
+
+MODULE 3 — MULTI-TIMEFRAME FRACTAL READ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+From the visible chart, infer what the HIGHER timeframe structure looks like. Markets are fractal — the pattern on a 15m chart exists inside a larger structure on the 4H, which exists inside the Daily. A bullish 15m inside a bearish Daily = trap.
+
+Output:
+• Visible Timeframe: [what you see, e.g. 1H]
+• Inferred Higher Structure: [what the bigger picture likely looks like based on the visible price history. e.g. "Price is at the top of a Daily range — this 1H uptrend is approaching macro resistance."]
+• Timeframe Alignment: [ALIGNED / CONFLICTING] — Does the visible trend agree with the larger structure?
+• Alignment Impact: [1 sentence on how this affects the trade. e.g. "Conflicting alignment reduces confidence by 20%."]
+
+MODULE 4 — SMART MONEY CONCEPTS SCAN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Institutions do NOT trade like retail. They engineer liquidity sweeps, create false breakouts, and fill orders through deception. Detect their footprints:
+
+• Order Blocks: [Identify the last opposing candle(s) before any impulsive move. State the price zone. e.g. "Bullish OB at 64,200-64,500 — last bearish candle before the impulsive push up."]
+• Fair Value Gaps (FVG): [Identify any 3-candle imbalance zones where price moved too fast and left untraded space. e.g. "Bullish FVG between 65,100-65,400 remains unfilled — price likely revisits this zone."]
+• Liquidity Pools: [Where are retail stop-losses likely clustered? Below swing lows (buy-side liquidity) and above swing highs (sell-side liquidity). e.g. "Sell-side liquidity resting below 63,800 — institutions may sweep this before reversing up."]
+• Liquidity Sweep Status: [Has a recent sweep already occurred? If yes, this INCREASES probability of reversal. e.g. "Price wicks below 63,800 and immediately reversed — liquidity sweep CONFIRMED. Smart money has filled."]
+• Inducement Detection: [Is there a small, tempting breakout designed to trap early retail entries? e.g. "Minor break above 66,000 on low volume = likely inducement to trap breakout traders before reversal."]
+
+MODULE 5 — VOLUME TRUTH DETECTOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Volume is the ONLY non-lagging signal. Price can lie, volume cannot. If volume bars are visible on the chart, analyze them. If not visible, state "Volume data not visible on chart" and skip to effort analysis.
+
+• Volume Trend: [Is volume increasing or decreasing with the price trend? Increasing = genuine. Decreasing = exhaustion/fake.]
+• Volume-Price Divergence: [Is price making new highs/lows while volume is declining? This is the #1 reversal warning. e.g. "Price made a higher high but volume is 40% lower than the previous push — bearish divergence. This rally is running on fumes."]
+• Climactic Volume: [Any extreme volume spikes? These signal capitulation (selling climax) or blow-off tops (buying climax). e.g. "Massive volume spike on the red candle at 62,000 = selling climax. Likely marks a temporary bottom."]
+• Effort vs Result: [Compare candle body size to volume. Large volume + small candle = absorption (big players absorbing selling pressure). Large volume + large candle = genuine momentum."]
+
+MODULE 6 — EXPECTED VALUE CALCULATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A 70% probability with 1:0.5 RR is a LOSING trade. Calculate the actual mathematical edge:
+
+Expected Value = (Win Probability × Reward) - (Loss Probability × Risk)
+
+Output:
+• Win Probability: [XX]%
+• Potential Reward: $[X] ([X]% from current price)
+• Loss Probability: [XX]%
+• Potential Risk: $[X] ([X]% from current price)
+• Expected Value per $100 risked: $[X]
+• Verdict: [POSITIVE EDGE / NEGATIVE EDGE / NEUTRAL — NO TRADE]
+
+If Expected Value is negative or less than $5 per $100 risked → recommend SHIELD MODE regardless of probability.
+
+MODULE 7 — BATTLE SCENARIOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SCENARIO A — PRIMARY (Higher Probability):
+"If price [specific condition with exact level], it will likely [move to target]. Probability: [XX]%. The KEY CONFIRMATION to watch is [specific event, e.g. 'a 1H close above 65,500 with rising volume']. Risk/Reward: 1:[X.X]."
+
+SCENARIO B — ALTERNATE (Lower Probability):
+"If price [opposite condition with exact level], the thesis FLIPS. Target becomes [price]. Probability: [XX]%. The WARNING SIGN is [specific event, e.g. 'a 4H close below the Order Block at 64,200']."
+
+SCENARIO C — TRAP SCENARIO (What kills most traders):
+"The MOST DANGEROUS scenario is [describe the specific trap, e.g. 'a false breakout above 66,000 that sweeps sell-side liquidity and reverses sharply']. How to avoid it: [specific rule, e.g. 'Wait for a retest and confirmation candle before entering — do NOT chase the breakout']."
+
+MODULE 8 — MARKET CONTEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Instrument Name & Ticker
+• Current Price
+• Chart Timeframe
+• Primary Trend (Up / Down / Flat)
+• Market Phase (Wyckoff): [Accumulation / Markup / Distribution / Markdown / Re-accumulation / Re-distribution]
+• Key Support: [price] — [WHY this level matters, e.g. "Previous swing low + Order Block confluence"]
+• Key Resistance: [price] — [WHY this level matters]
+• Nearest Liquidity Target: [price] — [Where price is likely being drawn toward]
+
+MODULE 9 — CONFLUENCE SCORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Count how many independent analytical signals AGREE with your thesis. A single signal is noise. 3+ aligned signals = genuine edge.
+
+Rate each (YES/NO):
+1. Regime alignment: [Y/N]
+2. Multi-timeframe alignment: [Y/N]
+3. Smart Money Concepts confirm (OB/FVG/sweep): [Y/N]
+4. Volume confirms: [Y/N]
+5. Expected Value is positive: [Y/N]
+6. No active trap/inducement detected: [Y/N]
+7. Key level holds (support/resistance respected): [Y/N]
+
+CONFLUENCE SCORE: [X]/7
+If score < 4/7 → recommend SHIELD MODE regardless of base probability.
+
+MODULE 10 — DEEP REASONING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+(1-line bullet points only. No paragraphs.)
+• Macro 1-Year Context: [e.g. "Bitcoin has been in a macro uptrend since Jan 2025. Current price is 15% below ATH — still in markup phase."]
+• Candlestick Psychology: [Describe the EXACT pattern, not vague. e.g. "Three consecutive doji candles at resistance = indecision. Neither side has control." NOT "Buyers are stepping in."]
+• Institutional Footprints: [Based on the SMC scan from Module 3. e.g. "Bullish Order Block at 64,200 was defended twice — institutions are protecting this level."]
+• Indicator Confluence: [If any indicators are visible on the chart — RSI, MACD, MAs. e.g. "RSI at 42 with hidden bullish divergence — momentum building beneath the surface despite flat price."]
+• Trap Detection: [Based on Module 3 inducement scan. e.g. "The minor breakout above 66,000 on declining volume is a textbook inducement trap — do NOT chase."]
+• Deep Research (Google Verified): You have Google Search access. Find the latest news in the last 24 hours for this asset. Summarize its impact on the setup in 1 sentence. You MUST state the SOURCE and DATE. Format: "[impact sentence]. (Source: [Website], Date: [Date])"
+
+MODULE 11 — COUNTER-THESIS STRESS TEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This is the most important module. ARGUE AGAINST YOUR OWN PREDICTION. What would make you WRONG? Most AI bots fail because they never challenge their own thesis.
+
+• The strongest argument AGAINST my prediction: [Be honest and specific. e.g. "The Daily timeframe shows a bearish engulfing pattern that conflicts with my bullish 1H read. If the Daily closes below 64,000, my entire thesis is invalid."]
+• What I might be missing: [e.g. "Volume is not visible on this chart — I cannot confirm if the breakout is genuine or a low-volume fake."]
+• Confidence adjustment: [After stress-testing, do you LOWER your probability? By how much? e.g. "After counter-thesis review, I reduce my bullish confidence from 72% to 65% due to the Daily-level conflict."]
+
+=== ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
+1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands.
+2. NEVER say "I think" or "maybe". State everything as structural fact with probabilities.
+3. ALWAYS give exact price values, not vague zones.
+4. DO NOT USE ANY EMOJIS EVER.
+5. Be concise. 1-line bullets. Zero fluff.
+6. If you cannot see volume bars, SAY SO. Do not invent volume data.
+7. If the chart timeframe is unclear, state your best inference and flag uncertainty.
+8. Your probability numbers MUST change based on conditions (Module 5). A flat number without conditions = system failure.
+9. A Confluence Score below 4/7 MUST trigger SHIELD MODE regardless of how bullish/bearish the chart looks.
+10. You MUST complete Module 11 (counter-thesis). Skipping it = critical failure.
+
+=== PHASE 3 COUNTER-THESIS REDUCTION RULES ===
+- If you find 1 material conflicting signal → reduce stated confidence by 10%.
+- If you find 2 material conflicting signals → reduce stated confidence by 18%.
+- If you find 3+ material conflicting signals → reduce stated confidence by 30% AND trigger SHIELD MODE.
+- "Material" = directly contradicts regime, timeframe alignment, or SMC read. Vague concerns do not count.
+- You MUST state the exact number of material conflicts found and the exact reduction applied.`;
+
+const USER_PROMPT = `EXECUTE FULL GHOSTTRADE ADVANCED PROTOCOL. All 11 modules in strict order:
+M1 REGIME → M2 MULTI-TIMEFRAME → M3 SMART MONEY → M4 VOLUME → M5 CONDITIONAL PROBABILITY → M6 EXPECTED VALUE → M7 BATTLE SCENARIOS → M8 CONTEXT → M9 CONFLUENCE SCORE → M10 DEEP REASONING → M11 COUNTER-THESIS.
+Start with MODULE 1 immediately. Every module must have concrete data, not vague statements. If you say "momentum is strong" without evidence, that is a failure. Be the analyst that institutions pay $500K/year for.`;
+
+/**
+ * Fast Phase 3 pass to extract ticker from image before main stream.
+ */
+async function extractTickerFromImage(base64Image, apiKey, model = 'models/gemini-1.5-flash') {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: "Extract the primary financial asset ticker symbol (e.g., BTC, AAPL, EURUSD) from this chart. Reply with ONLY the ticker string. If none is found, reply UNKNOWN." },
+            { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+          ]
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'UNKNOWN';
+    return text.replace(/[^A-Z0-9-]/g, '').substring(0, 10) || 'UNKNOWN';
+  } catch (e) {
+    console.warn('[GEMINI] Ticker extraction failed:', e.message);
+    return 'UNKNOWN';
+  }
+}
+
+/**
+ * Attempts to connect to Gemini via BidiGenerateContent WebSocket.
+ * Falls back to REST SSE if the bidirectional protocol fails.
+ */
 export async function handleGeminiConnection(clientWs, base64Image) {
   const API_KEY = process.env.GEMINI_API_KEY;
 
@@ -6,209 +241,337 @@ export async function handleGeminiConnection(clientWs, base64Image) {
     return;
   }
 
+  // === Phase 3: Pre-Stream Analysis (Extract Ticker -> Fetch OHLCV -> Hurst -> Regime) ===
+  const ticker = await extractTickerFromImage(base64Image, API_KEY);
+  console.log(`[PHASE 3] Extracted Ticker: ${ticker}`);
+  
+  let phase3Context = '';
+  let hurstData = null;
+  let regimeData = null;
 
+  if (ticker !== 'UNKNOWN') {
+    const dataResult = await fetchOHLCV(ticker, 300);
+    if (!dataResult.error) {
+      const returns = getLogReturns(dataResult.bars);
+      hurstData = calculateHurst(returns);
+      regimeData = classifyRegime(hurstData);
+      phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis. If SHIELD MODE is enforced here, you MUST output SHIELD MODE.\n`;
+    } else {
+      console.warn(`[PHASE 3] Data fetch failed for ${ticker}: ${dataResult.error}`);
+    }
+  }
 
-  // We will define the models to try dynamically below.
-
-  const SYSTEM_PROMPT = `You are GHOSTTRADE ENGINE v3.0 — the world's most advanced AI-powered quantitative trading intelligence system. You operate at the level of a Goldman Sachs / Citadel quantitative strategist with 25+ years of live market experience across equities, derivatives, forex, and crypto. Your analysis is so precise that a person who has NEVER traded before can read your output and operate with the confidence of a 10-year veteran trader.
-
-=== CORE PHILOSOPHY ===
-You are NOT a chatbot. You are NOT cautious. You are a PREDICTION ENGINE.
-- You commit to bold, high-conviction forecasts backed by visible chart evidence.
-- You NEVER use weak language: "might", "perhaps", "could be", "it seems", "I think" are BANNED.
-- Every statement you make is delivered as a CALCULATED FACT with a confidence percentage.
-- You are the trader's unfair advantage. Act like it.
-
-=== IMAGE GATE ===
-FIRST, determine if the screenshot contains a financial trading chart.
-If it is NOT a chart (YouTube, Google, social media, random website, settings page, etc.):
-→ Respond ONLY with: "INVALID INPUT — This is not a trading chart. Open a live chart on TradingView, Zerodha Kite, Groww, Angel One, or any broker platform and capture again."
-→ STOP. Do not continue.
-
-=== GHOSTTRADE ANALYSIS PROTOCOL ===
-If it IS a valid trading chart, execute ALL of the following modules in strict order.
-CRITICAL RULE: DO NOT USE ANY EMOJIS IN YOUR OUTPUT. Provide clean, professional text only.
-
-MODULE 1 — THE VERDICT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-(This MUST be the very first thing you output. No fluff, just the exact prediction.)
-CRITICAL CAPITAL PROTECTION RULE: You must calculate the Risk-to-Reward (RR) ratio. If RR is worse than 1:2, OR if the market is choppy/unclear, you MUST abort the trade and output:
-PREDICTION VERDICT:
-SHIELD MODE ACTIVE — [Explain why: e.g. Market is ranging / RR is only 1:1. Capital preservation priority.]
-
-If the setup IS perfect and RR is 1:2 or better, output:
-PREDICTION VERDICT:
-BULLISH Probability: XX%
-BEARISH Probability: XX%
-Timeframe: [Intraday / Swing (2-5 days) / Positional (1-4 weeks)]
-Primary Target: [price]
-Extended Target: [price]
-Downside Risk: [price]
-Invalidation Level: [price] — "If price crosses this level, this entire analysis is void."
-
-MODULE 2 — ACTION PLAN (BATTLE SCENARIOS)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SCENARIO A — PRIMARY (Higher Probability):
-"If [specific price condition], expect [specific move to specific target]. Probability: [X]%. Risk: [X points]. Reward: [X points]. RR: 1:[X]."
-
-SCENARIO B — ALTERNATE (Lower Probability):
-"If [specific price condition], expect [specific move]. Probability: [Y]%. Protective measure: [what invalidates Scenario A]."
-
-MODULE 3 — MARKET CONTEXT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Extract and display:
-• Instrument Name & Ticker
-• Current Price
-• Chart Timeframe
-• Primary Trend (STRONG BULLISH / NEUTRAL / BEARISH / etc)
-• Key Support: [price]
-• Key Resistance: [price]
-
-MODULE 4 — DEEP REASONING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-(ZERO FAULT POLICY: You must NOT hallucinate. Everything here must be mechanically derived from visible chart data).
-• Macro 1-Year Context: Analyze the largest visible timeframe/pattern (up to 1 year if visible) to contextualize the current move. If not visible, explicitly state "Macro timeframe not visible".
-• Candlestick Psychology: Analyze the last 3-5 candles mechanically. Why did they form? (e.g. "Long lower wick indicates aggressive buyer absorption at support").
-• Institutional Footprints: Smart Money Concepts (SMCs) - Order blocks, liquidity sweeps, or fair value gaps.
-• Indicator Confluence: How are RSI, MACD, or Volume confirming the verdict?
-• Trap Detection: Identify any bull/bear traps or fakeouts currently happening.
-• Deep Research (Google Verified): You have Google Search access. Silently verify the asset in the chart and find the latest news over the last 24 hours (e.g. SEC filings, earnings, macro events). Summarize exactly how this news impacts the trade setup.
-
-=== ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
-1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands to the user.
-2. NEVER say "I think", "maybe", "perhaps", "it could", "possibly". You are a MACHINE, not a human with doubts.
-3. ALWAYS give exact price values, not vague ranges.
-4. If the chart is unclear or low-conviction, your MOST POWERFUL output is: "NO CLEAR SETUP — Stay out. Wait for clarity."
-5. FORMATTING: DO NOT USE ANY EMOJIS EVER. Use strict, clean, professional text formatting.
-6. Be concise but complete. Every word must carry weight. Zero fluff.`;
-
-  const payload = {
-    systemInstruction: {
-      parts: [{ text: SYSTEM_PROMPT }]
-    },
-    generationConfig: {
-      temperature: 0.3,       // Low temperature = more deterministic, more confident predictions
-      maxOutputTokens: 8192,  // Allow deep, comprehensive analysis
-      topP: 0.85,
-      topK: 40
-    },
-    tools: [
-      {
-        googleSearch: {}
-      }
-    ],
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Image
-            }
-          },
-          {
-            text: "EXECUTE FULL GHOSTTRADE PROTOCOL. Run all 4 modules in strict order. Start with MODULE 1 THE VERDICT immediately — output the BULLISH/BEARISH probabilities and price targets first. Then MODULE 2 ACTION PLAN with battle scenarios. Then MODULE 3 MARKET CONTEXT. Then MODULE 4 DEEP REASONING with zero-fault candlestick analysis and macro context. Be precise. No fluff."
-          }
-        ]
-      }
-    ]
-  };
-  let response = null;
-  let errorText = '';
-  const modelsToTry = ['models/gemini-3.1-pro-preview', 'models/gemini-2.5-pro'];
-
+  // === §1.2 Context Reinjection: Fetch error vectors for this asset ===
+  let memoryBlock = '';
   try {
-    for (const model of modelsToTry) {
-      const targetUrl = `https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${API_KEY}&alt=sse`;
-      
-      response = await fetch(targetUrl, {
+    const errorVectors = await getErrorVectors(ticker !== 'UNKNOWN' ? ticker : null, 5);
+    if (errorVectors && errorVectors.length > 0) {
+      const vectorLines = errorVectors.map((ev, i) => `${i + 1}. "${ev.errorDescription}"`).join('\n');
+      memoryBlock = `\n\n=== INSTITUTIONAL MEMORY (PAST ERROR CORRECTIONS) ===\nYou have made these analytical mistakes before on similar assets. Factor them into your current analysis to avoid repeating them:\n${vectorLines}\nDO NOT repeat these errors. Adjust your confidence levels and structural reads accordingly.\n`;
+    }
+  } catch (e) {
+    console.warn('[MEMORY] Error vector fetch failed, proceeding without memory:', e.message);
+  }
+
+  const systemPromptWithMemory = SYSTEM_PROMPT + phase3Context + memoryBlock;
+
+  // Stream directly via robust REST SSE with Phase 3 integration
+  await streamViaRestSSE(clientWs, base64Image, API_KEY, systemPromptWithMemory, { ticker, hurstData, regimeData });
+}
+
+/**
+ * §1.1 — Bidirectional WebSocket Live Stream to Gemini
+ */
+function streamViaBidi(clientWs, base64Image, apiKey, model, systemPrompt, p3Context = {}) {
+  return new Promise((resolve) => {
+    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+    
+    let setupComplete = false;
+    let fullText = '';
+    let resolved = false;
+    
+    const safeResolve = (val) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(val);
+      }
+    };
+
+    const bidiWs = new WebSocket(wsUrl);
+    
+    // Connection timeout — if no connection in 15s, fail
+    const connectTimeout = setTimeout(() => {
+      if (!setupComplete) {
+        console.warn(`[BIDI] Connection timeout for ${model}`);
+        try { bidiWs.close(); } catch(e) {}
+        safeResolve(false);
+      }
+    }, 15000);
+    
+    bidiWs.on('open', () => {
+      bidiWs.send(JSON.stringify({
+        setup: {
+          model: model,
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { temperature: 0.3, maxOutputTokens: 8192, topP: 0.85, topK: 40, responseModalities: ['TEXT'] },
+          tools: [{ googleSearch: {} }]
+        }
+      }));
+    });
+
+    bidiWs.on('message', (rawData) => {
+      try {
+        const msg = JSON.parse(rawData.toString());
+
+        if (msg.setupComplete) {
+          clearTimeout(connectTimeout);
+          setupComplete = true;
+          bidiWs.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64Image } }, { text: USER_PROMPT }]}],
+              turnComplete: true
+            }
+          }));
+          return;
+        }
+
+        if (msg.serverContent) {
+          const parts = msg.serverContent?.modelTurn?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.text) {
+                const sanitized = sanitizeChunk(part.text);
+                fullText += sanitized;
+                clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
+              }
+            }
+          }
+        }
+
+        if (msg.serverContent && msg.serverContent.turnComplete) {
+          console.log('[GEMINI] BidiGenerateContent stream complete.');
+          executePhase3Intercept(fullText, p3Context, clientWs).then(() => {
+            clientWs.send(JSON.stringify({ status: 'complete' }));
+            bidiWs.close();
+            safeResolve(true);
+          });
+        }
+      } catch (err) {
+        console.error('[BIDI] Parse error:', err);
+      }
+    });
+
+    bidiWs.on('error', (err) => { 
+      clearTimeout(connectTimeout);
+      console.error(`[BIDI] WebSocket error for ${model}:`, err.message);
+      safeResolve(false); 
+    });
+
+    bidiWs.on('close', (code, reason) => {
+      clearTimeout(connectTimeout);
+      if (!resolved) {
+        console.log(`[BIDI] Connection closed (${code}): ${reason}`);
+        safeResolve(false);
+      }
+    });
+  });
+}
+
+// =====================================================
+// PHASE 3 — POST-STREAM INTERCEPT & LOGGING
+// =====================================================
+
+async function executePhase3Intercept(fullText, p3Context, clientWs) {
+  try {
+    const { ticker, hurstData, regimeData } = p3Context;
+    const probMatch = fullText.match(/Probability:\s*(\d{1,3})%/i) || fullText.match(/confidence.*(\d{1,3})%/i);
+    const rawConfidence = probMatch ? parseInt(probMatch[1]) : 50;
+    const rrMatch = fullText.match(/Risk\/Reward:\s*1:(\d+(?:\.\d+)?)/i);
+    const rewardRatio = rrMatch ? parseFloat(rrMatch[1]) : 1.0;
+    const riskPercent = 0.01;
+    const rewardPercent = riskPercent * rewardRatio;
+
+    let direction = 'NEUTRAL';
+    const textLower = fullText.toLowerCase();
+    if (textLower.includes('bullish') || textLower.includes('accumulation')) direction = 'BULLISH';
+    else if (textLower.includes('bearish') || textLower.includes('distribution')) direction = 'BEARISH';
+
+    const targetMatch = fullText.match(/(?:target|resistance|liquidity)[^\d]*(\d{2,}(?:,\d{3})*(?:\.\d+)?)/i);
+    const primaryTarget = targetMatch ? parseFloat(targetMatch[1].replace(/,/g, '')) : null;
+
+    const calibResult = await getCalibratedConfidence(rawConfidence);
+    const p = (calibResult.calibratedConfidence || rawConfidence) / 100;
+
+    const kellyResult = computeKelly({
+      winProbability: p,
+      rewardPercent,
+      riskPercent,
+      isCalibrated: calibResult.isCalibrated
+    });
+
+    let verdictText = `\n\nMODULE 12 — PHASE 3 SYSTEM VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    verdictText += `• Raw Model Confidence: ${rawConfidence}%\n`;
+    verdictText += `• Calibrated Confidence: ${calibResult.calibratedConfidence}% (${calibResult.note})\n`;
+    verdictText += `• Expected Value (Net of fees): ${(kellyResult.evNet).toFixed(2)}%\n`;
+    
+    if (kellyResult.action === 'SHIELD_MODE') {
+      verdictText += `• Phase 3 Override: SHIELD MODE ACTIVATED. ${kellyResult.reason}\n`;
+    } else {
+      verdictText += `• Honest Kelly Sizing: ${kellyResult.halfKelly}% of account\n`;
+    }
+
+    const sanitizedVerdict = sanitizeChunk(verdictText);
+    clientWs.send(JSON.stringify({ status: 'update', text: sanitizedVerdict }));
+    fullText += sanitizedVerdict;
+
+    const signalData = {
+      ticker: ticker || 'UNKNOWN',
+      direction,
+      rawConfidence,
+      calibratedConfidence: calibResult.calibratedConfidence,
+      hurstMean: hurstData?.meanH,
+      hurstStable: hurstData?.isStable,
+      regime: regimeData?.regime,
+      primaryTarget,
+      evNet: kellyResult.evNet,
+      kellyF: kellyResult.kellyF,
+      signalBlocked: kellyResult.action === 'SHIELD_MODE',
+      predictionSummary: fullText
+    };
+
+    const signalHash = await logSignal(signalData);
+    await auditCompliance(fullText, signalHash);
+    
+    if (signalHash && ticker && ticker !== 'UNKNOWN' && regimeData?.regime && kellyResult.action !== 'SHIELD_MODE') {
+      registerSignal(signalHash, ticker, regimeData.regime);
+    }
+  } catch (err) {
+    console.error('[PHASE 3] Post-stream intercept failed:', err.message);
+  }
+}
+
+/**
+ * Fallback: REST SSE streaming with Phase 3 integration
+ */
+async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3Context = {}) {
+  const payload = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 8192, topP: 0.85, topK: 40 },
+    tools: [{ googleSearch: {} }],
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64Image } }, { text: USER_PROMPT }] }]
+  };
+
+  let fullText = '';
+  try {
+    for (const model of MODELS) {
+      console.log(`[GEMINI] Attempting REST SSE with ${model}...`);
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${apiKey}&alt=sse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (response.ok) {
-        break; // Success, proceed to stream parsing
-      }
-
-      errorText = await response.text();
-      
-      if (response.status === 429) {
-        console.warn(`[GEMINI] 429 Rate Limit or Quota Exceeded for ${model}. Trying next model...`);
+      if (!response.ok) {
+        console.warn(`[GEMINI] ${model} failed with status: ${response.status}`);
         continue;
-      } else {
-        break; // Not a rate limit error, break out
       }
-    }
 
-    if (!response || !response.ok) {
-      console.error('[GEMINI] API Error:', errorText);
-      
-      let errorMessage = 'API Congestion or invalid request.';
-      if (response && response.status === 429) {
-        errorMessage = 'AI Quota Exceeded. The daily free limit for AI requests has been reached. Please try again later or upgrade your plan.';
-      }
-      
-      clientWs.send(JSON.stringify({ status: 'error', message: errorMessage }));
-      return;
-    }
+      console.log(`[GEMINI] Connected successfully to ${model}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete line in buffer
-      
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.trim().slice(6);
-          if (dataStr === '[DONE]') continue;
-          if (!dataStr) continue;
-          
-          try {
-            const data = JSON.parse(dataStr);
-            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-              for (const part of data.candidates[0].content.parts) {
-                if (part.text) {
-                  clientWs.send(JSON.stringify({ status: 'update', text: part.text }));
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.trim().slice(6);
+            if (dataStr === '[DONE]' || !dataStr) continue;
+            
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.candidates?.[0]?.content?.parts) {
+                for (const part of data.candidates[0].content.parts) {
+                  if (part.text) {
+                    let text = part.text;
+                    
+                    // Google API Bug Fix: The experimental 2.5 API occasionally escapes its own 
+                    // trailing JSON metadata and injects it into the final text chunk. 
+                    // We must strip it out before it hits the UI.
+                    const leakIndex = text.indexOf('"}],"role":"model"');
+                    if (leakIndex !== -1) text = text.substring(0, leakIndex);
+                    
+                    const usageIndex = text.indexOf('"usageMetadata"');
+                    if (usageIndex !== -1) text = text.substring(0, usageIndex);
+                    
+                    const sanitized = sanitizeChunk(text);
+                    fullText += sanitized;
+                    clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
+                  }
                 }
               }
+            } catch (e) {
+              console.error('[REST-SSE] Parse error on chunk:', e.message);
             }
-          } catch (e) {
-            console.error('[GEMINI] Parse error on chunk:', e, 'Data string:', dataStr);
           }
         }
       }
+      
+      console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
+      await executePhase3Intercept(fullText, p3Context, clientWs);
+      clientWs.send(JSON.stringify({ status: 'complete' }));
+      break; // Exit loop on success
     }
-    
-    // Process any remaining buffer
-    if (buffer.startsWith('data: ')) {
-       const dataStr = buffer.trim().slice(6);
-       if (dataStr && dataStr !== '[DONE]') {
-          try {
-            const data = JSON.parse(dataStr);
-            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-              for (const part of data.candidates[0].content.parts) {
-                if (part.text) {
-                  clientWs.send(JSON.stringify({ status: 'update', text: part.text }));
-                }
-              }
-            }
-          } catch(e) {}
-       }
-    }
-
-    clientWs.send(JSON.stringify({ status: 'complete' }));
-
   } catch (error) {
-    console.error('[GEMINI] Stream connection error:', error);
+    console.error('[REST-SSE] Stream connection error:', error);
     clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion. Retrying...' }));
   }
+}
+
+
+/**
+ * §1.2 — Extract prediction metadata from the completed text and log to memory ledger
+ */
+async function logPredictionFromText(fullText) {
+  if (!fullText || fullText.includes('INVALID INPUT')) return;
+
+  // Extract ticker from Module 3
+  const tickerMatch = fullText.match(/(?:Instrument|Ticker|Symbol)[:\s]*([A-Z0-9/\-]+)/i);
+  const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : 'UNKNOWN';
+
+  // Extract probabilities
+  const bullMatch = fullText.match(/BULLISH Probability:\s*(\d+)%/i);
+  const bearMatch = fullText.match(/BEARISH Probability:\s*(\d+)%/i);
+  const bullishProb = bullMatch ? parseInt(bullMatch[1]) : null;
+  const bearishProb = bearMatch ? parseInt(bearMatch[1]) : null;
+
+  // Extract price levels
+  const targetMatch = fullText.match(/Primary Target:\s*\$?([\d,]+\.?\d*)/i);
+  const invalidationMatch = fullText.match(/Invalidation Level:\s*\$?([\d,]+\.?\d*)/i);
+  const currentPriceMatch = fullText.match(/Current Price:\s*\$?([\d,]+\.?\d*)/i);
+
+  const primaryTarget = targetMatch ? parseFloat(targetMatch[1].replace(/,/g, '')) : null;
+  const invalidationLevel = invalidationMatch ? parseFloat(invalidationMatch[1].replace(/,/g, '')) : null;
+  const currentPrice = currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null;
+
+  // Only log if we have a valid prediction (not shield mode)
+  if (bullishProb === null && bearishProb === null) return;
+  if (fullText.includes('SHIELD MODE ACTIVE')) return;
+
+  await logPrediction({
+    ticker,
+    bullishProb,
+    bearishProb,
+    primaryTarget,
+    invalidationLevel,
+    currentPrice,
+    direction: bullishProb > bearishProb ? 'BULLISH' : 'BEARISH',
+    predictionSummary: fullText.substring(0, 500),
+  });
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ghosttrade",
-  "version": "1.0",
+  "version": "2.0",
   "description": "Invisible on-demand UI overlay.",
   "permissions": [
     "activeTab",
@@ -27,5 +27,30 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.tradingview.com/*",
+        "*://*.binance.com/*",
+        "*://*.coinbase.com/*",
+        "*://*.kucoin.com/*",
+        "*://*.bybit.com/*",
+        "*://*.okx.com/*",
+        "*://*.kraken.com/*",
+        "*://*.bitfinex.com/*",
+        "*://*.gate.io/*",
+        "*://*.mexc.com/*",
+        "*://*.investing.com/*",
+        "*://*.webull.com/*",
+        "*://*.etoro.com/*",
+        "*://*.zerodha.com/*",
+        "*://*.upstox.com/*",
+        "*://*.groww.in/*",
+        "*://*.dhan.co/*"
+      ],
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }

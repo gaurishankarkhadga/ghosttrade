@@ -1,16 +1,20 @@
 {
   "name": "sotix-backend",
-  "version": "1.0.0",
-  "description": "The Unbreakable Gateway",
+  "version": "2.0.0",
+  "description": "The Unbreakable Gateway — Phase 2 Evolution",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:compliance": "node test_compliance.js",
+    "test:all": "node test_compliance.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
-    "ws": "^8.18.0"
+    "mongodb": "^6.12.0",
+    "ws": "^8.18.0",
+    "yahoo-finance2": "^4.0.0"
   }
 }
