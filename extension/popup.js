@@ -14,6 +14,44 @@ const escapeHTML = (str) => {
   }[tag] || tag));
 };
 
+// =====================================================
+// ENV LOADER
+// =====================================================
+async function loadEnv() {
+  try {
+    const res = await fetch('.env');
+    const text = await res.text();
+    const env = {};
+    text.split('\n').forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        env[match[1]] = match[2];
+      }
+    });
+    return env;
+  } catch(e) {
+    console.error('Error loading .env:', e);
+    return {};
+  }
+}
+
+async function getBackendConfig() {
+  const env = await loadEnv();
+  const defaultWsUrl = env.DEFAULT_WS_URL || 'wss://ghosttrade-test1.onrender.com/stream';
+  
+  if (IS_EXTENSION) {
+    const result = await new Promise(resolve => chrome.storage.sync.get(['wsUrl'], resolve));
+    const wsUrl = result.wsUrl || defaultWsUrl;
+    let httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+    if (httpUrl.endsWith('/stream')) httpUrl = httpUrl.slice(0, -7);
+    return { wsUrl, httpUrl };
+  } else {
+    let httpUrl = defaultWsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+    if (httpUrl.endsWith('/stream')) httpUrl = httpUrl.slice(0, -7);
+    return { wsUrl: defaultWsUrl, httpUrl };
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   startProcess();
 
@@ -64,7 +102,9 @@ async function loadCalibrationData() {
   container.innerHTML = '<div class="text-center text-xs text-[var(--text-muted)] py-4">Loading calibration data...</div>';
   
   try {
-    const backendUrl = IS_EXTENSION ? 'http://localhost:5000' : 'http://localhost:5000';
+    const config = await getBackendConfig();
+    const backendUrl = config.httpUrl;
+
     const res = await fetch(`${backendUrl}/api/calibration?days=${windowDays}`);
     const data = await res.json();
     
@@ -197,22 +237,9 @@ function connectWebSocket(dataUrl) {
   const base64Data = dataUrl ? dataUrl.split(',')[1] : null;
   hasStartedStreaming = false;
 
-  // Determine WS URL
-  const getWsUrl = (callback) => {
-    if (IS_EXTENSION) {
-      chrome.storage.sync.get(['wsUrl'], (result) => {
-        // PRODUCTION CONNECTION HIDDEN FOR NOW
-        // callback(result.wsUrl || 'wss://... production url ...');
-        callback(result.wsUrl || 'ws://localhost:5000/stream');
-      });
-    } else {
-      // Local dev: connect to localhost backend
-      callback('ws://localhost:5000/stream');
-    }
-  };
-
-  getWsUrl((wsUrl) => {
-    socket = new WebSocket(wsUrl);
+  // Determine WS URL using getBackendConfig
+  getBackendConfig().then((config) => {
+    socket = new WebSocket(config.wsUrl);
 
     socket.onopen = () => {
       loadingText.innerText = 'Secure Channel Established. Analyzing...';
