@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadEnv() {
     try {
+      if (typeof chrome !== 'undefined' && chrome.tabs) return {}; // Cannot fetch local files in Chrome extension
       const res = await fetch('.env');
       const text = await res.text();
       const env = {};

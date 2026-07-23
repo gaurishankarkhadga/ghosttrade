@@ -19,6 +19,7 @@ const escapeHTML = (str) => {
 // =====================================================
 async function loadEnv() {
   try {
+    if (IS_EXTENSION) return {}; // Cannot fetch local files in Chrome extension
     const res = await fetch('.env');
     const text = await res.text();
     const env = {};
@@ -175,8 +176,8 @@ function startProcess() {
   reasoningContent.innerHTML = '';
 
   // Reset paper trading state
-  const simBtn = document.getElementById('simulate-btn');
-  if (simBtn) simBtn.classList.add('hidden');
+  const simActions = document.getElementById('simulate-actions-container');
+  if (simActions) simActions.classList.add('hidden');
   const paperPanel = document.getElementById('paper-trade-panel');
   if (paperPanel) paperPanel.classList.add('hidden');
 
@@ -206,7 +207,7 @@ function startProcess() {
       }
 
       setTimeout(() => {
-        chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 50 }, (dataUrl) => {
+        chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 85 }, (dataUrl) => {
           if (chrome.runtime.lastError) {
             console.error('Capture Error:', chrome.runtime.lastError);
             showError('Failed to capture screen.');
@@ -430,6 +431,20 @@ function handleWebSocketMessage(messageData) {
   try {
     const data = JSON.parse(messageData);
 
+    if (data.type === 'regime_invalidated') {
+      loadingIndicator.classList.add('hidden');
+      const safeMessage = escapeHTML(data.message || '');
+      content.innerHTML = `<div class="gt-error">[ALERT] ${safeMessage}</div>` + content.innerHTML;
+      content.classList.remove('hidden');
+      content.classList.add('visible');
+      // Update action card to reflect invalidation
+      const actionCard = document.getElementById('action-card');
+      if (actionCard && actionCard.classList.contains('show-action-card')) {
+        document.getElementById('simulate-btn').classList.add('hidden');
+      }
+      return;
+    }
+
     if (data.status === 'error') {
       loadingIndicator.classList.add('hidden');
       const safeMessage = escapeHTML(data.message || '');
@@ -464,29 +479,27 @@ function handleWebSocketMessage(messageData) {
 
       // Extract Probabilities or Shield Mode for Action Card
       const shieldMatch = cumulativeText.match(/SHIELD MODE ACTIVE — (.*)/);
-      // Match both old format and new BASE CASE format
-      const bullMatch = cumulativeText.match(/(?:BULLISH|BASE CASE:\s*BULLISH)\s*(?:Probability:?)?\s*(\d+)%/);
-      const bearMatch = cumulativeText.match(/(?:BEARISH|BASE CASE:\s*BEARISH)\s*(?:Probability:?)?\s*(\d+)%/);
+      // === FIXED: Match both old format and BASE CASE format ===
+      const bullMatch = cumulativeText.match(/(?:BASE\s*CASE[:\s]*BULLISH|BULLISH)\s*(?:Probability[:\s]*)?\s*(\d+)%/i);
+      const bearMatch = cumulativeText.match(/(?:BASE\s*CASE[:\s]*BEARISH|BEARISH)\s*(?:Probability[:\s]*)?\s*(\d+)%/i);
 
       if (shieldMatch) {
         document.getElementById('shield-reason').innerText = shieldMatch[1];
         document.getElementById('shield-card').classList.add('show-shield-card');
         document.getElementById('action-card').classList.remove('show-action-card');
         // §2.1 — Hide simulate button during shield mode
-        const simBtn = document.getElementById('simulate-btn');
-        if (simBtn) simBtn.classList.add('hidden');
-      } else if (bullMatch) {
-        document.getElementById('bullish-prob').innerText = bullMatch[1] + '%';
+        document.getElementById('simulate-actions-container').classList.add('hidden');
+      } else if (bullMatch || bearMatch) {
+        if (bullMatch) document.getElementById('bullish-prob').innerText = bullMatch[1] + '%';
+        if (bearMatch) document.getElementById('bearish-prob').innerText = bearMatch[1] + '%';
+        
         document.getElementById('action-card').classList.add('show-action-card');
         const shieldCard = document.getElementById('shield-card');
         if(shieldCard) shieldCard.classList.remove('show-shield-card');
-        // §2.1 — Show simulate button for actionable predictions
-        const simBtn = document.getElementById('simulate-btn');
-        if (simBtn) simBtn.classList.remove('hidden');
-      }
-      
-      if (bearMatch) {
-        document.getElementById('bearish-prob').innerText = bearMatch[1] + '%';
+        
+        // §2.1 — Show simulate actions container for actionable predictions
+        const actionsContainer = document.getElementById('simulate-actions-container');
+        if (actionsContainer) actionsContainer.classList.remove('hidden');
       }
 
       // Auto scroll to bottom
@@ -528,9 +541,18 @@ function showError(message) {
   const loadingIndicator = document.getElementById('loading-indicator');
   const content = document.getElementById('content');
   loadingIndicator.classList.add('hidden');
-  content.innerHTML = `<div class="gt-error">[ERROR] ${message}</div>`;
+  content.innerHTML = `<div class="gt-error">[ERROR] ${escapeHTML(message)}<br><br><a href="#" id="retry-btn" style="color:var(--emerald);text-decoration:underline;cursor:pointer;">Retry Connection</a></div>`;
   content.classList.remove('hidden');
   content.classList.add('visible');
+  
+  // Need to use event listener instead of inline onclick for extension CSP
+  setTimeout(() => {
+    const retryBtn = document.getElementById('retry-btn');
+    if (retryBtn) retryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      startProcess();
+    });
+  }, 10);
 }
 
 // =====================================================
@@ -543,12 +565,13 @@ function showError(message) {
  * Returns { currentPrice, primaryTarget, invalidationLevel, direction }
  */
 function extractTradeLevels(text) {
-  const currentPriceMatch = text.match(/Current Price[:\s]*\$?([\d,]+\.?\d*)/i);
-  const targetMatch = text.match(/Primary Target[:\s]*\$?([\d,]+\.?\d*)/i);
-  const invalidationMatch = text.match(/Invalidation Level[:\s]*\$?([\d,]+\.?\d*)/i);
-  const downRiskMatch = text.match(/Downside Risk[:\s]*\$?([\d,]+\.?\d*)/i);
-  const bullMatch = text.match(/BULLISH Probability:\s*(\d+)%/i);
-  const bearMatch = text.match(/BEARISH Probability:\s*(\d+)%/i);
+  const currentPriceMatch = text.match(/Current\s*Price[:\s]*\$?([\d,]+\.?\d*)/i);
+  const targetMatch = text.match(/Primary\s*Target[:\s]*\$?([\d,]+\.?\d*)/i);
+  const invalidationMatch = text.match(/Invalidation\s*(?:Level)?[:\s]*\$?([\d,]+\.?\d*)/i);
+  const downRiskMatch = text.match(/Downside\s*Risk[:\s]*\$?([\d,]+\.?\d*)/i);
+  // === FIXED: Match BASE CASE format ===
+  const bullMatch = text.match(/(?:BASE\s*CASE[:\s]*BULLISH|BULLISH)\s*(?:Probability[:\s]*)?\s*(\d+)%/i);
+  const bearMatch = text.match(/(?:BASE\s*CASE[:\s]*BEARISH|BEARISH)\s*(?:Probability[:\s]*)?\s*(\d+)%/i);
 
   const bullProb = bullMatch ? parseInt(bullMatch[1]) : 0;
   const bearProb = bearMatch ? parseInt(bearMatch[1]) : 0;
@@ -587,24 +610,28 @@ function loadDisciplineIndex(callback) {
 /**
  * Saves a new paper trade and updates discipline index
  */
-function savePaperTrade(trade, callback) {
+function savePaperTrade(trade, isDisciplined, callback) {
   if (IS_EXTENSION) {
-    chrome.storage.local.get(['paperTrades', 'disciplineTotal'], (result) => {
+    chrome.storage.local.get(['paperTrades', 'disciplineTotal', 'disciplineWins'], (result) => {
       const trades = result.paperTrades || [];
-      trades.push(trade);
+      if (trade) trades.push(trade);
       // Keep only last 50 trades to prevent storage bloat
       const trimmed = trades.slice(-50);
       const newTotal = (result.disciplineTotal || 0) + 1;
+      const newWins = (result.disciplineWins || 0) + (isDisciplined ? 1 : 0);
       chrome.storage.local.set({ 
         paperTrades: trimmed, 
-        disciplineTotal: newTotal 
+        disciplineTotal: newTotal,
+        disciplineWins: newWins
       }, () => {
         if (callback) callback(newTotal);
       });
     });
   } else {
     const total = parseInt(localStorage.getItem('disciplineTotal') || '0') + 1;
+    const wins = parseInt(localStorage.getItem('disciplineWins') || '0') + (isDisciplined ? 1 : 0);
     localStorage.setItem('disciplineTotal', String(total));
+    localStorage.setItem('disciplineWins', String(wins));
     if (callback) callback(total);
   }
 }
@@ -679,11 +706,31 @@ document.addEventListener('DOMContentLoaded', () => {
     simBtn.addEventListener('click', () => {
       const levels = extractTradeLevels(cumulativeText);
       if (levels.currentPrice || levels.primaryTarget) {
+        document.getElementById('simulate-actions-container').classList.add('hidden');
         showPaperTradePanel(levels);
       } else {
         document.getElementById('paper-status').textContent = 
           'Could not extract price levels from analysis.';
       }
+    });
+  }
+
+  // FOMO / Ignore Setup button
+  const fomoBtn = document.getElementById('fomo-btn');
+  if (fomoBtn) {
+    fomoBtn.addEventListener('click', () => {
+      document.getElementById('simulate-actions-container').classList.add('hidden');
+      savePaperTrade(null, false, () => {
+        updateDisciplineDisplay();
+        const summary = document.getElementById('action-summary');
+        const oldText = summary.innerText;
+        summary.innerText = '[LOGGED: Setup Ignored / Broken Rule]';
+        summary.style.color = 'var(--red)';
+        setTimeout(() => { 
+          summary.innerText = oldText; 
+          summary.style.color = '';
+        }, 3000);
+      });
     });
   }
 

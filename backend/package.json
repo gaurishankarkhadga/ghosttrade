@@ -1,5 +1,5 @@
 {
-  "name": "sotix-backend",
+  "name": "ghosttrade-backend",
   "version": "2.0.0",
   "description": "The Unbreakable Gateway — Phase 2 Evolution",
   "main": "server.js",

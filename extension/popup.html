@@ -148,11 +148,16 @@
       <p id="action-summary">Analyzing market structure...</p>
     </div>
 
-    <!-- §2.1 — Paper Trade Simulate Button -->
-    <button id="simulate-btn" class="gt-simulate-btn hidden">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
-      <span>Simulate Setup</span>
-    </button>
+    <!-- §2.1 — Paper Trade Actions -->
+    <div id="simulate-actions-container" class="hidden" style="display: flex; gap: 8px; margin-top: 8px;">
+      <button id="simulate-btn" class="gt-simulate-btn" style="margin-top: 0; flex: 1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        <span>Simulate Setup</span>
+      </button>
+      <button id="fomo-btn" class="gt-simulate-btn" style="margin-top: 0; flex: 1; background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%); border-color: rgba(239, 68, 68, 0.3); color: var(--red);">
+        <span>Ignored/FOMO</span>
+      </button>
+    </div>
   </div>
 
   <!-- §2.1 — Virtual Paper Trading Panel -->

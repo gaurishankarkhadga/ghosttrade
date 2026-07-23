@@ -32,6 +32,14 @@ const rateLimits = new Map();
 const MAX_REQUESTS_PER_MIN = 10;
 const RESET_INTERVAL_MS = 60 * 1000;
 
+// Cleanup expired rate limit entries every 5 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimits) {
+    if (now > record.resetTime) rateLimits.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
 function checkRateLimit(ip) {
   const now = Date.now();
   const record = rateLimits.get(ip);

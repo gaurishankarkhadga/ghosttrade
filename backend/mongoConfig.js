@@ -35,9 +35,7 @@ export async function getDb() {
     await client.connect();
     db = client.db(DB_NAME);
     
-    // Phase 2 collections
-    await db.collection('predictions').createIndex({ ticker: 1, timestamp: -1 });
-    await db.collection('predictions').createIndex({ auditDue: 1, audited: 1 });
+    // Phase 3 collections (signals replaces legacy predictions)
     await db.collection('error_vectors').createIndex({ ticker: 1, timestamp: -1 });
 
     // Phase 3 collections

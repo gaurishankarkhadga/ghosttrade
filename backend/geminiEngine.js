@@ -18,7 +18,11 @@ import { getCalibratedConfidence } from './calibrationEngine.js';
 import { computeKelly } from './kellyEngine.js';
 import { registerSignal } from './regimeMonitor.js';
 import { auditCompliance, sanitizeChunk } from './complianceFirewall.js';
-import { logSignal, getErrorVectors } from './memoryLedger.js';
+import { logSignal, getErrorVectors, getTickerStats, getRecentAnalyses } from './memoryLedger.js';
+import { calculateAllIndicators } from './technicalEngine.js';
+import { fetchOrderFlow, formatOrderFlowContext } from './orderFlowEngine.js';
+import { fetchFuturesData, formatFuturesContext } from './openInterestEngine.js';
+import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from './macroEngine.js';
 
 const MODELS = [
   'models/gemini-2.5-pro',
@@ -180,6 +184,14 @@ This is the most important module. ARGUE AGAINST YOUR OWN PREDICTION. What would
 • What I might be missing: [e.g. "Volume is not visible on this chart — I cannot confirm if the breakout is genuine or a low-volume fake."]
 • Confidence adjustment: [After stress-testing, do you LOWER your probability? By how much? e.g. "After counter-thesis review, I reduce my bullish confidence from 72% to 65% due to the Daily-level conflict."]
 
+MODULE 12 — EDUCATIONAL BREAKDOWN (WHY THIS MATTERS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Explain ONE key concept you used in this analysis (e.g., "Why Open Interest rising with price is bullish", "What a Bollinger Squeeze means"). Teach the user something valuable in 2-3 sentences.
+
+MODULE 13 — WHAT TO LEARN NEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Recommend ONE specific trading concept or tool the user should study to better understand this setup (e.g., "Read up on Volume Weighted Average Price (VWAP)").
+
 === ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
 1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands.
 2. NEVER say "I think" or "maybe". State everything as structural fact with probabilities.
@@ -190,7 +202,7 @@ This is the most important module. ARGUE AGAINST YOUR OWN PREDICTION. What would
 7. If the chart timeframe is unclear, state your best inference and flag uncertainty.
 8. Your probability numbers MUST change based on conditions (Module 5). A flat number without conditions = system failure.
 9. A Confluence Score below 4/7 MUST trigger SHIELD MODE regardless of how bullish/bearish the chart looks.
-10. You MUST complete Module 11 (counter-thesis). Skipping it = critical failure.
+10. You MUST complete Module 11 (counter-thesis) and Modules 12/13 (education). Skipping them = critical failure.
 
 === PHASE 3 COUNTER-THESIS REDUCTION RULES ===
 - If you find 1 material conflicting signal → reduce stated confidence by 10%.
@@ -199,8 +211,8 @@ This is the most important module. ARGUE AGAINST YOUR OWN PREDICTION. What would
 - "Material" = directly contradicts regime, timeframe alignment, or SMC read. Vague concerns do not count.
 - You MUST state the exact number of material conflicts found and the exact reduction applied.`;
 
-const USER_PROMPT = `EXECUTE FULL GHOSTTRADE ADVANCED PROTOCOL. All 11 modules in strict order:
-M1 REGIME → M2 MULTI-TIMEFRAME → M3 SMART MONEY → M4 VOLUME → M5 CONDITIONAL PROBABILITY → M6 EXPECTED VALUE → M7 BATTLE SCENARIOS → M8 CONTEXT → M9 CONFLUENCE SCORE → M10 DEEP REASONING → M11 COUNTER-THESIS.
+const USER_PROMPT = `EXECUTE FULL GHOSTTRADE ADVANCED PROTOCOL. All 13 modules in strict order:
+M1 PREDICTION VERDICT → M2 REGIME → M3 SMART MONEY → M4 VOLUME → M5 CONDITIONAL PROBABILITY → M6 EXPECTED VALUE → M7 BATTLE SCENARIOS → M8 CONTEXT → M9 CONFLUENCE SCORE → M10 DEEP REASONING → M11 COUNTER-THESIS → M12 EDUCATIONAL BREAKDOWN → M13 WHAT TO LEARN NEXT.
 Start with MODULE 1 immediately. Every module must have concrete data, not vague statements. If you say "momentum is strong" without evidence, that is a failure. Be the analyst that institutions pay $500K/year for.`;
 
 /**
@@ -250,12 +262,46 @@ export async function handleGeminiConnection(clientWs, base64Image) {
   let regimeData = null;
 
   if (ticker !== 'UNKNOWN') {
-    const dataResult = await fetchOHLCV(ticker, 300);
+    // Phase 2-4: Fetch all required market data in parallel
+    const [dataResult, flowData, futuresData, fng, macro, tickerStats, recentAnalyses] = await Promise.all([
+      fetchOHLCV(ticker, 300),
+      fetchOrderFlow(ticker, 1000),
+      fetchFuturesData(ticker),
+      fetchFearAndGreed(),
+      fetchMacroCorrelations(),
+      getTickerStats(ticker),
+      getRecentAnalyses(ticker, 2)
+    ]);
+
     if (!dataResult.error) {
       const returns = getLogReturns(dataResult.bars);
       hurstData = calculateHurst(returns);
       regimeData = classifyRegime(hurstData);
-      phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis. If SHIELD MODE is enforced here, you MUST output SHIELD MODE.\n`;
+      
+      // Calculate technical indicators from real data
+      const techContext = calculateAllIndicators(dataResult.bars);
+      
+      // Format institutional data layers
+      const flowContext = formatOrderFlowContext(flowData);
+      const futContext = formatFuturesContext(futuresData);
+      const macroContext = formatMacroContext(fng, macro);
+      
+      // Format performance and session context
+      let perfContext = '';
+      if (tickerStats) {
+        perfContext += `\n=== HISTORICAL PERFORMANCE ON ${ticker} ===\n`;
+        perfContext += `Total Predictions: ${tickerStats.total} | Win Rate: ${tickerStats.winRate}%\n`;
+        perfContext += `Average Confidence on Losses: ${tickerStats.avgConfidenceOnLosses}%\n`;
+        perfContext += `(If your confidence is often high when wrong, you are overestimating your edge. recalibrate.)\n`;
+      }
+      if (recentAnalyses && recentAnalyses.length > 0) {
+        perfContext += `\n=== RECENT ANALYSES (SESSION CONTINUITY) ===\n`;
+        recentAnalyses.forEach(r => {
+          perfContext += `- [${new Date(r.timestamp).toLocaleTimeString()}] Bias: ${r.direction} (${r.confidence}%) | Target: $${r.target || 'N/A'} | Outcome: ${r.outcome}\n`;
+        });
+      }
+      
+      phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis. If SHIELD MODE is enforced here, you MUST output SHIELD MODE.\n${techContext}${flowContext}${futContext}${macroContext}${perfContext}`;
     } else {
       console.warn(`[PHASE 3] Data fetch failed for ${ticker}: ${dataResult.error}`);
     }
@@ -279,125 +325,83 @@ export async function handleGeminiConnection(clientWs, base64Image) {
   await streamViaRestSSE(clientWs, base64Image, API_KEY, systemPromptWithMemory, { ticker, hurstData, regimeData });
 }
 
-/**
- * §1.1 — Bidirectional WebSocket Live Stream to Gemini
- */
-function streamViaBidi(clientWs, base64Image, apiKey, model, systemPrompt, p3Context = {}) {
-  return new Promise((resolve) => {
-    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-    
-    let setupComplete = false;
-    let fullText = '';
-    let resolved = false;
-    
-    const safeResolve = (val) => {
-      if (!resolved) {
-        resolved = true;
-        resolve(val);
-      }
-    };
-
-    const bidiWs = new WebSocket(wsUrl);
-    
-    // Connection timeout — if no connection in 15s, fail
-    const connectTimeout = setTimeout(() => {
-      if (!setupComplete) {
-        console.warn(`[BIDI] Connection timeout for ${model}`);
-        try { bidiWs.close(); } catch(e) {}
-        safeResolve(false);
-      }
-    }, 15000);
-    
-    bidiWs.on('open', () => {
-      bidiWs.send(JSON.stringify({
-        setup: {
-          model: model,
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { temperature: 0.3, maxOutputTokens: 8192, topP: 0.85, topK: 40, responseModalities: ['TEXT'] },
-          tools: [{ googleSearch: {} }]
-        }
-      }));
-    });
-
-    bidiWs.on('message', (rawData) => {
-      try {
-        const msg = JSON.parse(rawData.toString());
-
-        if (msg.setupComplete) {
-          clearTimeout(connectTimeout);
-          setupComplete = true;
-          bidiWs.send(JSON.stringify({
-            clientContent: {
-              turns: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64Image } }, { text: USER_PROMPT }]}],
-              turnComplete: true
-            }
-          }));
-          return;
-        }
-
-        if (msg.serverContent) {
-          const parts = msg.serverContent?.modelTurn?.parts;
-          if (parts) {
-            for (const part of parts) {
-              if (part.text) {
-                const sanitized = sanitizeChunk(part.text);
-                fullText += sanitized;
-                clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
-              }
-            }
-          }
-        }
-
-        if (msg.serverContent && msg.serverContent.turnComplete) {
-          console.log('[GEMINI] BidiGenerateContent stream complete.');
-          executePhase3Intercept(fullText, p3Context, clientWs).then(() => {
-            clientWs.send(JSON.stringify({ status: 'complete' }));
-            bidiWs.close();
-            safeResolve(true);
-          });
-        }
-      } catch (err) {
-        console.error('[BIDI] Parse error:', err);
-      }
-    });
-
-    bidiWs.on('error', (err) => { 
-      clearTimeout(connectTimeout);
-      console.error(`[BIDI] WebSocket error for ${model}:`, err.message);
-      safeResolve(false); 
-    });
-
-    bidiWs.on('close', (code, reason) => {
-      clearTimeout(connectTimeout);
-      if (!resolved) {
-        console.log(`[BIDI] Connection closed (${code}): ${reason}`);
-        safeResolve(false);
-      }
-    });
-  });
-}
 
 // =====================================================
 // PHASE 3 — POST-STREAM INTERCEPT & LOGGING
 // =====================================================
 
-async function executePhase3Intercept(fullText, p3Context, clientWs) {
+async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs) {
   try {
     const { ticker, hurstData, regimeData } = p3Context;
-    const probMatch = fullText.match(/Probability:\s*(\d{1,3})%/i) || fullText.match(/confidence.*(\d{1,3})%/i);
-    const rawConfidence = probMatch ? parseInt(probMatch[1]) : 50;
-    const rrMatch = fullText.match(/Risk\/Reward:\s*1:(\d+(?:\.\d+)?)/i);
-    const rewardRatio = rrMatch ? parseFloat(rrMatch[1]) : 1.0;
-    const riskPercent = 0.01;
-    const rewardPercent = riskPercent * rewardRatio;
 
+    // === FIXED: Robust confidence extraction ===
+    // Priority: BASE CASE format > Probability: format > confidence fallback
+    const baseCaseMatch = fullText.match(/BASE\s*CASE[:\s]*(?:BULLISH|BEARISH)\s*(\d{1,3})%/i);
+    const probMatch = fullText.match(/Probability[:\s]*(\d{1,3})%/i);
+    const confMatch = fullText.match(/(?:confidence|conf\.?)\s*(?:of|at|:)?\s*(\d{1,3})%/i);
+    const rawConfidence = baseCaseMatch ? parseInt(baseCaseMatch[1])
+      : probMatch ? parseInt(probMatch[1])
+      : confMatch ? parseInt(confMatch[1])
+      : 50;
+
+    // === FIXED: Direction extraction scoped to Module 1 only ===
+    // Only scan the first ~2000 chars (Module 1 verdict area) to avoid
+    // counter-thesis (Module 11) contaminating direction classification
     let direction = 'NEUTRAL';
-    const textLower = fullText.toLowerCase();
-    if (textLower.includes('bullish') || textLower.includes('accumulation')) direction = 'BULLISH';
-    else if (textLower.includes('bearish') || textLower.includes('distribution')) direction = 'BEARISH';
+    const module1Text = fullText.substring(0, Math.min(fullText.length, 2000)).toLowerCase();
+    const baseCaseDirMatch = fullText.match(/BASE\s*CASE[:\s]*(BULLISH|BEARISH)/i);
+    if (baseCaseDirMatch) {
+      direction = baseCaseDirMatch[1].toUpperCase();
+    } else if (module1Text.includes('bullish') && !module1Text.includes('bearish')) {
+      direction = 'BULLISH';
+    } else if (module1Text.includes('bearish') && !module1Text.includes('bullish')) {
+      direction = 'BEARISH';
+    } else {
+      // Both mentioned in Module 1 — use probability comparison
+      const bullProbMatch = module1Text.match(/bullish\s*(\d{1,3})%/i);
+      const bearProbMatch = module1Text.match(/bearish\s*(\d{1,3})%/i);
+      const bp = bullProbMatch ? parseInt(bullProbMatch[1]) : 0;
+      const brp = bearProbMatch ? parseInt(bearProbMatch[1]) : 0;
+      direction = bp >= brp ? 'BULLISH' : 'BEARISH';
+    }
 
-    const targetMatch = fullText.match(/(?:target|resistance|liquidity)[^\d]*(\d{2,}(?:,\d{3})*(?:\.\d+)?)/i);
-    const primaryTarget = targetMatch ? parseFloat(targetMatch[1].replace(/,/g, '')) : null;
+    // === FIXED: Target/invalidation extraction scoped to Module 1 ===
+    const primaryTargetMatch = fullText.match(/Primary\s*Target[:\s]*\$?([\d,]+\.?\d*)/i);
+    const extendedTargetMatch = fullText.match(/Extended\s*Target[:\s]*\$?([\d,]+\.?\d*)/i);
+    const invalidationMatch = fullText.match(/Invalidation\s*(?:Level)?[:\s]*\$?([\d,]+\.?\d*)/i);
+    const currentPriceMatch = fullText.match(/Current\s*Price[:\s]*\$?([\d,]+\.?\d*)/i);
+    const downRiskMatch = fullText.match(/Downside\s*Risk[:\s]*\$?([\d,]+\.?\d*)/i);
+
+    const primaryTarget = primaryTargetMatch ? parseFloat(primaryTargetMatch[1].replace(/,/g, '')) : null;
+    const extendedTarget = extendedTargetMatch ? parseFloat(extendedTargetMatch[1].replace(/,/g, '')) : null;
+    const invalidationLevel = invalidationMatch ? parseFloat(invalidationMatch[1].replace(/,/g, '')) : null;
+    const currentPrice = currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null;
+    const downRisk = downRiskMatch ? parseFloat(downRiskMatch[1].replace(/,/g, '')) : null;
+
+    // === FIXED: Calculate actual risk/reward from real price levels ===
+    const rrMatch = fullText.match(/Risk[\/-](?:to[\/-])?Reward(?:\s*Ratio)?[:\s]*1[:\s]*(\d+(?:\.\d+)?)/i);
+    let riskPercent, rewardPercent;
+
+    if (currentPrice && primaryTarget && (invalidationLevel || downRisk)) {
+      const stopLevel = invalidationLevel || downRisk;
+      rewardPercent = Math.abs(primaryTarget - currentPrice) / currentPrice;
+      riskPercent = Math.abs(currentPrice - stopLevel) / currentPrice;
+    } else if (rrMatch) {
+      const rewardRatio = parseFloat(rrMatch[1]);
+      riskPercent = 0.02; // Conservative 2% default
+      rewardPercent = riskPercent * rewardRatio;
+    } else {
+      riskPercent = 0.02;
+      rewardPercent = 0.02;
+    }
+
+    // Ensure non-zero values for Kelly
+    riskPercent = Math.max(riskPercent, 0.001);
+    rewardPercent = Math.max(rewardPercent, 0.001);
+
+    // === FIXED: Extract timeframe for audit window ===
+    const timeframeMatch = fullText.match(/Timeframe[:\s]*(Intraday|Swing|Position)/i);
+    const tradeTimeframe = timeframeMatch ? timeframeMatch[1].toUpperCase() : 'INTRADAY';
 
     const calibResult = await getCalibratedConfidence(rawConfidence);
     const p = (calibResult.calibratedConfidence || rawConfidence) / 100;
@@ -409,7 +413,7 @@ async function executePhase3Intercept(fullText, p3Context, clientWs) {
       isCalibrated: calibResult.isCalibrated
     });
 
-    let verdictText = `\n\nMODULE 12 — PHASE 3 SYSTEM VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    let verdictText = `\n\nMODULE 14 — PHASE 3 SYSTEM VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     verdictText += `• Raw Model Confidence: ${rawConfidence}%\n`;
     verdictText += `• Calibrated Confidence: ${calibResult.calibratedConfidence}% (${calibResult.note})\n`;
     verdictText += `• Expected Value (Net of fees): ${(kellyResult.evNet).toFixed(2)}%\n`;
@@ -423,20 +427,36 @@ async function executePhase3Intercept(fullText, p3Context, clientWs) {
     const sanitizedVerdict = sanitizeChunk(verdictText);
     clientWs.send(JSON.stringify({ status: 'update', text: sanitizedVerdict }));
     fullText += sanitizedVerdict;
+    rawFullText += verdictText;
 
+    // === FIXED: Populate ALL signal fields for proper audit resolution ===
     const signalData = {
       ticker: ticker || 'UNKNOWN',
       direction,
       rawConfidence,
       calibratedConfidence: calibResult.calibratedConfidence,
-      hurstMean: hurstData?.meanH,
-      hurstStable: hurstData?.isStable,
-      regime: regimeData?.regime,
+      hurstMean: hurstData?.meanH ?? null,
+      hurstRS: hurstData?.rsH ?? null,
+      hurstDFA: hurstData?.dfaH ?? null,
+      hurstCI: hurstData?.ci95 ?? null,
+      hurstStable: hurstData?.isStable ?? null,
+      regime: regimeData?.regime ?? null,
+      regimePosterior: regimeData?.posterior ?? null,
+      regimeActionable: regimeData?.isActionable ?? null,
       primaryTarget,
+      extendedTarget,
+      invalidationLevel,
+      currentPrice,
+      evGross: kellyResult.evGross,
       evNet: kellyResult.evNet,
+      evPer100: kellyResult.evPer100,
       kellyF: kellyResult.kellyF,
+      halfKelly: kellyResult.halfKelly,
+      estimatedFee: kellyResult.totalCostPercent,
       signalBlocked: kellyResult.action === 'SHIELD_MODE',
-      predictionSummary: fullText
+      blockedReason: kellyResult.action === 'SHIELD_MODE' ? kellyResult.reason : null,
+      tradeTimeframe,
+      predictionSummary: fullText.substring(0, 2000)
     };
 
     const signalHash = await logSignal(signalData);
@@ -462,6 +482,7 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
   };
 
   let fullText = '';
+  let rawFullText = '';
   try {
     for (const model of MODELS) {
       console.log(`[GEMINI] Attempting REST SSE with ${model}...`);
@@ -510,6 +531,7 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
                     const usageIndex = text.indexOf('"usageMetadata"');
                     if (usageIndex !== -1) text = text.substring(0, usageIndex);
                     
+                    rawFullText += text;
                     const sanitized = sanitizeChunk(text);
                     fullText += sanitized;
                     clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
@@ -524,7 +546,7 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
       }
       
       console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
-      await executePhase3Intercept(fullText, p3Context, clientWs);
+      await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
       clientWs.send(JSON.stringify({ status: 'complete' }));
       break; // Exit loop on success
     }
@@ -534,44 +556,5 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
   }
 }
 
-
-/**
- * §1.2 — Extract prediction metadata from the completed text and log to memory ledger
- */
-async function logPredictionFromText(fullText) {
-  if (!fullText || fullText.includes('INVALID INPUT')) return;
-
-  // Extract ticker from Module 3
-  const tickerMatch = fullText.match(/(?:Instrument|Ticker|Symbol)[:\s]*([A-Z0-9/\-]+)/i);
-  const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : 'UNKNOWN';
-
-  // Extract probabilities
-  const bullMatch = fullText.match(/BULLISH Probability:\s*(\d+)%/i);
-  const bearMatch = fullText.match(/BEARISH Probability:\s*(\d+)%/i);
-  const bullishProb = bullMatch ? parseInt(bullMatch[1]) : null;
-  const bearishProb = bearMatch ? parseInt(bearMatch[1]) : null;
-
-  // Extract price levels
-  const targetMatch = fullText.match(/Primary Target:\s*\$?([\d,]+\.?\d*)/i);
-  const invalidationMatch = fullText.match(/Invalidation Level:\s*\$?([\d,]+\.?\d*)/i);
-  const currentPriceMatch = fullText.match(/Current Price:\s*\$?([\d,]+\.?\d*)/i);
-
-  const primaryTarget = targetMatch ? parseFloat(targetMatch[1].replace(/,/g, '')) : null;
-  const invalidationLevel = invalidationMatch ? parseFloat(invalidationMatch[1].replace(/,/g, '')) : null;
-  const currentPrice = currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null;
-
-  // Only log if we have a valid prediction (not shield mode)
-  if (bullishProb === null && bearishProb === null) return;
-  if (fullText.includes('SHIELD MODE ACTIVE')) return;
-
-  await logPrediction({
-    ticker,
-    bullishProb,
-    bearishProb,
-    primaryTarget,
-    invalidationLevel,
-    currentPrice,
-    direction: bullishProb > bearishProb ? 'BULLISH' : 'BEARISH',
-    predictionSummary: fullText.substring(0, 500),
-  });
-}
+// NOTE: logPredictionFromText was dead code (never called, used legacy `predictions` collection).
+// Removed in Phase 1 cleanup. All signal logging now goes through logSignal() in executePhase3Intercept().

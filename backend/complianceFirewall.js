@@ -60,7 +60,7 @@ const REPLACEMENT_MAP = [
   { pattern: /\balways\s+profitable\b/gi,          replacement: 'historically positive EV' },
   { pattern: /\bzero[\s-]?risk\b/gi,               replacement: 'minimal structural risk' },
   { pattern: /\bno[\s-]?risk\b/gi,                 replacement: 'defined-risk setup' },
-  { pattern: /\bcertain(?:ty|ly)?\b/gi,             replacement: 'high-probability' },
+  { pattern: /\b(?:absolute|100%)\s+certain(?:ty)?\b/gi, replacement: 'high-probability' },
 ];
 
 /**

@@ -1,17 +1,23 @@
 // =====================================================
-// AUDIT DAEMON — 4-Hour Post-Trade Verification Engine
-// Continuously checks predictions against real market data
+// AUDIT DAEMON — Post-Trade Verification Engine
+// Continuously checks signals against real market data
 // and generates Error Vector Nodes for incorrect calls.
+//
+// PHASE 4 FIX: Now reads from `signals` collection
+// (not legacy `predictions`) so the feedback loop works.
+// Supports both crypto (CoinGecko) and stocks (Yahoo Finance).
+// Uses timeframe-aware audit windows.
 // =====================================================
 
-import { getDueAudits, markAudited, writeErrorVector } from './memoryLedger.js';
+import { getDb } from './mongoConfig.js';
+import { writeErrorVector } from './memoryLedger.js';
+import yahooFinance from 'yahoo-finance2';
 
 const AUDIT_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 let intervalId = null;
 
 // =====================================================
-// TICKER → COINGECKO ID MAPPING
-// Expand this map as needed for new asset classes
+// TICKER → COINGECKO ID MAPPING (Crypto)
 // =====================================================
 const TICKER_TO_COINGECKO = {
   'BTC': 'bitcoin',
@@ -19,25 +25,37 @@ const TICKER_TO_COINGECKO = {
   'BTCUSDT': 'bitcoin',
   'BTC/USD': 'bitcoin',
   'BTC/USDT': 'bitcoin',
+  'BTC-USD': 'bitcoin',
   'ETH': 'ethereum',
   'ETHUSD': 'ethereum',
   'ETHUSDT': 'ethereum',
   'ETH/USD': 'ethereum',
   'ETH/USDT': 'ethereum',
+  'ETH-USD': 'ethereum',
   'SOL': 'solana',
   'SOLUSD': 'solana',
   'SOL/USD': 'solana',
   'SOL/USDT': 'solana',
+  'SOL-USD': 'solana',
   'XRP': 'ripple',
   'XRPUSD': 'ripple',
+  'XRP-USD': 'ripple',
   'DOGE': 'dogecoin',
+  'DOGE-USD': 'dogecoin',
   'ADA': 'cardano',
+  'ADA-USD': 'cardano',
   'AVAX': 'avalanche-2',
+  'AVAX-USD': 'avalanche-2',
   'DOT': 'polkadot',
+  'DOT-USD': 'polkadot',
   'LINK': 'chainlink',
+  'LINK-USD': 'chainlink',
   'MATIC': 'matic-network',
+  'MATIC-USD': 'matic-network',
   'BNB': 'binancecoin',
+  'BNB-USD': 'binancecoin',
   'LTC': 'litecoin',
+  'LTC-USD': 'litecoin',
   'ATOM': 'cosmos',
   'UNI': 'uniswap',
   'NEAR': 'near',
@@ -49,24 +67,45 @@ const TICKER_TO_COINGECKO = {
   'WIF': 'dogwifcoin',
 };
 
+// =====================================================
+// TIMEFRAME-AWARE AUDIT WINDOW
+// Intraday = 4h, Swing = 48h, Position = 7 days
+// =====================================================
+function getAuditWindowMs(tradeTimeframe) {
+  switch (tradeTimeframe) {
+    case 'SWING':    return 48 * 60 * 60 * 1000;  // 48 hours
+    case 'POSITION': return 7 * 24 * 60 * 60 * 1000; // 7 days
+    case 'INTRADAY':
+    default:         return 4 * 60 * 60 * 1000;   // 4 hours
+  }
+}
+
+// =====================================================
+// PRICE FETCHING — Crypto via CoinGecko, Stocks via Yahoo
+// =====================================================
+
 /**
- * Fetches current price from CoinGecko's free API.
- * Uses the Demo API (no key required, 10K calls/month).
+ * Determines if a ticker is a crypto asset.
  */
-async function fetchCurrentPrice(ticker) {
+function isCryptoTicker(ticker) {
+  const normalized = ticker.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
+  return !!TICKER_TO_COINGECKO[normalized];
+}
+
+/**
+ * Fetches current price from CoinGecko (crypto only).
+ */
+async function fetchCryptoPrice(ticker) {
   const normalizedTicker = ticker.toUpperCase().replace(/[^A-Z0-9/]/g, '');
   const coinId = TICKER_TO_COINGECKO[normalizedTicker];
   
-  if (!coinId) {
-    console.warn(`[AUDIT] No CoinGecko mapping for ticker: ${ticker}`);
-    return null;
-  }
+  if (!coinId) return null;
 
   try {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`;
     const response = await fetch(url, {
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000), // 10s timeout
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {
@@ -77,8 +116,93 @@ async function fetchCurrentPrice(ticker) {
     const data = await response.json();
     return data[coinId]?.usd || null;
   } catch (error) {
-    console.error(`[AUDIT] Price fetch failed for ${ticker}:`, error.message);
+    console.error(`[AUDIT] CoinGecko price fetch failed for ${ticker}:`, error.message);
     return null;
+  }
+}
+
+/**
+ * Fetches current price from Yahoo Finance (stocks, forex, indices).
+ */
+async function fetchStockPrice(ticker) {
+  try {
+    // Resolve Yahoo Finance symbol
+    let symbol = ticker.toUpperCase().replace(/[^A-Z0-9./-]/g, '');
+    
+    const quote = await yahooFinance.quote(symbol);
+    return quote?.regularMarketPrice || null;
+  } catch (error) {
+    console.warn(`[AUDIT] Yahoo Finance price fetch failed for ${ticker}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Universal price fetcher — tries crypto first, then stocks.
+ */
+async function fetchCurrentPrice(ticker) {
+  if (!ticker || ticker === 'UNKNOWN') return null;
+
+  if (isCryptoTicker(ticker)) {
+    return fetchCryptoPrice(ticker);
+  }
+  
+  return fetchStockPrice(ticker);
+}
+
+// =====================================================
+// SIGNAL RESOLUTION — Reads from `signals` collection
+// =====================================================
+
+/**
+ * Fetches signals that are due for audit from the `signals` collection.
+ * A signal is due when: auditDue <= now AND resolvedOutcome is null.
+ */
+async function getDueSignals() {
+  try {
+    const db = await getDb();
+    const now = new Date();
+    
+    const signals = await db.collection('signals')
+      .find({
+        auditDue: { $lte: now },
+        resolvedOutcome: null,
+        signalBlocked: { $ne: true }, // Don't audit SHIELD MODE signals
+      })
+      .sort({ auditDue: 1 })
+      .limit(20) // Process max 20 per cycle
+      .toArray();
+
+    return signals;
+  } catch (error) {
+    console.error('[AUDIT] Failed to fetch due signals:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Marks a signal as resolved with CORRECT/INCORRECT/INCONCLUSIVE outcome.
+ * This is the critical write that makes the calibration engine work.
+ */
+async function resolveSignal(signalHash, outcome, reason, actualPrice) {
+  try {
+    const db = await getDb();
+
+    await db.collection('signals').updateOne(
+      { _id: signalHash },
+      {
+        $set: {
+          resolvedOutcome: outcome, // 'CORRECT' | 'INCORRECT' | 'INCONCLUSIVE'
+          resolvedAt: new Date(),
+          resolvedReason: reason,
+          actualPrice: actualPrice,
+        }
+      }
+    );
+
+    console.log(`[AUDIT] Signal ${signalHash} resolved: ${outcome}`);
+  } catch (error) {
+    console.error(`[AUDIT] Failed to resolve signal ${signalHash}:`, error.message);
   }
 }
 
@@ -109,10 +233,9 @@ function extractAnalyticalContext(predictionSummary) {
 /**
  * Determines if a prediction was correct based on actual price movement.
  * Generates rich, analytically-specific error vectors for the self-healing system.
- * Returns { correct: boolean, reason: string }
  */
-function evaluatePrediction(prediction, actualPrice) {
-  const { direction, primaryTarget, invalidationLevel, currentPrice, predictionSummary } = prediction;
+function evaluateSignal(signal, actualPrice) {
+  const { direction, primaryTarget, invalidationLevel, currentPrice, predictionSummary } = signal;
   
   if (!actualPrice || !currentPrice) {
     return { correct: null, reason: 'Insufficient price data for evaluation' };
@@ -122,7 +245,6 @@ function evaluatePrediction(prediction, actualPrice) {
   const percentChange = (priceChange / currentPrice) * 100;
   const ctx = extractAnalyticalContext(predictionSummary);
 
-  // Build rich context string for error vectors
   function buildErrorContext(baseReason) {
     const contextParts = [baseReason];
     
@@ -148,11 +270,13 @@ function evaluatePrediction(prediction, actualPrice) {
     return contextParts.join('. ') + '.';
   }
 
+  const ticker = signal.ticker || 'UNKNOWN';
+
   if (direction === 'BULLISH') {
     if (invalidationLevel && actualPrice < invalidationLevel) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${prediction.ticker} failed bullish structure — price dropped to $${actualPrice.toFixed(2)} below invalidation $${invalidationLevel.toFixed(2)} (${percentChange.toFixed(1)}% loss)`)
+        reason: buildErrorContext(`${ticker} failed bullish structure — price dropped to $${actualPrice.toFixed(2)} below invalidation $${invalidationLevel.toFixed(2)} (${percentChange.toFixed(1)}% loss)`)
       };
     }
     if (primaryTarget && actualPrice >= primaryTarget * 0.95) {
@@ -161,14 +285,12 @@ function evaluatePrediction(prediction, actualPrice) {
     if (priceChange < 0 && Math.abs(percentChange) > 2) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${prediction.ticker} reversed ${Math.abs(percentChange).toFixed(1)}% against bullish thesis — bearish pressure dominated`)
+        reason: buildErrorContext(`${ticker} reversed ${Math.abs(percentChange).toFixed(1)}% against bullish thesis — bearish pressure dominated`)
       };
     }
-    // Small move, directional bias held
     if (priceChange >= 0) {
       return { correct: true, reason: `Directional bias held — ${percentChange.toFixed(1)}% in the predicted direction` };
     }
-    // Small loss, not enough to invalidate
     return { correct: null, reason: `Inconclusive — only ${Math.abs(percentChange).toFixed(1)}% against thesis, within noise range` };
   }
 
@@ -176,7 +298,7 @@ function evaluatePrediction(prediction, actualPrice) {
     if (invalidationLevel && actualPrice > invalidationLevel) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${prediction.ticker} failed bearish structure — price rallied to $${actualPrice.toFixed(2)} above invalidation $${invalidationLevel.toFixed(2)} (+${percentChange.toFixed(1)}%)`)
+        reason: buildErrorContext(`${ticker} failed bearish structure — price rallied to $${actualPrice.toFixed(2)} above invalidation $${invalidationLevel.toFixed(2)} (+${percentChange.toFixed(1)}%)`)
       };
     }
     if (primaryTarget && actualPrice <= primaryTarget * 1.05) {
@@ -185,7 +307,7 @@ function evaluatePrediction(prediction, actualPrice) {
     if (priceChange > 0 && Math.abs(percentChange) > 2) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${prediction.ticker} reversed ${Math.abs(percentChange).toFixed(1)}% against bearish thesis — bullish momentum overpowered`)
+        reason: buildErrorContext(`${ticker} reversed ${Math.abs(percentChange).toFixed(1)}% against bearish thesis — bullish momentum overpowered`)
       };
     }
     if (priceChange <= 0) {
@@ -198,50 +320,48 @@ function evaluatePrediction(prediction, actualPrice) {
 }
 
 /**
- * Main audit cycle — processes all due predictions
+ * Main audit cycle — processes all due signals
  */
 async function runAuditCycle() {
   try {
-    const dueAudits = await getDueAudits();
+    const dueSignals = await getDueSignals();
     
-    if (dueAudits.length === 0) return;
+    if (dueSignals.length === 0) return;
     
-    console.log(`[AUDIT DAEMON] Processing ${dueAudits.length} due predictions...`);
+    console.log(`[AUDIT DAEMON] Processing ${dueSignals.length} due signal(s)...`);
 
-    for (const prediction of dueAudits) {
+    for (const signal of dueSignals) {
       try {
         // Fetch real-time price
-        const actualPrice = await fetchCurrentPrice(prediction.ticker);
+        const actualPrice = await fetchCurrentPrice(signal.ticker);
         
         if (actualPrice === null) {
-          // Can't verify — mark as audited but inconclusive
-          await markAudited(prediction._id, 'INCONCLUSIVE — No price data available');
+          await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available', null);
           continue;
         }
 
-        // Evaluate prediction accuracy
-        const evaluation = evaluatePrediction(prediction, actualPrice);
+        // Evaluate signal accuracy
+        const evaluation = evaluateSignal(signal, actualPrice);
 
         if (evaluation.correct === false) {
           // === ERROR VECTOR COMPILATION ===
-          // Write plain-English error node to the asset's profile
           await writeErrorVector(
-            prediction.ticker,
+            signal.ticker,
             evaluation.reason,
-            prediction._id
+            signal._id
           );
-          await markAudited(prediction._id, `INCORRECT — ${evaluation.reason}`);
+          await resolveSignal(signal._id, 'INCORRECT', evaluation.reason, actualPrice);
         } else if (evaluation.correct === true) {
-          await markAudited(prediction._id, `CORRECT — ${evaluation.reason}`);
+          await resolveSignal(signal._id, 'CORRECT', evaluation.reason, actualPrice);
         } else {
-          await markAudited(prediction._id, `INCONCLUSIVE — ${evaluation.reason}`);
+          await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);
         }
 
-        // Rate limit: wait 1.5s between CoinGecko calls to stay under free tier limits
+        // Rate limit: wait 1.5s between price API calls
         await new Promise(r => setTimeout(r, 1500));
 
       } catch (error) {
-        console.error(`[AUDIT DAEMON] Error processing prediction ${prediction._id}:`, error.message);
+        console.error(`[AUDIT DAEMON] Error processing signal ${signal._id}:`, error.message);
       }
     }
   } catch (error) {
@@ -253,7 +373,7 @@ async function runAuditCycle() {
  * Start the audit daemon — runs continuously on an interval
  */
 export function startAuditDaemon() {
-  console.log(`[AUDIT DAEMON] Started — checking every ${AUDIT_INTERVAL_MS / 1000}s for due predictions`);
+  console.log(`[AUDIT DAEMON] Started — checking every ${AUDIT_INTERVAL_MS / 1000}s for due signals`);
   
   // Run first cycle after a 30s delay to let the server warm up
   setTimeout(() => {

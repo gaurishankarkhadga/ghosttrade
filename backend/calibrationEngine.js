@@ -170,6 +170,10 @@ export async function generateCalibrationReport(days = 90) {
   }
 }
 
+let cachedCurve = null;
+let curveCacheTimestamp = 0;
+const CURVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Gets calibration-adjusted confidence for use in Kelly sizing.
  * This is the function called by geminiEngine.js before each analysis.
@@ -179,9 +183,13 @@ export async function generateCalibrationReport(days = 90) {
  */
 export async function getCalibratedConfidence(rawConfidence) {
   try {
-    const signals = await fetchResolvedSignals(365); // Use max history for calibration
-    const curve   = buildCalibrationCurve(signals);
-    return adjustConfidence(rawConfidence, curve);
+    const now = Date.now();
+    if (!cachedCurve || now - curveCacheTimestamp > CURVE_CACHE_TTL_MS) {
+      const signals = await fetchResolvedSignals(365); // Use max history for calibration
+      cachedCurve = buildCalibrationCurve(signals);
+      curveCacheTimestamp = now;
+    }
+    return adjustConfidence(rawConfidence, cachedCurve);
   } catch (err) {
     console.error('[CALIBRATION] getCalibratedConfidence failed:', err.message);
     return { calibratedConfidence: rawConfidence, isCalibrated: false, note: 'Calibration lookup failed — using raw confidence.' };

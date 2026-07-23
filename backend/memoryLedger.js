@@ -7,55 +7,68 @@
 import crypto from 'crypto';
 import { getDb } from './mongoConfig.js';
 
+// NOTE: Legacy logPrediction() removed — all logging now goes through logSignal() below.
+
+
 /**
- * §1.2 — State Extraction & Hashing
- * Logs a completed prediction to the cloud database.
- * Generates a unique SHA-256 hash as the document ID.
+ * Gets historical statistics for a specific ticker to inject into the AI prompt
+ * @param {string} ticker 
  */
-export async function logPrediction(data) {
+export async function getTickerStats(ticker) {
   try {
     const db = await getDb();
+    const signals = await db.collection('signals').find({
+      ticker: ticker,
+      resolvedOutcome: { $in: ['CORRECT', 'INCORRECT'] }
+    }).toArray();
+
+    if (signals.length === 0) return null;
+
+    const total = signals.length;
+    const correct = signals.filter(s => s.resolvedOutcome === 'CORRECT').length;
+    const winRate = (correct / total) * 100;
     
-    const timestamp = new Date();
-    const auditDue = new Date(timestamp.getTime() + (4 * 60 * 60 * 1000)); // +4 hours
+    const incorrectCalls = signals.filter(s => s.resolvedOutcome === 'INCORRECT');
+    const avgConfidenceOnLosses = incorrectCalls.length > 0 
+      ? incorrectCalls.reduce((s, c) => s + (c.calibratedConfidence || 50), 0) / incorrectCalls.length
+      : 0;
 
-    // Generate unique data hash
-    const hashInput = JSON.stringify({
-      ticker: data.ticker,
-      timestamp: timestamp.toISOString(),
-      direction: data.direction,
-      primaryTarget: data.primaryTarget,
-    });
-    const predictionHash = crypto.createHash('sha256').update(hashInput).digest('hex').substring(0, 16);
-
-    const document = {
-      _id: predictionHash,
-      ticker: data.ticker || 'UNKNOWN',
-      timestamp,
-      direction: data.direction || 'NEUTRAL',
-      bullishProb: data.bullishProb,
-      bearishProb: data.bearishProb,
-      primaryTarget: data.primaryTarget,
-      invalidationLevel: data.invalidationLevel,
-      currentPrice: data.currentPrice,
-      predictionSummary: data.predictionSummary || '',
-      auditDue,
-      audited: false,
-      auditResult: null,
+    return {
+      total,
+      correct,
+      winRate: parseFloat(winRate.toFixed(1)),
+      avgConfidenceOnLosses: parseFloat(avgConfidenceOnLosses.toFixed(1))
     };
-
-    await db.collection('predictions').insertOne(document);
-    console.log(`[MEMORY] Prediction logged: ${data.ticker} → ${data.direction} | Hash: ${predictionHash} | Audit due: ${auditDue.toISOString()}`);
-    
-    return predictionHash;
   } catch (error) {
-    // Duplicate key (same prediction) is fine — skip silently
-    if (error.code === 11000) {
-      console.log('[MEMORY] Duplicate prediction hash — skipping');
-      return null;
-    }
-    console.error('[MEMORY] Failed to log prediction:', error.message);
-    throw error;
+    console.error(`[MEMORY] Failed to get ticker stats for ${ticker}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Retrieves the last N analyses for this ticker to provide session continuity
+ * @param {string} ticker 
+ * @param {number} limit 
+ */
+export async function getRecentAnalyses(ticker, limit = 2) {
+  try {
+    const db = await getDb();
+    const recent = await db.collection('signals').find({ ticker })
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
+
+    return recent.map(r => ({
+      direction: r.direction,
+      confidence: r.calibratedConfidence || r.rawConfidence,
+      target: r.primaryTarget,
+      timeframe: r.tradeTimeframe,
+      outcome: r.resolvedOutcome || 'PENDING',
+      timestamp: r.timestamp
+    }));
+  } catch (error) {
+    console.error(`[MEMORY] Failed to get recent analyses for ${ticker}:`, error.message);
+    return [];
   }
 }
 
@@ -108,53 +121,8 @@ export async function writeErrorVector(ticker, errorDescription, originalPredict
   }
 }
 
-/**
- * Fetches predictions that are due for audit (auditDue <= now AND audited === false)
- */
-export async function getDueAudits() {
-  try {
-    const db = await getDb();
-    
-    const now = new Date();
-    const predictions = await db.collection('predictions')
-      .find({
-        auditDue: { $lte: now },
-        audited: false,
-      })
-      .sort({ auditDue: 1 })
-      .limit(20) // Process max 20 per cycle to prevent overload
-      .toArray();
+// NOTE: Legacy getDueAudits() removed — audit daemon now reads from signals collection directly.
 
-    return predictions;
-  } catch (error) {
-    console.error('[MEMORY] Failed to fetch due audits:', error.message);
-    return [];
-  }
-}
-
-/**
- * Marks a prediction as audited with the result
- */
-export async function markAudited(predictionHash, result) {
-  try {
-    const db = await getDb();
-    
-    await db.collection('predictions').updateOne(
-      { _id: predictionHash },
-      { 
-        $set: { 
-          audited: true, 
-          auditResult: result,
-          auditedAt: new Date(),
-        } 
-      }
-    );
-
-    console.log(`[MEMORY] Prediction ${predictionHash} marked as audited: ${result}`);
-  } catch (error) {
-    console.error('[MEMORY] Failed to mark audited:', error.message);
-  }
-}
 
 // =====================================================
 // PHASE 3 — Full Signal Logging (PRD §4.6)
@@ -168,7 +136,13 @@ export async function logSignal(data) {
   try {
     const db = await getDb();
     const timestamp = new Date();
-    const auditDue  = new Date(timestamp.getTime() + (4 * 60 * 60 * 1000));
+
+    // Timeframe-aware audit window: Intraday=4h, Swing=48h, Position=7d
+    const tf = (data.tradeTimeframe || 'INTRADAY').toUpperCase();
+    const auditDelayMs = tf === 'POSITION' ? 7 * 24 * 60 * 60 * 1000
+      : tf === 'SWING' ? 48 * 60 * 60 * 1000
+      : 4 * 60 * 60 * 1000;
+    const auditDue = new Date(timestamp.getTime() + auditDelayMs);
 
     const hashInput = JSON.stringify({
       ticker:        data.ticker,
@@ -207,6 +181,7 @@ export async function logSignal(data) {
       estimatedSpread:      data.estimatedSpread      ?? null,
       signalBlocked:        data.signalBlocked        ?? false,
       blockedReason:        data.blockedReason        ?? null,
+      tradeTimeframe:       data.tradeTimeframe       ?? 'INTRADAY',
       predictionSummary:    data.predictionSummary    || '',
       resolvedOutcome:      null,
       resolvedAt:           null,

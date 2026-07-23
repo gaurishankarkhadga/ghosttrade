@@ -47,6 +47,9 @@ export function computeKelly({
       halfKelly: null,
       evGross:  null,
       evNet:    null,
+      evPer100: null,
+      totalCostPercent: null,
+      isCalibrated,
     };
   }
 
@@ -55,16 +58,20 @@ export function computeKelly({
   // Total round-trip cost (enter + exit, both sides)
   const totalCostPercent = (feePercent * 2) + spreadPercent;
 
+  // Net Reward/Risk (after fees subtracted from gross profit/loss)
+  const netRewardPercent = rewardPercent - totalCostPercent;
+  const netRiskPercent = riskPercent + totalCostPercent;
+
   // Gross EV (before fees)
   const evGross = (winProbability * rewardPercent) - (lossProbability * riskPercent);
 
-  // Net EV (after fees subtracted from gross profit/loss)
-  const evNet   = evGross - totalCostPercent;
+  // Net EV (after fees)
+  const evNet = (winProbability * netRewardPercent) - (lossProbability * netRiskPercent);
 
   // Full Kelly fraction: f* = (p*b - q) / b
-  // where b = reward/risk ratio, p = win prob, q = loss prob
-  const b       = rewardPercent / riskPercent;
-  const kellyF  = (winProbability * b - lossProbability) / b;
+  // where b = netReward/netRisk ratio, p = win prob, q = loss prob
+  const b = netRewardPercent / netRiskPercent;
+  const kellyF = b > 0 ? (winProbability * b - lossProbability) / b : 0;
 
   // Half-Kelly (safer, accounts for model uncertainty)
   const halfKelly = kellyF / 2;
@@ -82,6 +89,7 @@ export function computeKelly({
       evGross:   parseFloat((evGross * 100).toFixed(2)),
       evNet:     parseFloat((evNet * 100).toFixed(2)),
       evPer100:  parseFloat(evPer100.toFixed(2)),
+      totalCostPercent: parseFloat((totalCostPercent * 100).toFixed(3)),
       isCalibrated,
     };
   }
