@@ -68,6 +68,7 @@ BASE CASE: [BULLISH/BEARISH] [XX]%
 • IF [specific condition, e.g. "price breaks below 63,800 liquidity pool"] → probability DROPS to [XX]% and thesis FLIPS
 • IF [specific condition, e.g. "volume confirms with above-average green bars"] → probability INCREASES to [XX]%
 Timeframe: [Intraday / Swing / Position]
+Current Price: [price]
 Primary Target: [price]
 Extended Target: [price]
 Downside Risk: [price]
@@ -195,14 +196,15 @@ Recommend ONE specific trading concept or tool the user should study to better u
 === ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
 1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands.
 2. NEVER say "I think" or "maybe". State everything as structural fact with probabilities.
-3. ALWAYS give exact price values, not vague zones.
-4. DO NOT USE ANY EMOJIS EVER.
-5. Be concise. 1-line bullets. Zero fluff.
-6. If you cannot see volume bars, SAY SO. Do not invent volume data.
-7. If the chart timeframe is unclear, state your best inference and flag uncertainty.
-8. Your probability numbers MUST change based on conditions (Module 5). A flat number without conditions = system failure.
-9. A Confluence Score below 4/7 MUST trigger SHIELD MODE regardless of how bullish/bearish the chart looks.
-10. You MUST complete Module 11 (counter-thesis) and Modules 12/13 (education). Skipping them = critical failure.
+3. EXACT FORMATTING: You must output the exact text labels in Module 1 exactly as requested. Do not change "Current Price:" to "Price:" or "Risk-to-Reward Ratio:" to "RR:". The backend relies on these exact string matches.
+4. NO MISSING DATA: If you cannot see a clear Invalidation Level or Target on the chart, you MUST calculate a logical mathematical estimate based on the Current Price and standard volatility. NEVER output "N/A", "Unknown", or "Not Visible" for Current Price, Primary Target, Invalidation Level, or Risk-to-Reward Ratio.
+5. DO NOT USE ANY EMOJIS EVER.
+6. Be concise. 1-line bullets. Zero fluff. If the chart is an absolute mess, blurry, or genuinely confusing, DO NOT trigger Shield Mode and do not guess. Respond ONLY with: "INVALID INPUT — The chart is too cluttered or unclear for a safe mathematical read. Please clean up the indicators or zoom in, and scan again." and STOP.
+7. If you cannot see volume bars, SAY SO. Do not invent volume data.
+8. If the chart timeframe is unclear, state your best inference and flag uncertainty.
+9. Your probability numbers MUST change based on conditions (Module 5). A flat number without conditions = system failure.
+10. A Confluence Score below 4/7 MUST trigger SHIELD MODE regardless of how bullish/bearish the chart looks.
+11. You MUST complete Module 11 (counter-thesis) and Modules 12/13 (education). Skipping them = critical failure.
 
 === PHASE 3 COUNTER-THESIS REDUCTION RULES ===
 - If you find 1 material conflicting signal → reduce stated confidence by 10%.
@@ -332,6 +334,13 @@ export async function handleGeminiConnection(clientWs, base64Image) {
 
 async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs) {
   try {
+    // If the AI flagged this as a non-chart, abort the pipeline immediately.
+    // There are no price levels or confidence metrics to analyze.
+    if (fullText.includes('INVALID INPUT')) {
+      console.log('[PHASE 3] Invalid input detected (not a chart). Aborting intercept.');
+      return;
+    }
+
     const { ticker, hurstData, regimeData } = p3Context;
 
     // === FIXED: Robust confidence extraction ===
