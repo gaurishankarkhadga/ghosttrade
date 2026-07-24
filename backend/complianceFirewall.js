@@ -4,6 +4,8 @@
 // advisory language before text reaches the client.
 // =====================================================
 
+import { logComplianceViolation } from './memoryLedger.js';
+
 const REPLACEMENT_MAP = [
   // =====================================================
   // ORDERING RULES: Longest/most-specific patterns FIRST.
@@ -117,15 +119,18 @@ export async function auditCompliance(fullText, signalHash) {
     check.pattern.lastIndex = 0;
   }
 
-  // Log violations to DB asynchronously (non-blocking)
+  // Log violations to DB (await to ensure it writes before process exists)
   if (violations.length > 0 && signalHash) {
-    import('./memoryLedger.js').then(({ logComplianceViolation }) => {
-      for (const term of violations) {
+    try {
+      const logPromises = violations.map(term => {
         const idx = fullText.toLowerCase().indexOf(term.toLowerCase());
         const context = idx >= 0 ? fullText.substring(Math.max(0, idx - 30), idx + 60) : '';
-        logComplianceViolation(term, context, signalHash);
-      }
-    }).catch(() => {});
+        return logComplianceViolation(term, context, signalHash);
+      });
+      await Promise.all(logPromises);
+    } catch (err) {
+      console.error('[COMPLIANCE] Error logging violations:', err);
+    }
   }
   
   return { clean: violations.length === 0, violations };

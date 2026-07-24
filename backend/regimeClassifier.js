@@ -31,13 +31,13 @@ export function classifyRegime(hurstResult) {
   // CI width is the primary uncertainty measure — tighter CI = more confident
   const ciWidth = ci95.upper - ci95.lower;
 
-  // Base certainty: how far is H from the ambiguous zone (0.45–0.55)?
-  // Distance from the nearest boundary of the random walk zone
+  // Base certainty: scale so that H >= 0.75 or H <= 0.25 gives max base certainty (1.0)
+  // 0.55-0.75 is the scaling range for trending.
   let distanceFromNeutral;
   if (meanH > 0.55) {
-    distanceFromNeutral = (meanH - 0.55) / 0.45; // 0 at boundary, 1 at H=1.0
+    distanceFromNeutral = Math.min(1.0, (meanH - 0.55) / 0.20); 
   } else if (meanH < 0.45) {
-    distanceFromNeutral = (0.45 - meanH) / 0.45; // 0 at boundary, 1 at H=0.0
+    distanceFromNeutral = Math.min(1.0, (0.45 - meanH) / 0.20); 
   } else {
     distanceFromNeutral = 0; // In the random walk zone
   }
@@ -45,13 +45,13 @@ export function classifyRegime(hurstResult) {
   // Posterior = base certainty reduced by CI width uncertainty and instability penalty
   let posterior = distanceFromNeutral;
 
-  // Penalize for wide confidence interval
-  const ciPenalty = Math.min(ciWidth * 2, 0.30); // Max 30% penalty
-  posterior -= ciPenalty;
+  // Penalize for wide confidence interval (only if wider than a tight 0.15 bound)
+  const ciPenalty = Math.max(0, (ciWidth - 0.15)) * 1.5; 
+  posterior -= Math.min(ciPenalty, 0.30); // Max 30% penalty
 
   // Penalize for R/S vs DFA disagreement
   if (!isStable) {
-    const instabilityPenalty = Math.min(disagreement * 1.5, 0.20); // Max 20% penalty
+    const instabilityPenalty = Math.min(disagreement, 0.20); // Max 20% penalty
     posterior -= instabilityPenalty;
   }
 

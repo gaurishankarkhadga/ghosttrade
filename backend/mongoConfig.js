@@ -6,6 +6,10 @@
 
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
+import dns from 'dns';
+
+// Fix for queryTxt ETIMEOUT cluster0.mongodb.net issues in restricted networks
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 dotenv.config();
 

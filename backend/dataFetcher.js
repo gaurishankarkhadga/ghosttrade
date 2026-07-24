@@ -4,7 +4,8 @@
 // No API key required — uses yahoo-finance2 npm package.
 // =====================================================
 
-import yahooFinance from 'yahoo-finance2';
+import yf from 'yahoo-finance2';
+const yahooFinance = new yf();
 
 // How many bars to fetch by default (must be > 200 for Hurst)
 const DEFAULT_BAR_COUNT = 300;
