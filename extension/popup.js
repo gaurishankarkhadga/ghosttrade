@@ -1,6 +1,7 @@
 let socket = null;
 let hasStartedStreaming = false;
 let cumulativeText = "";
+let currentLanguage = "English";
 
 // =====================================================
 // ENV DETECTION — Works in both Chrome Extension & Local Dev
@@ -88,7 +89,62 @@ document.addEventListener('DOMContentLoaded', () => {
       runBulkScanner();
     });
   }
+
+  // System Logs Panel Logic
+  const logsBtn = document.getElementById('logs-btn');
+  const logsPanel = document.getElementById('logs-panel');
+  if (logsBtn && logsPanel) {
+    const closeLogsBtn = logsPanel.querySelector('.close-panel-btn');
+    logsBtn.addEventListener('click', () => {
+      logsPanel.classList.remove('hidden');
+    });
+    closeLogsBtn.addEventListener('click', () => {
+      logsPanel.classList.add('hidden');
+    });
+  }
+
+  // Language Translation Logic
+  const langSelect = document.getElementById('language-select');
+  if (langSelect) {
+    // Determine default based on timezone
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let defaultLang = 'English';
+    if (tz === 'Asia/Calcutta' || tz === 'Asia/Kolkata') defaultLang = 'Hinglish';
+    else if (tz === 'Asia/Kathmandu') defaultLang = 'Nepali';
+
+    if (IS_EXTENSION) {
+      chrome.storage.local.get(['translationLanguage'], (result) => {
+        currentLanguage = result.translationLanguage || defaultLang;
+        langSelect.value = currentLanguage;
+      });
+      langSelect.addEventListener('change', (e) => {
+        currentLanguage = e.target.value;
+        chrome.storage.local.set({ translationLanguage: currentLanguage });
+      });
+    } else {
+      currentLanguage = localStorage.getItem('translationLanguage') || defaultLang;
+      langSelect.value = currentLanguage;
+      langSelect.addEventListener('change', (e) => {
+        currentLanguage = e.target.value;
+        localStorage.setItem('translationLanguage', currentLanguage);
+      });
+    }
+  }
 });
+
+function logToPanel(type, title, detail) {
+  const container = document.getElementById('system-logs-container');
+  if (!container) return;
+  const time = new Date().toLocaleTimeString();
+  const color = type === 'error' ? 'var(--red)' : (type === 'warn' ? 'var(--amber)' : 'var(--text-muted)');
+  const html = `
+    <div style="background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; border-left: 2px solid ${color};">
+      <div style="color: ${color}; font-weight: bold; margin-bottom: 4px;">[${time}] ${escapeHTML(title)}</div>
+      <div style="opacity: 0.8; word-break: break-all;">${escapeHTML(detail || '')}</div>
+    </div>
+  `;
+  container.innerHTML = html + container.innerHTML;
+}
 
 async function loadCalibrationData() {
   const container = document.getElementById('calibration-curve-container');
@@ -255,13 +311,13 @@ function startProcess() {
     // === PRODUCTION: Chrome Extension Mode ===
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs || tabs.length === 0) {
-        showError('No active tab found.');
+        showError('No active tab found.', 'chrome.tabs.query returned no tabs');
         return;
       }
 
       const tab = tabs[0];
       if (tab.url && tab.url.startsWith('chrome://')) {
-        showError('Cannot analyze Chrome internal pages.');
+        showError('Cannot analyze Chrome internal pages.', 'Attempted to run extension on restricted chrome:// URL');
         return;
       }
 
@@ -269,7 +325,7 @@ function startProcess() {
         chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 85 }, (dataUrl) => {
           if (chrome.runtime.lastError) {
             console.error('Capture Error:', chrome.runtime.lastError);
-            showError('Failed to capture screen.');
+            showError('Failed to capture screen.', chrome.runtime.lastError.message);
             return;
           }
           connectWebSocket(dataUrl);
@@ -306,7 +362,7 @@ function connectWebSocket(dataUrl) {
       statusLabel.innerText = 'Analyzing';
 
       if (base64Data) {
-        socket.send(JSON.stringify({ type: 'image_payload', image: base64Data }));
+        socket.send(JSON.stringify({ type: 'image_payload', image: base64Data, language: currentLanguage }));
       } else {
         // DEV MODE: waiting for manual payload via external request
         loadingText.innerText = 'DEV MODE — Awaiting image payload...';
@@ -319,7 +375,7 @@ function connectWebSocket(dataUrl) {
 
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
-      showError('Core link severed. Verify backend is running.');
+      showError('Core link severed. Verify backend is running.', 'WebSocket Error');
     };
 
     socket.onclose = (event) => {
@@ -327,11 +383,13 @@ function connectWebSocket(dataUrl) {
       statusLabel.innerText = 'Disconnected';
       statusLabel.className = 'gt-status-label disconnected';
       statusDot.className = 'gt-status-dot disconnected';
+      
+      logToPanel('warn', 'Connection Closed', `Code: ${event.code}, Reason: ${event.reason || 'None'}`);
 
       if (event.code !== 1000 && !hasStartedStreaming) {
         loadingIndicator.classList.add('hidden');
         if (!document.getElementById('content').innerHTML.includes('gt-error')) {
-          showError('Connection closed unexpectedly.');
+          showError('Connection closed unexpectedly.', `WebSocket closed with code ${event.code}`);
         }
       }
     };
@@ -506,7 +564,8 @@ function handleWebSocketMessage(messageData) {
     if (data.status === 'error') {
       loadingIndicator.classList.add('hidden');
       const safeMessage = escapeHTML(data.message || '');
-      content.innerHTML = `<div class="gt-error">[SYSTEM FAULT] ${safeMessage}</div>`;
+      logToPanel('error', 'Backend Error', data.rawError || data.message || 'Unknown error');
+      content.innerHTML = `<div class="gt-error">[SYSTEM ALERT] ${safeMessage}</div>`;
       content.classList.remove('hidden');
       content.classList.add('visible');
     }
@@ -595,7 +654,8 @@ function handleWebSocketMessage(messageData) {
   }
 }
 
-function showError(message) {
+function showError(message, rawDetail) {
+  logToPanel('error', 'Client Error', rawDetail || message);
   const loadingIndicator = document.getElementById('loading-indicator');
   const content = document.getElementById('content');
   loadingIndicator.classList.add('hidden');

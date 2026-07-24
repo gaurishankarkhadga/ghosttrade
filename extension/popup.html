@@ -40,6 +40,29 @@
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
     </button>
+    <!-- Logs Button -->
+    <button id="logs-btn" class="toolbar-btn" title="View System Logs" style="background:transparent; border:none; color:var(--amber); cursor:pointer; margin-left: 5px; padding: 4px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;">
+        <path d="M4 6h16M4 12h16M4 18h16"></path>
+      </svg>
+    </button>
+    <!-- Language Selector -->
+    <div class="toolbar-btn" style="background:transparent; border:none; margin-left: 5px; padding: 4px; display: flex; align-items: center;" title="Translation Language">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px; color: var(--text-muted);">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+      <select id="language-select" style="background: transparent; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; outline: none; margin-left: 2px;">
+        <option value="English">EN</option>
+        <option value="Hinglish">HI-EN</option>
+        <option value="Nepali">NE</option>
+        <option value="Spanish">ES</option>
+        <option value="French">FR</option>
+        <option value="Mandarin">ZH</option>
+        <option value="Arabic">AR</option>
+      </select>
+    </div>
   </header>
 
   <!-- Main Scrollable Content -->
@@ -115,6 +138,24 @@
       
       <div id="scanner-results" class="space-y-2">
         <!-- Results injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SYSTEM LOGS PANEL                            -->
+  <!-- ========================================== -->
+  <div id="logs-panel" class="side-panel hidden" style="z-index: 150; background: var(--bg-dark);">
+    <div class="panel-header" style="border-bottom-color: var(--amber);">
+      <h3 class="panel-title" style="color: var(--amber);">System Logs</h3>
+      <button class="close-panel-btn">✕</button>
+    </div>
+    <div class="panel-body">
+      <p class="text-xs text-[var(--text-muted)] mb-4" style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 1rem;">
+        Technical error logs to help developers diagnose issues.
+      </p>
+      <div id="system-logs-container" class="space-y-2 font-mono" style="max-height: 300px; overflow-y: auto; font-size: 0.65rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;">
+        <!-- Logs injected here -->
       </div>
     </div>
   </div>

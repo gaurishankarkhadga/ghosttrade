@@ -247,11 +247,11 @@ async function extractTickerFromImage(base64Image, apiKey, model = MODELS[1]) { 
  * Attempts to connect to Gemini via BidiGenerateContent WebSocket.
  * Falls back to REST SSE if the bidirectional protocol fails.
  */
-export async function handleGeminiConnection(clientWs, base64Image) {
+export async function handleGeminiConnection(clientWs, base64Image, language = 'English') {
   const API_KEY = process.env.GEMINI_API_KEY;
 
   if (!API_KEY) {
-    clientWs.send(JSON.stringify({ status: 'error', message: 'API Key not configured in backend.' }));
+    clientWs.send(JSON.stringify({ status: 'error', message: 'The system cannot connect because the AI API key is missing. Please check the backend configuration.', rawError: 'Missing GEMINI_API_KEY in environment variables' }));
     return;
   }
 
@@ -321,7 +321,12 @@ export async function handleGeminiConnection(clientWs, base64Image) {
     console.warn('[MEMORY] Error vector fetch failed, proceeding without memory:', e.message);
   }
 
-  const systemPromptWithMemory = SYSTEM_PROMPT + phase3Context + memoryBlock;
+  let translationRule = '';
+  if (language && language !== 'English') {
+    translationRule = `\n\n=== TRANSLATION REQUIREMENT ===\nYou MUST output your entire reasoning, analysis, explanation, and educational modules in the following language: ${language}.\nCRITICAL: Do NOT translate the exact text labels in Module 1 (e.g., "BASE CASE:", "Primary Target:", "Current Price:", "Risk-to-Reward Ratio:"). Keep those labels exactly as requested in English so the backend parser does not break.`;
+  }
+
+  const systemPromptWithMemory = SYSTEM_PROMPT + phase3Context + memoryBlock + translationRule;
 
   // Stream directly via robust REST SSE with Phase 3 integration
   await streamViaRestSSE(clientWs, base64Image, API_KEY, systemPromptWithMemory, { ticker, hurstData, regimeData });
@@ -493,6 +498,7 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
   let fullText = '';
   let rawFullText = '';
   try {
+    let success = false;
     for (const model of MODELS) {
       console.log(`[GEMINI] Attempting REST SSE with ${model}...`);
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${apiKey}&alt=sse`, {
@@ -507,6 +513,7 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
       }
 
       console.log(`[GEMINI] Connected successfully to ${model}`);
+      success = true;
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
@@ -563,9 +570,14 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
       clientWs.send(JSON.stringify({ status: 'complete' }));
       break; // Exit loop on success
     }
+    
+    if (!success) {
+      console.error('[GEMINI] All models exhausted and failed.');
+      clientWs.send(JSON.stringify({ status: 'error', message: 'Gemini API rate limit occurred. Too many people are using the AI right now. Please wait a minute and try again.', rawError: '429 Too Many Requests on all fallback models' }));
+    }
   } catch (error) {
     console.error('[REST-SSE] Stream connection error:', error);
-    clientWs.send(JSON.stringify({ status: 'error', message: 'API Congestion. Retrying...' }));
+    clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the AI. Retrying...', rawError: error.message }));
   }
 }
 

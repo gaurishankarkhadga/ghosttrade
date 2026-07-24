@@ -90,8 +90,8 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     startDate.setDate(endDate.getDate() - Math.ceil(bars * 1.4));
 
     const result = await yahooFinance.chart(symbol, {
-      period1: startDate,
-      period2: endDate,
+      period1: startDate.toISOString().split('T')[0],
+      period2: endDate.toISOString().split('T')[0],
       interval: '1d',
     });
 

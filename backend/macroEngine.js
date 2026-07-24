@@ -4,7 +4,8 @@
 // trade against major macroeconomic trends.
 // =====================================================
 
-import yahooFinance from 'yahoo-finance2';
+import yf from 'yahoo-finance2';
+const yahooFinance = new yf();
 
 /**
  * Fetches Fear and Greed Index from alternative.me

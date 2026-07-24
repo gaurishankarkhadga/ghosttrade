@@ -129,8 +129,8 @@ wss.on('connection', (ws, req) => {
           return;
         }
 
-        console.log(`[WS] Received image payload, routing to Gemini Engine`);
-        handleGeminiConnection(ws, data.image);
+        console.log(`[WS] Received image payload, routing to Gemini Engine. Target Language: ${data.language || 'English'}`);
+        handleGeminiConnection(ws, data.image, data.language || 'English');
       }
     } catch (e) {
       console.error('[WS] Failed to parse message', e);
