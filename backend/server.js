@@ -7,6 +7,7 @@ import { startAuditDaemon, stopAuditDaemon } from './auditDaemon.js';
 import { startRegimeMonitor, stopRegimeMonitor, registerClient } from './regimeMonitor.js';
 import { generateCalibrationReport } from './calibrationEngine.js';
 import { closeDb } from './mongoConfig.js';
+import { runBulkScan, DEFAULT_CRYPTO_WATCHLIST } from './scannerEngine.js';
 
 dotenv.config();
 
@@ -22,6 +23,17 @@ app.get('/api/calibration', async (req, res) => {
     return res.status(500).json(report);
   }
   res.json(report);
+});
+
+// Phase 4: Bulk Scanner Endpoint
+app.post('/api/scan', async (req, res) => {
+  const tickers = req.body.tickers || DEFAULT_CRYPTO_WATCHLIST;
+  try {
+    const results = await runBulkScan(tickers);
+    res.json({ status: 'success', data: results });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

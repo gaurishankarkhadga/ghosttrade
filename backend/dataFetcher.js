@@ -9,6 +9,10 @@ import yahooFinance from 'yahoo-finance2';
 // How many bars to fetch by default (must be > 200 for Hurst)
 const DEFAULT_BAR_COUNT = 300;
 
+// Simple in-memory cache for bulk scanning
+const ohlcvCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 // Map of known crypto ticker aliases to Yahoo Finance symbols
 const CRYPTO_ALIAS_MAP = {
   'BTC':    'BTC-USD',
@@ -69,6 +73,14 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     return { error: 'UNKNOWN_TICKER', message: `Cannot resolve ticker: ${ticker}` };
   }
 
+  // Check cache
+  const cacheKey = `${symbol}_${bars}`;
+  const cached = ohlcvCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    console.log(`[DATA] Cache hit for ${symbol}`);
+    return cached.data;
+  }
+
   try {
     // Calculate date range — fetch extra days to account for weekends/holidays
     const endDate   = new Date();
@@ -109,7 +121,9 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     }
 
     console.log(`[DATA] Fetched ${ohlcv.length} bars for ${symbol}`);
-    return { symbol, bars: ohlcv };
+    const finalData = { symbol, bars: ohlcv };
+    ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+    return finalData;
 
   } catch (err) {
     console.error(`[DATA] Yahoo Finance fetch failed for ${symbol}:`, err.message);

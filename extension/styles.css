@@ -849,6 +849,14 @@ body {
 .border { border-width: 1px; }
 .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
 
+/* Custom Additions */
+.w-full { width: 100%; }
+.w-1\/4 { width: 25%; }
+.block { display: block; }
+.font-bold { font-weight: 700; }
+.h-16 { height: 4rem; }
+.space-y-2 > * + * { margin-top: 0.5rem; }
+
 .bg-\[var\(--bg-dark\)\] { background-color: var(--bg-surface); }
 .bg-\[var\(--bg-card\)\] { background-color: var(--bg-elevated); }
 .border-\[var\(--border\)\] { border-color: var(--border-medium); }

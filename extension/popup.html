@@ -33,6 +33,13 @@
         <polyline points="10 9 9 9 8 9"></polyline>
       </svg>
     </button>
+    <!-- Phase 4 Scanner Button -->
+    <button id="scanner-btn" class="toolbar-btn" title="Bulk Market Scanner" style="background:transparent; border:none; color:var(--emerald); cursor:pointer; margin-left: 5px; padding: 4px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+    </button>
   </header>
 
   <!-- Main Scrollable Content -->
@@ -85,6 +92,29 @@
       <div id="calibration-curve-container" class="space-y-3">
         <!-- Curve rows injected here by popup.js -->
         <div class="text-center text-xs text-[var(--text-muted)] py-4">Loading calibration data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- BULK SCANNER PANEL (PHASE 4)                 -->
+  <!-- ========================================== -->
+  <div id="scanner-panel" class="side-panel hidden" style="z-index: 100;">
+    <div class="panel-header" style="border-bottom-color: var(--emerald);">
+      <h3 class="panel-title" style="color: var(--emerald);">Market Scanner</h3>
+      <button class="close-panel-btn">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="mb-4">
+        <label class="text-xs text-[var(--text-muted)] block mb-1">Watchlist (comma separated)</label>
+        <textarea id="scanner-watchlist" class="w-full bg-[var(--bg-dark)] border border-[var(--border)] text-[var(--text-main)] text-xs rounded p-2 outline-none h-16" style="resize:none;">BTC, ETH, SOL, XRP, DOGE, ADA, AVAX</textarea>
+      </div>
+      <button id="start-scan-btn" class="gt-simulate-btn w-full mb-4" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: var(--emerald);">Start Scan</button>
+      
+      <div id="scanner-progress" class="hidden text-xs text-center text-[var(--text-muted)] mb-4">Scanning...</div>
+      
+      <div id="scanner-results" class="space-y-2">
+        <!-- Results injected here -->
       </div>
     </div>
   </div>

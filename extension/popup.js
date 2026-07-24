@@ -93,6 +93,24 @@ document.addEventListener('DOMContentLoaded', () => {
       loadCalibrationData();
     });
   }
+
+  // Phase 4: Bulk Scanner Panel Logic
+  const scannerBtn = document.getElementById('scanner-btn');
+  const scannerPanel = document.getElementById('scanner-panel');
+  if (scannerBtn && scannerPanel) {
+    const closeScannerBtn = scannerPanel.querySelector('.close-panel-btn');
+    const startScanBtn = document.getElementById('start-scan-btn');
+    
+    scannerBtn.addEventListener('click', () => {
+      scannerPanel.classList.remove('hidden');
+    });
+    closeScannerBtn.addEventListener('click', () => {
+      scannerPanel.classList.add('hidden');
+    });
+    startScanBtn.addEventListener('click', () => {
+      runBulkScanner();
+    });
+  }
 });
 
 async function loadCalibrationData() {
@@ -154,6 +172,70 @@ async function loadCalibrationData() {
 
   } catch (err) {
     container.innerHTML = `<div class="text-center text-xs text-[var(--red)] py-4">Failed to load calibration data:<br>${escapeHTML(err.message)}</div>`;
+  }
+}
+
+async function runBulkScanner() {
+  const watchlistInput = document.getElementById('scanner-watchlist').value;
+  const tickers = watchlistInput.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+  const progressEl = document.getElementById('scanner-progress');
+  const resultsContainer = document.getElementById('scanner-results');
+  
+  if (tickers.length === 0) return;
+  
+  progressEl.classList.remove('hidden');
+  progressEl.innerText = `Scanning ${tickers.length} assets...`;
+  resultsContainer.innerHTML = '';
+  
+  try {
+    const config = await getBackendConfig();
+    const res = await fetch(`${config.httpUrl}/api/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers })
+    });
+    
+    const data = await res.json();
+    if (data.status === 'error') throw new Error(data.message);
+    
+    progressEl.classList.add('hidden');
+    
+    if (!data.data || data.data.length === 0) {
+       resultsContainer.innerHTML = '<div class="text-xs text-center text-[var(--text-muted)]">No actionable setups found.</div>';
+       return;
+    }
+    
+    data.data.forEach(result => {
+       const isTrending = result.regime === 'TRENDING';
+       const color = isTrending ? 'var(--emerald)' : (result.actionable ? 'var(--amber)' : 'var(--text-muted)');
+       const scoreColor = result.score >= 50 ? 'var(--emerald)' : 'var(--text-main)';
+       
+       const html = `
+         <div class="bg-[var(--bg-card)] border border-[var(--border)] rounded p-2 text-xs flex justify-between items-center">
+           <div class="w-1/4">
+             <div class="font-bold text-[var(--text-main)]">${result.ticker}</div>
+             <div class="text-[10px] text-[var(--text-muted)]">$${result.currentPrice?.toFixed(2) || '---'}</div>
+           </div>
+           <div class="w-1/4 text-center">
+             <div class="text-[10px] text-[var(--text-muted)]">Regime</div>
+             <div class="font-mono text-[10px]" style="color: ${color}">${result.regime}</div>
+           </div>
+           <div class="w-1/4 text-center">
+             <div class="text-[10px] text-[var(--text-muted)]">Hurst</div>
+             <div class="font-mono text-[10px] text-[var(--text-main)]">${result.hurst}</div>
+           </div>
+           <div class="w-1/4 text-right">
+             <div class="text-[10px] text-[var(--text-muted)]">Score</div>
+             <div class="font-bold text-sm" style="color: ${scoreColor}">${result.score}</div>
+           </div>
+         </div>
+       `;
+       resultsContainer.innerHTML += html;
+    });
+
+  } catch (err) {
+    progressEl.innerText = `Error: ${err.message}`;
+    progressEl.style.color = 'var(--red)';
   }
 }
 

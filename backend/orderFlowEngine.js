@@ -7,6 +7,10 @@
 
 const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
 
+// Simple in-memory cache for bulk scanning
+const orderFlowCache = new Map();
+const FLOW_CACHE_TTL_MS = 60 * 1000; // 1 minute
+
 // Ticker → Binance symbol mapping
 const TICKER_TO_BINANCE = {
   'BTC': 'btcusdt', 'BTCUSD': 'btcusdt', 'BTCUSDT': 'btcusdt', 'BTC/USD': 'btcusdt', 'BTC/USDT': 'btcusdt', 'BTC-USD': 'btcusdt',
@@ -54,6 +58,12 @@ export async function fetchOrderFlow(ticker, limit = 1000) {
     return { error: `No Binance mapping for ${ticker}`, available: false };
   }
 
+  const cacheKey = `${symbol}_${limit}`;
+  const cached = orderFlowCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < FLOW_CACHE_TTL_MS)) {
+    return cached.data;
+  }
+
   try {
     const url = `https://api.binance.com/api/v3/aggTrades?symbol=${symbol.toUpperCase()}&limit=${limit}`;
     const response = await fetch(url, {
@@ -66,7 +76,9 @@ export async function fetchOrderFlow(ticker, limit = 1000) {
     }
 
     const trades = await response.json();
-    return analyzeOrderFlow(trades, symbol);
+    const finalData = analyzeOrderFlow(trades, symbol);
+    orderFlowCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+    return finalData;
   } catch (error) {
     console.warn(`[ORDER FLOW] Fetch failed for ${ticker}:`, error.message);
     return { error: error.message, available: false };
