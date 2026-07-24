@@ -14,31 +14,8 @@ const escapeHTML = (str) => {
   }[tag] || tag));
 };
 
-// =====================================================
-// ENV LOADER
-// =====================================================
-async function loadEnv() {
-  try {
-    if (IS_EXTENSION) return {}; // Cannot fetch local files in Chrome extension
-    const res = await fetch('.env');
-    const text = await res.text();
-    const env = {};
-    text.split('\n').forEach(line => {
-      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (match) {
-        env[match[1]] = match[2];
-      }
-    });
-    return env;
-  } catch(e) {
-    console.error('Error loading .env:', e);
-    return {};
-  }
-}
-
 async function getBackendConfig() {
-  const env = await loadEnv();
-  const defaultWsUrl = env.DEFAULT_WS_URL || 'wss://ghosttrade-test1.onrender.com/stream';
+  const defaultWsUrl = 'ws://localhost:5000/stream';
   
   if (IS_EXTENSION) {
     const result = await new Promise(resolve => chrome.storage.sync.get(['wsUrl'], resolve));
@@ -301,7 +278,7 @@ function startProcess() {
     });
   } else {
     // === DEVELOPMENT: Local testing mode ===
-    // Skip screen capture — send a placeholder directly to the WebSocket
+    // DEV MODE: Skip screen capture and wait for an external payload
     loadingText.innerText = 'DEV MODE — Connecting to local backend...';
     connectWebSocket(null);
   }
@@ -331,9 +308,8 @@ function connectWebSocket(dataUrl) {
       if (base64Data) {
         socket.send(JSON.stringify({ type: 'image_payload', image: base64Data }));
       } else {
-        // DEV MODE: send a test signal so backend knows to respond
-        loadingText.innerText = 'DEV MODE — Send an image via backend test or use extension.';
-        socket.send(JSON.stringify({ type: 'image_payload', image: 'DEV_TEST_PLACEHOLDER' }));
+        // DEV MODE: waiting for manual payload via external request
+        loadingText.innerText = 'DEV MODE — Awaiting image payload...';
       }
     };
 
@@ -773,7 +749,7 @@ function showPaperTradePanel(levels) {
     bearProb: levels.bearProb,
   };
 
-  savePaperTrade(trade, () => {
+  savePaperTrade(trade, true, () => {
     updateDisciplineDisplay();
     document.getElementById('paper-status').textContent = 
       `Setup simulated at ${new Date().toLocaleTimeString()}. Track your discipline.`;

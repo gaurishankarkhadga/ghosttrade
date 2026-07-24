@@ -9,15 +9,31 @@ import { isBinanceCrypto } from './orderFlowEngine.js';
 
 const BINANCE_FUTURES_API = 'https://fapi.binance.com/fapi/v1';
 
+// Shared ticker resolution map — must stay in sync with orderFlowEngine.js
+const TICKER_TO_FUTURES = {
+  'BTC': 'BTCUSDT', 'BTCUSD': 'BTCUSDT', 'BTCUSDT': 'BTCUSDT', 'BTC/USD': 'BTCUSDT', 'BTC/USDT': 'BTCUSDT', 'BTC-USD': 'BTCUSDT',
+  'ETH': 'ETHUSDT', 'ETHUSD': 'ETHUSDT', 'ETHUSDT': 'ETHUSDT', 'ETH/USD': 'ETHUSDT', 'ETH/USDT': 'ETHUSDT', 'ETH-USD': 'ETHUSDT',
+  'SOL': 'SOLUSDT', 'SOLUSD': 'SOLUSDT', 'SOL/USDT': 'SOLUSDT', 'SOL-USD': 'SOLUSDT',
+  'XRP': 'XRPUSDT', 'XRPUSD': 'XRPUSDT', 'XRP-USD': 'XRPUSDT',
+  'DOGE': 'DOGEUSDT', 'DOGE-USD': 'DOGEUSDT',
+  'ADA': 'ADAUSDT', 'ADA-USD': 'ADAUSDT',
+  'AVAX': 'AVAXUSDT', 'AVAX-USD': 'AVAXUSDT',
+  'DOT': 'DOTUSDT', 'DOT-USD': 'DOTUSDT',
+  'LINK': 'LINKUSDT', 'LINK-USD': 'LINKUSDT',
+  'MATIC': 'MATICUSDT', 'MATIC-USD': 'MATICUSDT',
+  'BNB': 'BNBUSDT', 'BNB-USD': 'BNBUSDT',
+  'LTC': 'LTCUSDT', 'LTC-USD': 'LTCUSDT',
+  'ATOM': 'ATOMUSDT', 'UNI': 'UNIUSDT', 'NEAR': 'NEARUSDT',
+  'APT': 'APTUSDT', 'ARB': 'ARBUSDT', 'OP': 'OPUSDT',
+  'SUI': 'SUIUSDT', 'PEPE': 'PEPEUSDT', 'WIF': 'WIFUSDT',
+};
+
 /**
- * Resolves ticker to Binance Futures symbol
+ * Resolves ticker to Binance Futures symbol using the shared map.
  */
 function resolveFuturesSymbol(ticker) {
-  const normalized = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (normalized === 'BTC' || normalized === 'BTCUSD') return 'BTCUSDT';
-  if (normalized === 'ETH' || normalized === 'ETHUSD') return 'ETHUSDT';
-  if (normalized.endsWith('USDT')) return normalized;
-  return `${normalized}USDT`;
+  const normalized = ticker.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
+  return TICKER_TO_FUTURES[normalized] || null;
 }
 
 /**

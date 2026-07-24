@@ -220,7 +220,7 @@ Start with MODULE 1 immediately. Every module must have concrete data, not vague
 /**
  * Fast Phase 3 pass to extract ticker from image before main stream.
  */
-async function extractTickerFromImage(base64Image, apiKey, model = 'models/gemini-1.5-flash') {
+async function extractTickerFromImage(base64Image, apiKey, model = MODELS[1]) { // Defaulting to the flash model from array
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -555,7 +555,11 @@ async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3C
       }
       
       console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
-      await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
+      try {
+        await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
+      } catch (p3Err) {
+        console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
+      }
       clientWs.send(JSON.stringify({ status: 'complete' }));
       break; // Exit loop on success
     }

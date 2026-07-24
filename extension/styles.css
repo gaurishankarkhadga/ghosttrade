@@ -581,6 +581,13 @@ body {
    §2.1 — VIRTUAL PAPER TRADING ENGINE STYLES
    ============================================================ */
 
+/* Simulate Actions Container */
+.gt-simulate-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* Simulate Button */
 .gt-simulate-btn {
   width: 100%;

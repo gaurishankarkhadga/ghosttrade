@@ -90,8 +90,20 @@ const wss = new WebSocketServer({
   maxPayload: 10 * 1024 * 1024, // 10MB DoS protection limit
   verifyClient: (info, callback) => {
     const origin = info.origin || info.req.headers.origin;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // In production, require an origin header — blocks server-side bots/scripts
+    if (!origin) {
+      if (isProduction) {
+        console.warn('[SECURITY] Blocked WS connection with no origin header (production mode)');
+        return callback(false, 403, 'Forbidden');
+      }
+      // Local dev: allow null origin for testing tools (Postman, wscat, etc.)
+      return callback(true);
+    }
+
     // Strictly allow only Chrome Extensions or Localhost
-    if (!origin || origin.startsWith('chrome-extension://') || origin.startsWith('http://localhost')) {
+    if (origin.startsWith('chrome-extension://') || origin.startsWith('http://localhost')) {
       callback(true);
     } else {
       console.warn(`[SECURITY] Blocked unauthorized WS connection from origin: ${origin}`);

@@ -47,7 +47,7 @@ const CRYPTO_ALIAS_MAP = {
  * Resolves a ticker from the AI's output to a Yahoo Finance symbol.
  * Handles crypto aliases and standard stock symbols.
  */
-function resolveYahooSymbol(rawTicker) {
+export function resolveYahooSymbol(rawTicker) {
   if (!rawTicker) return null;
   const clean = rawTicker.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
   // Check crypto alias map first

@@ -239,7 +239,7 @@ export function volumeAnalysis(bars, lookback = 20) {
   const priceUp = bars[bars.length - 1].close > bars[bars.length - 5].close;
   const volumeDown = trend === 'DECREASING';
   const divergence = priceUp && volumeDown ? 'BEARISH_DIVERGENCE'
-    : !priceUp && !volumeDown ? 'BULLISH_DIVERGENCE'
+    : !priceUp && volumeDown ? 'BULLISH_DIVERGENCE'
     : 'NONE';
 
   let interpretation;

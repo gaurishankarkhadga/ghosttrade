@@ -11,6 +11,7 @@
 
 import { getDb } from './mongoConfig.js';
 import { writeErrorVector } from './memoryLedger.js';
+import { resolveYahooSymbol } from './dataFetcher.js';
 import yahooFinance from 'yahoo-finance2';
 
 const AUDIT_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
@@ -126,8 +127,12 @@ async function fetchCryptoPrice(ticker) {
  */
 async function fetchStockPrice(ticker) {
   try {
-    // Resolve Yahoo Finance symbol
-    let symbol = ticker.toUpperCase().replace(/[^A-Z0-9./-]/g, '');
+    // Use the shared Yahoo Finance symbol resolver (handles crypto aliases, forex pairs, stocks)
+    const symbol = resolveYahooSymbol(ticker);
+    if (!symbol) {
+      console.warn(`[AUDIT] Cannot resolve Yahoo Finance symbol for ${ticker}`);
+      return null;
+    }
     
     const quote = await yahooFinance.quote(symbol);
     return quote?.regularMarketPrice || null;

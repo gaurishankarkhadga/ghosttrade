@@ -9,8 +9,12 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const MONGO_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.MONGODB_DB_NAME || 'ghosttrade';
+
+if (!MONGO_URI) {
+  console.warn('[WARNING] MONGODB_URI is not set in environment variables. Database operations will fail.');
+}
 
 let client = null;
 let db = null;
@@ -21,6 +25,10 @@ let db = null;
  */
 export async function getDb() {
   if (db) return db;
+
+  if (!MONGO_URI) {
+    throw new Error('MONGODB_URI is not configured in the environment.');
+  }
 
   try {
     client = new MongoClient(MONGO_URI, {
@@ -43,8 +51,8 @@ export async function getDb() {
     await db.collection('signals').createIndex({ resolvedOutcome: 1, timestamp: -1 });
     await db.collection('signals').createIndex({ calibratedConfidence: 1, resolvedOutcome: 1 });
     await db.collection('signals').createIndex({ regimeInvalidated: 1 });
-    await db.collection('calibration_snapshots').createIndex({ generatedAt: -1 });
-    await db.collection('calibration_snapshots').createIndex({ windowDays: 1, generatedAt: -1 });
+    // Compound index for auditDaemon.getDueSignals() query path
+    await db.collection('signals').createIndex({ auditDue: 1, resolvedOutcome: 1, signalBlocked: 1 });
     await db.collection('compliance_violations').createIndex({ timestamp: -1 });
     await db.collection('compliance_violations').createIndex({ term: 1, timestamp: -1 });
     await db.collection('regime_invalidations').createIndex({ ticker: 1, invalidatedAt: -1 });
