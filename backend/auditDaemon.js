@@ -218,20 +218,43 @@ function extractAnalyticalContext(predictionSummary) {
   if (!predictionSummary) return {};
   const text = predictionSummary;
   
+  // Legacy matches
   const regimeMatch = text.match(/REGIME:\s*(\S+)/i);
   const confluenceMatch = text.match(/CONFLUENCE SCORE:\s*(\d)\/7/i);
-  const alignmentMatch = text.match(/Timeframe Alignment:\s*(ALIGNED|CONFLICTING)/i);
-  const volumeMatch = text.match(/Volume-Price Divergence:.*?(bearish divergence|bullish divergence|declining volume|exhaustion)/i);
-  const trapMatch = text.match(/inducement|trap|sweep/i);
   const evMatch = text.match(/Expected Value per \$100 risked:\s*\$?([-\d.]+)/i);
+
+  // Advanced Matrix Phase 1 Matches
+  const matrix15mMatch = text.match(/15m Regime:\s*([A-Z-]+).*?Vol:\s*([A-Z_]+)/);
+  const matrix1dMatch = text.match(/1D Regime:\s*([A-Z-]+).*?Vol:\s*([A-Z_]+)/);
+  const shieldMatch = text.match(/🚨 TIME FRAME SHIELD TRIGGERED.*?fighting the 1D macro trend/i);
+  const meanReversionTrapMatch = text.match(/⚠️ MEAN REVERSION TRAP DETECTED/i);
+  const volAnomalyMatch = text.match(/⚠️ MICRO-VOLATILITY ANOMALY/i);
+
+  // Level 2 Liquidity Phase 2 Matches
+  const flowBiasMatch = text.match(/Flow Bias:\s*([A-Z_]+)/);
+  const buyWallMatch = text.match(/Institutional BUY Walls.*?-\s*\$([\d,]+)\s*waiting/s);
+  const sellWallMatch = text.match(/Institutional SELL Walls.*?-\s*\$([\d,]+)\s*waiting/s);
+  const liquidityTrapMatch = text.match(/🚨 TRAP WARNING: If you are predicting a primary target ABOVE the largest SELL wall/i);
   
   return {
     regime: regimeMatch ? regimeMatch[1] : null,
     confluenceScore: confluenceMatch ? parseInt(confluenceMatch[1]) : null,
-    alignment: alignmentMatch ? alignmentMatch[1] : null,
-    volumeDivergence: volumeMatch ? volumeMatch[1] : null,
-    trapDetected: trapMatch ? true : false,
     expectedValue: evMatch ? parseFloat(evMatch[1]) : null,
+    
+    // Matrix data
+    regime15m: matrix15mMatch ? matrix15mMatch[1] : null,
+    vol15m: matrix15mMatch ? matrix15mMatch[2] : null,
+    regime1d: matrix1dMatch ? matrix1dMatch[1] : null,
+    vol1d: matrix1dMatch ? matrix1dMatch[2] : null,
+    shieldTriggered: !!shieldMatch,
+    meanReversionTrap: !!meanReversionTrapMatch,
+    volAnomaly: !!volAnomalyMatch,
+
+    // Level 2 data
+    flowBias: flowBiasMatch ? flowBiasMatch[1] : null,
+    hasMassiveBuyWall: !!buyWallMatch,
+    hasMassiveSellWall: !!sellWallMatch,
+    liquidityTrap: !!liquidityTrapMatch,
   };
 }
 
@@ -253,23 +276,34 @@ function evaluateSignal(signal, actualPrice) {
   function buildErrorContext(baseReason) {
     const contextParts = [baseReason];
     
-    if (ctx.regime) {
-      contextParts.push(`Regime was ${ctx.regime}`);
+    // Legacy rules
+    if (ctx.regime) contextParts.push(`Regime was ${ctx.regime}`);
+    if (ctx.confluenceScore !== null && ctx.confluenceScore < 5) contextParts.push(`Confluence was weak (${ctx.confluenceScore}/7)`);
+    if (ctx.expectedValue !== null && ctx.expectedValue < 5) contextParts.push(`Expected Value was <$5`);
+
+    // Advanced Matrix Autopsy
+    if (ctx.shieldTriggered) {
+      contextParts.push(`CRITICAL ERROR: AI fought the 1D Macro Trend (${ctx.regime1d || 'Unknown'}) by trusting a conflicting 15m signal (${ctx.regime15m || 'Unknown'}). The Timeframe Shield warned against this trap`);
     }
-    if (ctx.confluenceScore !== null && ctx.confluenceScore < 5) {
-      contextParts.push(`Confluence was weak at ${ctx.confluenceScore}/7 — should have triggered SHIELD MODE`);
+    if (ctx.meanReversionTrap) {
+      contextParts.push(`CRITICAL ERROR: AI fell for a Mean Reversion Trap. The 1D was chopping, the 15m breakout was a fakeout liquidity grab`);
     }
-    if (ctx.alignment === 'CONFLICTING') {
-      contextParts.push(`Multi-timeframe alignment was CONFLICTING — higher timeframe structure disagreed with the call`);
+    if (ctx.volAnomaly) {
+      contextParts.push(`RISK ERROR: Micro-Volatility was dangerously high (${ctx.vol15m}) compared to Macro baseline (${ctx.vol1d}), leading to a stop-out before directional execution`);
     }
-    if (ctx.volumeDivergence) {
-      contextParts.push(`Volume showed ${ctx.volumeDivergence} which was ignored or underweighted`);
+
+    // Level 2 Liquidity Autopsy
+    if (signal.direction === 'BULLISH' && ctx.flowBias && ctx.flowBias.includes('SELL')) {
+      contextParts.push(`ORDER FLOW ERROR: AI called BULLISH despite ${ctx.flowBias} market aggression`);
     }
-    if (ctx.trapDetected) {
-      contextParts.push(`Trap/inducement signals were detected but the prediction proceeded anyway`);
+    if (signal.direction === 'BEARISH' && ctx.flowBias && ctx.flowBias.includes('BUY')) {
+      contextParts.push(`ORDER FLOW ERROR: AI called BEARISH despite ${ctx.flowBias} market aggression`);
     }
-    if (ctx.expectedValue !== null && ctx.expectedValue < 5) {
-      contextParts.push(`Expected Value was only $${ctx.expectedValue.toFixed(1)}/100 — below the $5 threshold`);
+    if (signal.direction === 'BULLISH' && ctx.liquidityTrap && ctx.hasMassiveSellWall) {
+      contextParts.push(`LEVEL 2 FATAL ERROR: AI blindly called BULLISH directly into a massive Institutional SELL Wall. The price hit the wall and instantly reversed. You MUST front-run Level 2 walls`);
+    }
+    if (signal.direction === 'BEARISH' && ctx.hasMassiveBuyWall) {
+       contextParts.push(`LEVEL 2 FATAL ERROR: AI called BEARISH into a massive Institutional BUY Wall. The price hit the support wall and bounced. Never short into heavy limit accumulation`);
     }
     
     return contextParts.join('. ') + '.';

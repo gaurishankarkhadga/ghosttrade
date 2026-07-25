@@ -10,6 +10,7 @@ const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
 // Simple in-memory cache for bulk scanning
 const orderFlowCache = new Map();
 const FLOW_CACHE_TTL_MS = 60 * 1000; // 1 minute
+import { getLiveDepthFromMemory } from './websocketEngine.js';
 
 // Ticker → Binance symbol mapping
 const TICKER_TO_BINANCE = {
@@ -81,6 +82,55 @@ export async function fetchOrderFlow(ticker, limit = 1000) {
     return finalData;
   } catch (error) {
     console.warn(`[ORDER FLOW] Fetch failed for ${ticker}:`, error.message);
+    return { error: error.message, available: false };
+  }
+}
+
+/**
+ * Fetches Level 2 Order Book Depth from Binance REST API.
+ * Detects institutional limit order walls (Buy/Sell Liquidity).
+ * @param {string} ticker - Ticker symbol
+ * @param {number} limit - Depth limit (default 1000, max 5000)
+ * @returns {Promise<Object>} Order book analysis
+ */
+export async function fetchOrderBookDepth(ticker, limit = 1000) {
+  const symbol = resolveBinanceSymbol(ticker);
+  if (!symbol) {
+    return { error: `No Binance mapping for ${ticker}`, available: false };
+  }
+
+  // [PHASE 7] Sub-Millisecond Zero Latency WebSocket Check
+  const liveData = getLiveDepthFromMemory(ticker);
+  if (!liveData.error) {
+      // Data exists in memory cache from the live stream
+      // We parse it instantly without making an HTTP request
+      return analyzeOrderBook(liveData, symbol);
+  }
+
+  // Fallback to HTTP REST if WebSocket cache is empty/booting
+  const cacheKey = `depth_${symbol}_${limit}`;
+  const cached = orderFlowCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < FLOW_CACHE_TTL_MS)) {
+    return cached.data;
+  }
+
+  try {
+    const url = `https://api.binance.com/api/v3/depth?symbol=${symbol.toUpperCase()}&limit=${limit}`;
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      return { error: `Binance Depth API ${response.status}`, available: false };
+    }
+
+    const depthData = await response.json();
+    const finalData = analyzeOrderBook(depthData, symbol);
+    orderFlowCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+    return finalData;
+  } catch (error) {
+    console.warn(`[ORDER BOOK] Fetch failed for ${ticker}:`, error.message);
     return { error: error.message, available: false };
   }
 }
@@ -211,25 +261,134 @@ function analyzeOrderFlow(trades, symbol) {
 }
 
 /**
- * Formats order flow data into a text block for AI injection.
+ * Analyzes Level 2 Order Book data to find liquidity walls.
+ * @param {Object} depthData - Binance depth response
+ * @param {string} symbol - Trading pair
+ * @returns {Object} Order book wall analysis
  */
-export function formatOrderFlowContext(flowData) {
-  if (!flowData || !flowData.available) {
-    return '';
+function analyzeOrderBook(depthData, symbol) {
+  if (!depthData || !depthData.bids || !depthData.asks || depthData.bids.length === 0 || depthData.asks.length === 0) {
+    return { error: 'No depth data', available: false };
   }
 
-  let block = `\n=== ORDER FLOW ANALYSIS (LIVE BINANCE DATA) ===\n`;
-  block += `Symbol: ${flowData.symbol}\n`;
-  block += `Buy Volume: ${flowData.buyVolume} | Sell Volume: ${flowData.sellVolume}\n`;
-  block += `Volume Delta: ${flowData.delta > 0 ? '+' : ''}${flowData.delta} (${flowData.deltaPercent > 0 ? '+' : ''}${flowData.deltaPercent}%)\n`;
-  block += `Buy/Sell Ratio: ${flowData.buyRatio}% buy / ${(100 - flowData.buyRatio).toFixed(1)}% sell\n`;
-  block += `Recent Flow (last 20%): ${flowData.recentBuyRatio}% buy${flowData.flowReversal ? ' [WARNING] REVERSAL SIGNAL' : ''}\n`;
-  block += `Trade Velocity: ${flowData.tradesPerSecond} trades/sec\n`;
-  block += `Whale Orders: ${flowData.whaleOrders} total (${flowData.whaleBuys} buys, ${flowData.whaleSells} sells)\n`;
-  block += `Total Value: $${flowData.totalValueUSD.toLocaleString()}\n`;
-  block += `Flow Bias: ${flowData.flowBias}\n`;
-  block += `Assessment: ${flowData.interpretation}\n`;
-  block += `IMPORTANT: Use this order flow data to confirm or contradict your chart-based thesis. Divergence between price action and order flow is a HIGH-PROBABILITY reversal signal.\n`;
+  // Parse bids (buy orders) and asks (sell orders)
+  // Format: [ [ "price", "qty" ], ... ]
+  const bids = depthData.bids.map(b => ({ price: parseFloat(b[0]), qty: parseFloat(b[1]), valueUSD: parseFloat(b[0]) * parseFloat(b[1]) }));
+  const asks = depthData.asks.map(a => ({ price: parseFloat(a[0]), qty: parseFloat(a[1]), valueUSD: parseFloat(a[0]) * parseFloat(a[1]) }));
+
+  const currentPrice = (bids[0].price + asks[0].price) / 2;
+
+  // Filter out orders that are too far away (e.g., > 5% away from price) to focus on relevant liquidity
+  const RANGE_PCT = 0.05;
+  const lowerBound = currentPrice * (1 - RANGE_PCT);
+  const upperBound = currentPrice * (1 + RANGE_PCT);
+
+  const relevantBids = bids.filter(b => b.price >= lowerBound);
+  const relevantAsks = asks.filter(a => a.price <= upperBound);
+
+  const totalBidValue = relevantBids.reduce((s, b) => s + b.valueUSD, 0);
+  const totalAskValue = relevantAsks.reduce((s, a) => s + a.valueUSD, 0);
+
+  // Define a "wall" as any single price level holding > 5% of the total regional liquidity, or > $5M (whichever is smaller)
+  const WALL_THRESHOLD_BID = Math.min(totalBidValue * 0.05, 5000000); 
+  const WALL_THRESHOLD_ASK = Math.min(totalAskValue * 0.05, 5000000);
+
+  // Group liquidity by rough price zones (0.1% brackets) to catch clusters
+  const bracketSize = currentPrice * 0.001; 
+  
+  const groupLiquidity = (orders, isBid) => {
+    const clusters = new Map();
+    for (const o of orders) {
+      // Round to nearest bracket
+      const bracket = isBid ? Math.floor(o.price / bracketSize) * bracketSize : Math.ceil(o.price / bracketSize) * bracketSize;
+      if (!clusters.has(bracket)) clusters.set(bracket, 0);
+      clusters.set(bracket, clusters.get(bracket) + o.valueUSD);
+    }
+    return Array.from(clusters.entries()).map(([price, valueUSD]) => ({ price, valueUSD })).sort((a, b) => isBid ? b.price - a.price : a.price - b.price);
+  };
+
+  const bidClusters = groupLiquidity(relevantBids, true);
+  const askClusters = groupLiquidity(relevantAsks, false);
+
+  const buyWalls = bidClusters.filter(c => c.valueUSD >= WALL_THRESHOLD_BID).slice(0, 3); // Top 3 walls
+  const sellWalls = askClusters.filter(c => c.valueUSD >= WALL_THRESHOLD_ASK).slice(0, 3);
+
+  let interpretation = '';
+  if (sellWalls.length > 0 && buyWalls.length === 0) {
+    interpretation = 'Heavy institutional resistance overhead. Low support. Price is likely suppressed.';
+  } else if (buyWalls.length > 0 && sellWalls.length === 0) {
+    interpretation = 'Heavy institutional support below. Low resistance. Floor is strongly defended.';
+  } else if (sellWalls.length > 0 && buyWalls.length > 0) {
+    const largestSell = sellWalls.reduce((max, w) => w.valueUSD > max.valueUSD ? w : max, sellWalls[0]);
+    const largestBuy = buyWalls.reduce((max, w) => w.valueUSD > max.valueUSD ? w : max, buyWalls[0]);
+    if (largestSell.valueUSD > largestBuy.valueUSD * 1.5) {
+      interpretation = 'Resistance walls significantly outweigh support walls. Institutional bias is bearish limit placement.';
+    } else if (largestBuy.valueUSD > largestSell.valueUSD * 1.5) {
+      interpretation = 'Support walls significantly outweigh resistance walls. Institutional bias is bullish limit accumulation.';
+    } else {
+      interpretation = 'Market is trapped between strong institutional walls. Ranging behavior highly likely until a wall is pulled or filled.';
+    }
+  } else {
+    interpretation = 'No massive institutional walls detected within 5% of price. Liquidity is thin/fragmented. Expect high volatility.';
+  }
+
+  return {
+    available: true,
+    symbol: symbol.toUpperCase(),
+    currentPrice,
+    totalBidValue: Math.round(totalBidValue),
+    totalAskValue: Math.round(totalAskValue),
+    buyWalls: buyWalls.map(w => ({ price: Math.round(w.price), valueUSD: Math.round(w.valueUSD) })),
+    sellWalls: sellWalls.map(w => ({ price: Math.round(w.price), valueUSD: Math.round(w.valueUSD) })),
+    interpretation
+  };
+}
+
+/**
+ * Formats order flow data into a text block for AI injection.
+ */
+export function formatOrderFlowContext(flowData, depthData) {
+  if (!flowData && !depthData) return '';
+
+  let block = `\n=== ORDER FLOW & LIQUIDITY ANALYSIS (LIVE BINANCE DATA) ===\n`;
+  
+  if (flowData && flowData.available) {
+    block += `[MARKET AGGRESSION - PAST 1000 TRADES]\n`;
+    block += `Symbol: ${flowData.symbol}\n`;
+    block += `Buy Volume: ${flowData.buyVolume} | Sell Volume: ${flowData.sellVolume}\n`;
+    block += `Volume Delta: ${flowData.delta > 0 ? '+' : ''}${flowData.delta} (${flowData.deltaPercent > 0 ? '+' : ''}${flowData.deltaPercent}%)\n`;
+    block += `Whale Market Orders: ${flowData.whaleOrders} total (${flowData.whaleBuys} buys, ${flowData.whaleSells} sells)\n`;
+    block += `Flow Bias: ${flowData.flowBias} (${flowData.interpretation})\n\n`;
+  }
+
+  if (depthData && depthData.available) {
+    block += `[LEVEL 2 LIQUIDITY - RESTING LIMIT ORDERS]\n`;
+    block += `Total Bid (Support) Liquidity (within 5%): $${depthData.totalBidValue.toLocaleString()}\n`;
+    block += `Total Ask (Resistance) Liquidity (within 5%): $${depthData.totalAskValue.toLocaleString()}\n`;
+    
+    if (depthData.buyWalls.length > 0) {
+      block += `Institutional BUY Walls (Support):\n`;
+      depthData.buyWalls.forEach(w => block += `- $${w.valueUSD.toLocaleString()} waiting at $${w.price.toLocaleString()}\n`);
+    } else {
+      block += `No major Buy Walls detected.\n`;
+    }
+
+    if (depthData.sellWalls.length > 0) {
+      block += `Institutional SELL Walls (Resistance):\n`;
+      depthData.sellWalls.forEach(w => block += `- $${w.valueUSD.toLocaleString()} waiting at $${w.price.toLocaleString()}\n`);
+    } else {
+      block += `No major Sell Walls detected.\n`;
+    }
+    
+    block += `Liquidity Bias: ${depthData.interpretation}\n\n`;
+    
+    // Add specific trap logic
+    if (depthData.sellWalls.length > 0) {
+       block += `🚨 TRAP WARNING: If you are predicting a primary target ABOVE the largest SELL wall, you MUST justify how the buyers have enough aggression to chew through it. If not, lower your target to FRONT-RUN the wall.\n`;
+    }
+  }
+
+  block += `IMPORTANT: Use this real-time execution and limit order data to confirm or contradict your chart-based thesis.\n`;
 
   return block;
 }

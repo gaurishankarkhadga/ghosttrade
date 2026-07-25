@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import WebSocket from 'ws';
 
 // Phase 3 Imports
-import { fetchOHLCV, getLogReturns } from './dataFetcher.js';
+import { fetchOHLCV, fetchMultiTimeframeOHLCV, getLogReturns, getClosePrices } from './dataFetcher.js';
 import { calculateHurst } from './hurstEngine.js';
 import { classifyRegime } from './regimeClassifier.js';
 import { getCalibratedConfidence } from './calibrationEngine.js';
@@ -19,8 +19,8 @@ import { computeKelly } from './kellyEngine.js';
 import { registerSignal } from './regimeMonitor.js';
 import { auditCompliance, sanitizeChunk } from './complianceFirewall.js';
 import { logSignal, getErrorVectors, getTickerStats, getRecentAnalyses } from './memoryLedger.js';
-import { calculateAllIndicators } from './technicalEngine.js';
-import { fetchOrderFlow, formatOrderFlowContext } from './orderFlowEngine.js';
+import { calculateAllIndicators, sma, atr } from './technicalEngine.js';
+import { fetchOrderFlow, fetchOrderBookDepth, formatOrderFlowContext } from './orderFlowEngine.js';
 import { fetchFuturesData, formatFuturesContext } from './openInterestEngine.js';
 import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from './macroEngine.js';
 
@@ -265,9 +265,10 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
 
   if (ticker !== 'UNKNOWN') {
     // Phase 2-4: Fetch all required market data in parallel
-    const [dataResult, flowData, futuresData, fng, macro, tickerStats, recentAnalyses] = await Promise.all([
-      fetchOHLCV(ticker, 300),
+    const [dataResult, flowData, depthData, futuresData, fng, macro, tickerStats, recentAnalyses] = await Promise.all([
+      fetchMultiTimeframeOHLCV(ticker, 300),
       fetchOrderFlow(ticker, 1000),
+      fetchOrderBookDepth(ticker, 1000),
       fetchFuturesData(ticker),
       fetchFearAndGreed(),
       fetchMacroCorrelations(),
@@ -276,15 +277,90 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
     ]);
 
     if (!dataResult.error) {
-      const returns = getLogReturns(dataResult.bars);
-      hurstData = calculateHurst(returns);
-      regimeData = classifyRegime(hurstData);
+      const tf15m = dataResult.timeframes['15m'];
+      const tf1h = dataResult.timeframes['1h'];
+      const tf1d = dataResult.timeframes['1d'];
+
+      const returns15m = getLogReturns(tf15m);
+      const returns1h = getLogReturns(tf1h);
+      const returns1d = getLogReturns(tf1d);
+
+      const hurst15m = calculateHurst(returns15m);
+      const hurst1h = calculateHurst(returns1h);
+      const hurst1d = calculateHurst(returns1d);
+
+      const regime15m = classifyRegime(hurst15m);
+      const regime1h = classifyRegime(hurst1h);
+      const regime1d = classifyRegime(hurst1d);
+
+      // Store 1D as primary for downstream compatibility
+      hurstData = hurst1d;
+      regimeData = regime1d;
       
-      // Calculate technical indicators from real data
-      const techContext = calculateAllIndicators(dataResult.bars);
+      // Calculate technical indicators from daily data
+      const techContext = calculateAllIndicators(tf1d);
+      
+      // Advanced Multi-Timeframe Shield Logic
+      const closes15m = getClosePrices(tf15m);
+      const closes1d = getClosePrices(tf1d);
+      const price15m = closes15m[closes15m.length - 1];
+      const price1d = closes1d[closes1d.length - 1];
+      
+      // Trend Confirmation (20/50 SMA)
+      const sma20_15m = sma(closes15m, 20) || price15m;
+      const sma50_15m = sma(closes15m, 50) || price15m;
+      const sma20_1d = sma(closes1d, 20) || price1d;
+      const sma50_1d = sma(closes1d, 50) || price1d;
+
+      const is15mStrongUp = price15m > sma20_15m && sma20_15m > sma50_15m;
+      const is15mStrongDown = price15m < sma20_15m && sma20_15m < sma50_15m;
+      const dir15m = is15mStrongUp ? 'UP' : is15mStrongDown ? 'DOWN' : 'CHOP';
+
+      const is1dStrongUp = price1d > sma20_1d && sma20_1d > sma50_1d;
+      const is1dStrongDown = price1d < sma20_1d && sma20_1d < sma50_1d;
+      const dir1d = is1dStrongUp ? 'UP' : is1dStrongDown ? 'DOWN' : 'CHOP';
+
+      // Volatility Context
+      const atr15m = atr(tf15m, 14);
+      const atr1d = atr(tf1d, 14);
+
+      let multiRegimeContext = `\n=== ADVANCED MULTI-TIMEFRAME MATRIX (THE SHIELD) ===\n`;
+      multiRegimeContext += `15m Regime: ${regime15m.regime}${regime15m.regime === 'TRENDING' ? '-' + dir15m : ''} (Hurst: ${hurst15m.meanH.toFixed(2)}, Vol: ${atr15m?.regime})\n`;
+      multiRegimeContext += `1H Regime:  ${regime1h.regime} (Hurst: ${hurst1h.meanH.toFixed(2)})\n`;
+      multiRegimeContext += `1D Regime:  ${regime1d.regime}${regime1d.regime === 'TRENDING' ? '-' + dir1d : ''} (Hurst: ${hurst1d.meanH.toFixed(2)}, Vol: ${atr1d?.regime})\n`;
+      
+      const is15mBullish = regime15m.regime === 'TRENDING' && dir15m === 'UP';
+      const is15mBearish = regime15m.regime === 'TRENDING' && dir15m === 'DOWN';
+      const is1dBullish = regime1d.regime === 'TRENDING' && dir1d === 'UP';
+      const is1dBearish = regime1d.regime === 'TRENDING' && dir1d === 'DOWN';
+
+      let shieldTriggered = false;
+
+      // Rule 1: Macro Trend Fight
+      if ((is15mBullish && is1dBearish) || (is15mBearish && is1dBullish)) {
+        multiRegimeContext += `\n🚨 TIME FRAME SHIELD TRIGGERED: 15m short-term trend is explicitly fighting the 1D macro trend. DO NOT TAKE THIS TRADE. High probability of being a trap. 🚨\n`;
+        shieldTriggered = true;
+      }
+      
+      // Rule 2: Mean Reversion Trap (Macro chop, micro trend = liquidity grab)
+      if (regime1d.regime === 'MEAN_REVERTING' && regime15m.regime === 'TRENDING') {
+        multiRegimeContext += `\n⚠️ MEAN REVERSION TRAP DETECTED: The 1D macro regime is ranging/choppy, but the 15m is trending. This is likely a short-term liquidity grab that will reverse. Fade the 15m trend or DO NOT TRADE. ⚠️\n`;
+        shieldTriggered = true;
+      }
+      
+      // Rule 3: Volatility Expansion Warning
+      if (atr15m && atr1d && atr15m.percentOfPrice > atr1d.percentOfPrice * 1.5) {
+         multiRegimeContext += `\n⚠️ MICRO-VOLATILITY ANOMALY: 15m volatility is abnormally high compared to the 1D baseline. This indicates news-driven erratic movement or institutional stop-hunting. Reduce position size by 50%. ⚠️\n`;
+      }
+
+      if (!shieldTriggered) {
+        multiRegimeContext += `\nTimeframes are aligned. No explicit timeframe conflict detected.\n`;
+      }
+
+      regimeData.summaryForAI = multiRegimeContext + "\n" + regimeData.summaryForAI;
       
       // Format institutional data layers
-      const flowContext = formatOrderFlowContext(flowData);
+      const flowContext = formatOrderFlowContext(flowData, depthData);
       const futContext = formatFuturesContext(futuresData);
       const macroContext = formatMacroContext(fng, macro);
       

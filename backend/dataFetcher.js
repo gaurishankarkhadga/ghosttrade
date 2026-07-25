@@ -133,6 +133,83 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
 }
 
 /**
+ * Fetches multiple timeframes concurrently for the Multi-Dimensional Matrix.
+ * Returns 15m, 1h, and 1d OHLCV data arrays.
+ */
+export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
+  const symbol = resolveYahooSymbol(ticker);
+  if (!symbol) return { error: 'UNKNOWN_TICKER', message: `Cannot resolve ticker: ${ticker}` };
+
+  const cacheKey = `${symbol}_multi_${bars}`;
+  const cached = ohlcvCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    console.log(`[DATA] Multi-TF Cache hit for ${symbol}`);
+    return cached.data;
+  }
+
+  try {
+    const endDate = new Date();
+    
+    // Dates for 1d (needs ~1.4x bars in days)
+    const startDate1d = new Date();
+    startDate1d.setDate(endDate.getDate() - Math.ceil(bars * 1.4));
+    
+    // Dates for 1h (needs ~1.4x bars in hours -> / 24 days)
+    // Add extra buffer for weekends (crypto trades 24/7, stocks don't)
+    const startDate1h = new Date();
+    startDate1h.setDate(endDate.getDate() - Math.ceil((bars * 1.4) / 24) - 2); 
+    
+    // Dates for 15m (needs ~1.4x bars in 15m chunks -> / 96 days)
+    const startDate15m = new Date();
+    startDate15m.setDate(endDate.getDate() - Math.ceil((bars * 1.4) / 96) - 2);
+
+    const [res15m, res1h, res1d] = await Promise.all([
+      yahooFinance.chart(symbol, { period1: startDate15m.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '15m' }).catch(() => null),
+      yahooFinance.chart(symbol, { period1: startDate1h.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '1h' }).catch(() => null),
+      yahooFinance.chart(symbol, { period1: startDate1d.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '1d' }).catch(() => null)
+    ]);
+
+    const formatData = (res) => {
+      if (!res || !res.quotes || res.quotes.length === 0) return null;
+      return res.quotes
+        .filter(q => q.close !== null && q.open !== null)
+        .map(q => ({
+          date:   new Date(q.date),
+          open:   q.open, high: q.high, low: q.low, close: q.close, volume: q.volume || 0,
+        }))
+        .sort((a, b) => a.date - b.date)
+        .slice(-bars);
+    };
+
+    const tf15m = formatData(res15m);
+    const tf1h = formatData(res1h);
+    const tf1d = formatData(res1d);
+
+    if (!tf15m || !tf1h || !tf1d) {
+      return { error: 'NO_DATA', message: `Missing timeframe data for ${symbol}. (15m: ${!!tf15m}, 1h: ${!!tf1h}, 1d: ${!!tf1d})` };
+    }
+
+    if (tf1d.length < 200) {
+      return { error: 'INSUFFICIENT_DATA', message: `Only ${tf1d.length} 1d bars available. Minimum 200 required.` };
+    }
+
+    console.log(`[DATA] Fetched Multi-TF for ${symbol} (15m: ${tf15m.length}, 1h: ${tf1h.length}, 1d: ${tf1d.length})`);
+    
+    const finalData = { 
+      symbol, 
+      timeframes: { '15m': tf15m, '1h': tf1h, '1d': tf1d } 
+    };
+    
+    ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+    return finalData;
+
+  } catch (err) {
+    console.error(`[DATA] Yahoo Finance Multi-TF fetch failed for ${symbol}:`, err.message);
+    return { error: 'FETCH_FAILED', message: err.message };
+  }
+}
+
+/**
  * Extracts closing prices from an OHLCV array.
  */
 export function getClosePrices(ohlcv) {
