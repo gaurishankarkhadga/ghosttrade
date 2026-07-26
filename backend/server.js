@@ -17,14 +17,47 @@ fastify.register(fastifyWebsocket);
 const connectedClients = new Set();
 let isBrainRunning = false;
 
-// Authenticate and issue JWT
+// In-Memory User Database (Deep Auth System)
+const memoryDb = {
+    users: [
+        { email: 'trader@ghosttrade.io', password: 'whalesonly', role: 'admin' }
+    ]
+};
+
+// Deeper Authenticate & Issue JWT (Login)
 fastify.post('/api/auth/login', async (request, reply) => {
-    const { password } = request.body;
-    if (password === ACCESS_CODE) {
-        const token = jwt.sign({ authenticated: true }, JWT_SECRET, { expiresIn: '24h' });
-        return reply.send({ token });
+    const { email, password } = request.body;
+    
+    const user = memoryDb.users.find(u => 
+        (u.email === email && u.password === password) || password === ACCESS_CODE
+    );
+
+    if (user || password === ACCESS_CODE) {
+        const token = jwt.sign({ authenticated: true, email: email || 'demo_user' }, JWT_SECRET, { expiresIn: '24h' });
+        return reply.send({ token, email: user?.email || 'demo_user' });
     }
-    return reply.code(401).send({ error: 'Unauthorized' });
+    
+    return reply.code(401).send({ error: 'Invalid credentials. Access Denied.' });
+});
+
+// Deeper Authenticate & Issue JWT (Sign Up)
+fastify.post('/api/auth/signup', async (request, reply) => {
+    const { name, email, password } = request.body;
+
+    if (!email || !password) {
+        return reply.code(400).send({ error: 'Email and password are required.' });
+    }
+
+    const existingUser = memoryDb.users.find(u => u.email === email);
+    if (existingUser) {
+        return reply.code(409).send({ error: 'Account with this email already exists.' });
+    }
+
+    // Register user in memory
+    memoryDb.users.push({ name, email, password, role: 'trader' });
+
+    const token = jwt.sign({ authenticated: true, email }, JWT_SECRET, { expiresIn: '24h' });
+    return reply.send({ token, email, name });
 });
 
 // Broadcast latest Ghost Brain math to all authenticated frontend clients

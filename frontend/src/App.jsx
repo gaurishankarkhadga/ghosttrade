@@ -1,255 +1,159 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import useGhostStore from './store/ghostStore';
 
-function AuthWall() {
-  const { login } = useGhostStore();
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+import AuthGateway from './components/AuthGateway';
+import LiveTickerMarquee from './components/LiveTickerMarquee';
+import CommandPalette from './components/CommandPalette';
+import TerminalNavbar from './components/TerminalNavbar';
+import MarketOverviewHeader from './components/MarketOverviewHeader';
+import QuantBentoCard from './components/QuantBentoCard';
+import AssetDeepDiveModal from './components/AssetDeepDiveModal';
+import OrderBookInspector from './components/OrderBookInspector';
+import TradeExecutionModal from './components/TradeExecutionModal';
+import TelemetryFooter from './components/TelemetryFooter';
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    const success = await login(password);
-    setLoading(false);
-    
-    if (!success) {
-      setError('ACCESS DENIED: Invalid Security Authorization Key.');
-    } else {
-      navigate('/dashboard');
+export default function App() {
+  const { isAuthenticated, scanData, isConnected, login, logout, connectWebSocket } = useGhostStore();
+
+  const [activeMarket, setActiveMarket] = useState('ALL'); // 'ALL' | 'CRYPTO' | 'NSE'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCmdKOpen, setIsCmdKOpen] = useState(false);
+  const [selectedAssetForDeepDive, setSelectedAssetForDeepDive] = useState(null);
+  const [selectedAssetForTrade, setSelectedAssetForTrade] = useState(null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      connectWebSocket();
     }
-  };
+  }, [isAuthenticated, connectWebSocket]);
+
+  if (!isAuthenticated) {
+    return <AuthGateway onLoginSuccess={(key) => login(key)} />;
+  }
+
+  // Filter scan data by market type and search query
+  const filteredAssets = (scanData && scanData.length > 0)
+    ? scanData.filter(item => {
+        const matchesMarket = activeMarket === 'ALL'
+          || (activeMarket === 'CRYPTO' && item.ticker.includes('-USD'))
+          || (activeMarket === 'NSE' && item.ticker.includes('.NS'));
+        const matchesSearch = item.ticker.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesMarket && matchesSearch;
+      })
+    : [
+        {
+          ticker: 'BTC-USD',
+          currentPrice: 64293.93,
+          score: 70,
+          flowBias: 'STRONG_BUY',
+          macroRegime: 'TRENDING',
+          sentimentBias: 'NEUTRAL',
+          recommendedSize: 27.89,
+          evNet: 2.65,
+          shieldTriggered: false,
+          sector: 'STORE_OF_VALUE'
+        },
+        {
+          ticker: 'RELIANCE.NS',
+          currentPrice: 1280.30,
+          score: 20,
+          flowBias: 'NEUTRAL',
+          macroRegime: 'TRENDING',
+          sentimentBias: 'BEARISH',
+          recommendedSize: 0.00,
+          evNet: -0.15,
+          shieldTriggered: true,
+          sentimentAlerts: ['BEARISH CLOUD: Negative news sentiment detected.'],
+          sector: 'INDIAN_NSE'
+        }
+      ];
+
+  const activeAssetForL2 = filteredAssets[0] || null;
 
   return (
-    <div className="auth-wrapper">
-      <div className="auth-card">
-        <div className="auth-logo">
-          <div className="auth-logo-icon">GB</div>
-          <div>
-            <div className="nav-title mono">GhostBrain Terminal v3</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Institutional Execution System</div>
-          </div>
-        </div>
+    <div className="app-container">
+      {/* Live Market Marquee */}
+      <LiveTickerMarquee scanData={scanData} />
 
-        <form onSubmit={handleLogin}>
-          <div className="input-group">
-            <label className="mono">AUTHORIZATION CODE</label>
-            <input 
-              type="password" 
-              className="input-styled mono" 
-              placeholder="Enter security token..." 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+      {/* Top Navbar */}
+      <TerminalNavbar
+        activeMarket={activeMarket}
+        onSelectMarket={(m) => setActiveMarket(m)}
+        searchQuery={searchQuery}
+        onSearchChange={(q) => setSearchQuery(q)}
+        onOpenCmdK={() => setIsCmdKOpen(true)}
+        isConnected={isConnected}
+        onLockTerminal={() => logout()}
+      />
 
-          {error && (
-            <div style={{ 
-              color: 'var(--neon-red)', 
-              fontSize: '0.8rem', 
-              marginBottom: '16px', 
-              padding: '10px', 
-              background: 'rgba(244, 63, 94, 0.1)', 
-              borderRadius: '6px',
-              border: '1px solid rgba(244, 63, 94, 0.2)' 
-            }}>
-              {error}
+      {/* Main Workspace */}
+      <main className="main-workspace">
+        {/* Macro Regime Strip */}
+        <MarketOverviewHeader scanData={scanData} />
+
+        {/* Bento Grid & Order Book Inspector Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: '24px' }}>
+          {/* Left: Bento Asset Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="font-orbitron font-bold" style={{ fontSize: '1.1rem', color: '#f8fafc' }}>
+                MONITORED QUANT ASSETS ({filteredAssets.length})
+              </h2>
+              <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+                FILTER: {activeMarket}
+              </span>
             </div>
-          )}
 
-          <button type="submit" className="btn-terminal mono" disabled={loading}>
-            {loading ? 'VERIFYING SECURITY KEY...' : 'CONNECT TO TERMINAL'}
-          </button>
-        </form>
-
-        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-          <span>ENCRYPTION: AES-256-GCM</span>
-          <span>SYSTEM: ONLINE</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Dashboard() {
-  const { wsStatus, assets, logout } = useGhostStore();
-  const [activeMarket, setActiveMarket] = useState('CRYPTO');
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  // Mock Market Filter
-  const filteredAssets = Object.values(assets).filter(asset => {
-    if (activeMarket === 'CRYPTO') return !asset.ticker.endsWith('.NS');
-    if (activeMarket === 'NSE') return asset.ticker.endsWith('.NS') || asset.sector === 'INDIAN_NSE';
-    return true;
-  });
-
-  return (
-    <div>
-      <header className="terminal-nav">
-        <div className="nav-brand">
-          <div className="auth-logo-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem' }}>GB</div>
-          <div>
-            <div className="nav-title mono">GhostBrain v3</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Institutional Sub-Millisecond Engine</div>
-          </div>
-        </div>
-
-        <div className="market-selector">
-          <button 
-            className={`market-tab ${activeMarket === 'CRYPTO' ? 'active' : ''}`}
-            onClick={() => setActiveMarket('CRYPTO')}
-          >
-            ⚡ CRYPTO (Binance)
-          </button>
-          <button 
-            className={`market-tab ${activeMarket === 'NSE' ? 'active' : ''}`}
-            onClick={() => setActiveMarket('NSE')}
-          >
-            🇮🇳 INDIAN MARKET (NSE)
-          </button>
-        </div>
-
-        <div className="nav-stats">
-          <div className={`badge ${wsStatus === 'CONNECTED' ? 'badge-green' : 'badge-red'}`}>
-            <div className="badge-dot"></div>
-            <span className="mono">STREAM: {wsStatus}</span>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '20px'
+            }}>
+              {filteredAssets.map((asset, idx) => (
+                <QuantBentoCard
+                  key={`${asset.ticker}-${idx}`}
+                  asset={asset}
+                  onOpenDeepDive={(a) => setSelectedAssetForDeepDive(a)}
+                  onOpenTradeModal={(a) => setSelectedAssetForTrade(a)}
+                />
+              ))}
+            </div>
           </div>
 
-          <button 
-            onClick={handleLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-muted)',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.8rem'
-            }}
-          >
-            EXIT
-          </button>
-        </div>
-      </header>
-
-      <main className="grid-container">
-        {filteredAssets.length === 0 && wsStatus === 'CONNECTED' && (
-           <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)' }}>
-             <div className="mono" style={{ fontSize: '1.2rem', marginBottom: '8px' }}>PULLING REAL-TIME MARKET PIPELINE...</div>
-             <p style={{ fontSize: '0.85rem' }}>Waiting for sub-millisecond calculation cycle from Ghost Brain Engine...</p>
-           </div>
-        )}
-        
-        <div className="cards-grid">
-          {filteredAssets.map(asset => {
-             let scoreColor = 'var(--neon-cyan)';
-             if (asset.score >= 75) scoreColor = 'var(--neon-green)';
-             if (asset.score < 45) scoreColor = 'var(--neon-red)';
-
-             return (
-               <div key={asset.ticker} className="quant-card">
-                  <div className="card-top">
-                     <div>
-                        <div className="ticker-title mono">{asset.ticker}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{asset.sector || 'GENERAL'}</div>
-                     </div>
-                     <span className="badge badge-green" style={{ fontSize: '0.7rem' }}>
-                        LIVE 0.2ms
-                     </span>
-                  </div>
-                  
-                  <div className="quant-gauge-box">
-                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        QUANT SCORE
-                     </span>
-                     <span className="quant-score-val mono" style={{ color: scoreColor }}>
-                        {asset.score}
-                     </span>
-                  </div>
-
-                  <div className="gauge-bar-bg">
-                     <div 
-                        className="gauge-bar-fill" 
-                        style={{ 
-                          width: `${Math.min(Math.max(asset.score, 5), 100)}%`, 
-                          background: scoreColor,
-                          boxShadow: `0 0 10px ${scoreColor}`
-                        }}
-                     ></div>
-                  </div>
-
-                  <div className="metrics-table">
-                     <div className="metric-row">
-                        <span className="metric-label">Order Flow Bias</span>
-                        <span className="metric-val mono">{asset.flowBias || 'NEUTRAL'}</span>
-                     </div>
-                     <div className="metric-row">
-                        <span className="metric-label">Whale Trap Alert</span>
-                        <span 
-                          className="metric-val mono" 
-                          style={{ color: asset.liquidityTrap ? 'var(--neon-red)' : 'var(--neon-green)' }}
-                        >
-                           {asset.liquidityTrap ? '🚨 TRAP DETECTED' : '✓ CLEAR'}
-                        </span>
-                     </div>
-                     <div className="metric-row">
-                        <span className="metric-label">Macro Regime (1D)</span>
-                        <span className="metric-val mono">{asset.macroRegime || 'BALANCED'}</span>
-                     </div>
-                     <div className="metric-row">
-                        <span className="metric-label">News Sentiment</span>
-                        <span className="metric-val mono">{asset.sentimentBias || 'NEUTRAL'}</span>
-                     </div>
-                  </div>
-
-                  <div className="kelly-banner">
-                     <div>
-                        <div className="kelly-title">RECOMMENDED KELLY POSITION</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Optimal Risk Allocation</div>
-                     </div>
-                     <div className="kelly-val mono">
-                        {asset.recommendedSize ? `${asset.recommendedSize.toFixed(2)}%` : '0.00%'}
-                     </div>
-                  </div>
-               </div>
-             );
-          })}
+          {/* Right: Level 2 Order Book Depth Inspector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <OrderBookInspector activeAsset={activeAssetForL2} />
+          </div>
         </div>
       </main>
+
+      {/* Hardware Telemetry Footer */}
+      <TelemetryFooter isConnected={isConnected} totalAssets={filteredAssets.length} />
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={isCmdKOpen}
+        onClose={() => setIsCmdKOpen(false)}
+        onSelectMarket={(m) => setActiveMarket(m)}
+        onSelectTicker={(symbol) => setSearchQuery(symbol)}
+      />
+
+      {/* Deep Analytics Modal */}
+      {selectedAssetForDeepDive && (
+        <AssetDeepDiveModal
+          asset={selectedAssetForDeepDive}
+          onClose={() => setSelectedAssetForDeepDive(null)}
+          onOpenTradeModal={(a) => setSelectedAssetForTrade(a)}
+        />
+      )}
+
+      {/* Live Trade Execution Modal */}
+      {selectedAssetForTrade && (
+        <TradeExecutionModal
+          asset={selectedAssetForTrade}
+          onClose={() => setSelectedAssetForTrade(null)}
+        />
+      )}
     </div>
   );
 }
-
-function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useGhostStore();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return children;
-}
-
-function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<AuthWall />} />
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-      </Routes>
-    </Router>
-  );
-}
-
-export default App;

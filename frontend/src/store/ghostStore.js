@@ -6,24 +6,33 @@ const useGhostStore = create((set, get) => ({
   wsStatus: 'DISCONNECTED',
   assets: {}, // { 'BTC-USD': { score: 50, flowBias: 'NEUTRAL', kellySize: 10, ... } }
   
-  login: async (password) => {
+  login: async (credentials) => {
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${baseUrl}/api/auth/login`, {
+      const endpoint = credentials.isSignup ? '/api/auth/signup' : '/api/auth/login';
+      
+      const payload = credentials.isSignup 
+        ? { name: credentials.name, email: credentials.email, password: credentials.password }
+        : { email: credentials.email, password: credentials.password };
+
+      const res = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify(payload)
       });
+      
       const data = await res.json();
-      if (data.token) {
+      
+      if (res.ok && data.token) {
         set({ isAuthenticated: true, token: data.token });
         get().connectWebSocket(data.token);
-        return true;
+        return { success: true, message: 'Authentication successful.' };
       }
-      return false;
+      
+      return { success: false, message: data.error || 'Authentication failed.' };
     } catch (e) {
-      console.error('Login failed', e);
-      return false;
+      console.error('Auth request failed:', e);
+      return { success: false, message: 'Network error. Could not reach authentication server.' };
     }
   },
 
