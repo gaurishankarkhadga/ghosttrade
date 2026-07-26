@@ -37,23 +37,28 @@ function broadcast(payload) {
     }
 }
 
-// The Ghost Brain Execution Loop
+// The Ghost Brain Execution Loop (Multi-Market: Crypto + NSE)
 async function runGhostBrainLoop() {
     if (isBrainRunning) return;
     isBrainRunning = true;
     
-    console.log('[DAEMON] Starting Ghost Brain Backend Loop...');
+    console.log('[DAEMON] Starting Ghost Brain Multi-Market Backend Loop (Binance + NSE)...');
+    
+    // Start WebSocket for Crypto level 2 depth
     await startWebSocketPipeline(['BTC-USD', 'ETH-USD', 'SOL-USD']);
     
+    // Combined multi-market ticker array
+    const activeWatchlist = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS'];
+
     setInterval(async () => {
         if (connectedClients.size === 0) return; // Don't burn CPU if no UI is watching
         try {
-            const results = await runBulkScanPhase4(['BTC-USD', 'ETH-USD', 'SOL-USD']);
+            const results = await runBulkScanPhase4(activeWatchlist);
             broadcast(results);
         } catch (e) {
             console.error('[DAEMON] Loop error:', e.message);
         }
-    }, 2000); // Compute every 2 seconds
+    }, 3000); // Compute every 3 seconds for safe rate limits
 }
 
 // Secure WebSocket endpoint for the React UI

@@ -15,11 +15,16 @@ import { fetchAssetSentiment } from './sentimentEngine.js';
 import { calculateRotationImpacts, SECTOR_MAP } from './correlationEngine.js';
 import fs from 'fs';
 
-// Top 20 as requested for safety against Binance Rate Limits
+// Top 20 Crypto Watchlist
 export const DEFAULT_CRYPTO_WATCHLIST = [
   'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'BNB-USD', 'DOGE-USD', 'ADA-USD', 'AVAX-USD',
   'LINK-USD', 'MATIC-USD', 'LTC-USD', 'DOT-USD', 'UNI-USD', 'ATOM-USD', 'NEAR-USD',
   'APT-USD', 'ARB-USD', 'OP-USD', 'SUI-USD', 'PEPE-USD'
+];
+
+// Indian Market NSE Watchlist
+export const DEFAULT_NSE_WATCHLIST = [
+  'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'TATAMOTORS.NS', '^NSEI'
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));

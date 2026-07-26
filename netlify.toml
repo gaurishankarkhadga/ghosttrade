@@ -1,0 +1,12 @@
+[build]
+  # Tell Netlify that the project is inside the frontend folder
+  base = "frontend"
+  publish = "dist"
+  command = "npm run build"
+
+# Single Page Application (SPA) Routing
+# This ensures that if you refresh the page, Netlify routes back to React instead of showing a 404 error
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

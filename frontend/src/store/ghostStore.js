@@ -8,7 +8,8 @@ const useGhostStore = create((set, get) => ({
   
   login: async (password) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -28,7 +29,12 @@ const useGhostStore = create((set, get) => ({
 
   connectWebSocket: (token) => {
     set({ wsStatus: 'CONNECTING' });
-    const ws = new WebSocket(`ws://localhost:5000?token=${token}`);
+    
+    // Dynamically resolve WebSocket URL (wss:// for https://, ws:// for http://)
+    const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + `?token=${token}`;
+    
+    const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => set({ wsStatus: 'CONNECTED' });
     ws.onclose = () => {

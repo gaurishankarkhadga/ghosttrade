@@ -56,7 +56,17 @@ export function isBinanceCrypto(ticker) {
 export async function fetchOrderFlow(ticker, limit = 1000) {
   const symbol = resolveBinanceSymbol(ticker);
   if (!symbol) {
-    return { error: `No Binance mapping for ${ticker}`, available: false };
+    return {
+      available: false,
+      symbol: ticker.toUpperCase(),
+      buyVolume: 0,
+      sellVolume: 0,
+      delta: 0,
+      deltaPercent: 0,
+      buyRatio: 50,
+      flowBias: 'NEUTRAL',
+      interpretation: 'Order flow telemetry inactive for this market sector'
+    };
   }
 
   const cacheKey = `${symbol}_${limit}`;
@@ -96,7 +106,17 @@ export async function fetchOrderFlow(ticker, limit = 1000) {
 export async function fetchOrderBookDepth(ticker, limit = 1000) {
   const symbol = resolveBinanceSymbol(ticker);
   if (!symbol) {
-    return { error: `No Binance mapping for ${ticker}`, available: false };
+    return {
+      available: false,
+      symbol: ticker.toUpperCase(),
+      currentPrice: 0,
+      totalBidValue: 0,
+      totalAskValue: 0,
+      buyWalls: [],
+      sellWalls: [],
+      interpretation: 'Level 2 depth not active for this market segment',
+      error: null
+    };
   }
 
   // [PHASE 7] Sub-Millisecond Zero Latency WebSocket Check

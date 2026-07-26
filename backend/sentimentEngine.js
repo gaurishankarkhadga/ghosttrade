@@ -12,10 +12,19 @@ const BULLISH_KEYWORDS = ['elon', 'tesla', 'etf', 'approved', 'partnership', 'in
 /**
  * Fetches real live Crypto news from CoinTelegraph RSS feed.
  * Completely replaces the mock with a 100% production-ready data pipeline.
+/**
+ * Fetches real live financial news dynamically based on Market Type.
+ * Crypto -> CoinTelegraph RSS
+ * NSE / Indian Market -> Economic Times Market RSS
  */
 async function fetchLiveNews(ticker) {
   try {
-    const response = await fetch('https://cointelegraph.com/rss', {
+    const isNSE = ticker.endsWith('.NS') || ticker.endsWith('.BO') || ticker.startsWith('NSE:') || ticker.startsWith('^');
+    const rssUrl = isNSE 
+      ? 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms' 
+      : 'https://cointelegraph.com/rss';
+
+    const response = await fetch(rssUrl, {
        headers: { 'User-Agent': 'Mozilla/5.0' },
        signal: AbortSignal.timeout(5000)
     });
@@ -26,15 +35,17 @@ async function fetchLiveNews(ticker) {
     
     // Extract titles from RSS XML
     const titles = [];
-    const titleMatches = xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g);
+    const titleMatches = xml.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/g);
     for (const match of titleMatches) {
-        titles.push({ title: match[1], published_at: new Date().toISOString() });
+        if (match[1] && !match[1].includes('Economic Times') && !match[1].includes('CoinTelegraph')) {
+            titles.push({ title: match[1], published_at: new Date().toISOString() });
+        }
     }
     
-    const baseAsset = ticker.split('-')[0].toUpperCase();
+    const cleanTicker = ticker.replace('.NS', '').replace('NSE:', '').split('-')[0].toUpperCase();
     
-    // Filter news specific to this asset. If no specific news, return the top 3 macro headlines.
-    const assetSpecific = titles.filter(t => t.title.toUpperCase().includes(baseAsset));
+    // Filter news specific to this asset. If no specific news, return top 3 market headlines.
+    const assetSpecific = titles.filter(t => t.title.toUpperCase().includes(cleanTicker));
     
     return assetSpecific.length > 0 ? assetSpecific : titles.slice(0, 3);
 

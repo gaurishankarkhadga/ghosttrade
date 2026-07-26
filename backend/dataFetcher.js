@@ -46,16 +46,23 @@ const CRYPTO_ALIAS_MAP = {
 
 /**
  * Resolves a ticker from the AI's output to a Yahoo Finance symbol.
- * Handles crypto aliases and standard stock symbols.
+ * Handles crypto aliases, Indian stock symbols (.NS), and standard stock symbols.
  */
 export function resolveYahooSymbol(rawTicker) {
   if (!rawTicker) return null;
-  const clean = rawTicker.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
+  const upper = rawTicker.trim().toUpperCase();
+  
+  // Handle Indian NSE tickers directly
+  if (upper.endsWith('.NS') || upper.endsWith('.BO') || upper.startsWith('^') || upper.startsWith('NSE:')) {
+    return upper.replace('NSE:', '');
+  }
+
+  const clean = upper.replace(/[^A-Z0-9/-]/g, '');
   // Check crypto alias map first
   if (CRYPTO_ALIAS_MAP[clean]) return CRYPTO_ALIAS_MAP[clean];
   // Already has Yahoo-style suffix (e.g., "BTC-USD")
   if (clean.includes('-')) return clean;
-  // Assume it's a standard stock ticker (e.g., AAPL, TSLA)
+  // Assume it's a standard stock ticker
   return clean;
 }
 

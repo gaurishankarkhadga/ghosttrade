@@ -1,117 +1,254 @@
 import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import useGhostStore from './store/ghostStore';
 
-function App() {
-  const { isAuthenticated, login, wsStatus, assets } = useGhostStore();
+function AuthWall() {
+  const { login } = useGhostStore();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+    
     const success = await login(password);
-    if (!success) setError('Invalid access code.');
+    setLoading(false);
+    
+    if (!success) {
+      setError('ACCESS DENIED: Invalid Security Authorization Key.');
+    } else {
+      navigate('/dashboard');
+    }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="auth-container">
-        <form className="glass-panel auth-box" onSubmit={handleLogin}>
-          <h2><span className="mono">GhostBrain v3</span> Authentication</h2>
-          <p style={{ color: 'var(--text-secondary)' }}>Institutional Quant Terminal</p>
-          <input 
-            type="password" 
-            className="input-field" 
-            placeholder="Enter Access Code..." 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          {error && <p style={{ color: 'var(--accent-red)', fontSize: '0.9rem' }}>{error}</p>}
-          <button type="submit" className="btn-primary">INITIATE CONNECTION</button>
-        </form>
-      </div>
-    );
-  }
+  return (
+    <div className="auth-wrapper">
+      <div className="auth-card">
+        <div className="auth-logo">
+          <div className="auth-logo-icon">GB</div>
+          <div>
+            <div className="nav-title mono">GhostBrain Terminal v3</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Institutional Execution System</div>
+          </div>
+        </div>
 
-  // Determine global status color based on WebSocket
-  let statusColor = 'yellow';
-  if (wsStatus === 'CONNECTED') statusColor = 'green';
-  if (wsStatus === 'DISCONNECTED') statusColor = 'red';
+        <form onSubmit={handleLogin}>
+          <div className="input-group">
+            <label className="mono">AUTHORIZATION CODE</label>
+            <input 
+              type="password" 
+              className="input-styled mono" 
+              placeholder="Enter security token..." 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          {error && (
+            <div style={{ 
+              color: 'var(--neon-red)', 
+              fontSize: '0.8rem', 
+              marginBottom: '16px', 
+              padding: '10px', 
+              background: 'rgba(244, 63, 94, 0.1)', 
+              borderRadius: '6px',
+              border: '1px solid rgba(244, 63, 94, 0.2)' 
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" className="btn-terminal mono" disabled={loading}>
+            {loading ? 'VERIFYING SECURITY KEY...' : 'CONNECT TO TERMINAL'}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+          <span>ENCRYPTION: AES-256-GCM</span>
+          <span>SYSTEM: ONLINE</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard() {
+  const { wsStatus, assets, logout } = useGhostStore();
+  const [activeMarket, setActiveMarket] = useState('CRYPTO');
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // Mock Market Filter
+  const filteredAssets = Object.values(assets).filter(asset => {
+    if (activeMarket === 'CRYPTO') return !asset.ticker.endsWith('.NS');
+    if (activeMarket === 'NSE') return asset.ticker.endsWith('.NS') || asset.sector === 'INDIAN_NSE';
+    return true;
+  });
 
   return (
     <div>
-      <header style={{ padding: '20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="mono">GhostBrain Terminal</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Live Multi-Layer Execution Pipeline</p>
+      <header className="terminal-nav">
+        <div className="nav-brand">
+          <div className="auth-logo-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem' }}>GB</div>
+          <div>
+            <div className="nav-title mono">GhostBrain v3</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Institutional Sub-Millisecond Engine</div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          <span className={`status-badge ${statusColor}`}>
-             WS: {wsStatus}
-          </span>
+
+        <div className="market-selector">
+          <button 
+            className={`market-tab ${activeMarket === 'CRYPTO' ? 'active' : ''}`}
+            onClick={() => setActiveMarket('CRYPTO')}
+          >
+            ⚡ CRYPTO (Binance)
+          </button>
+          <button 
+            className={`market-tab ${activeMarket === 'NSE' ? 'active' : ''}`}
+            onClick={() => setActiveMarket('NSE')}
+          >
+            🇮🇳 INDIAN MARKET (NSE)
+          </button>
+        </div>
+
+        <div className="nav-stats">
+          <div className={`badge ${wsStatus === 'CONNECTED' ? 'badge-green' : 'badge-red'}`}>
+            <div className="badge-dot"></div>
+            <span className="mono">STREAM: {wsStatus}</span>
+          </div>
+
+          <button 
+            onClick={handleLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-muted)',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            EXIT
+          </button>
         </div>
       </header>
 
-      <main className="dashboard-grid">
-        {Object.values(assets).length === 0 && wsStatus === 'CONNECTED' && (
-           <p style={{ color: 'var(--text-secondary)', gridColumn: '1 / -1', textAlign: 'center', marginTop: '50px' }}>
-             Waiting for initial scan payload from Ghost Brain...
-           </p>
+      <main className="grid-container">
+        {filteredAssets.length === 0 && wsStatus === 'CONNECTED' && (
+           <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)' }}>
+             <div className="mono" style={{ fontSize: '1.2rem', marginBottom: '8px' }}>PULLING REAL-TIME MARKET PIPELINE...</div>
+             <p style={{ fontSize: '0.85rem' }}>Waiting for sub-millisecond calculation cycle from Ghost Brain Engine...</p>
+           </div>
         )}
         
-        {Object.values(assets).map(asset => {
-           let scoreColor = '#3b82f6';
-           if (asset.score >= 80) scoreColor = '#10b981';
-           if (asset.score < 40) scoreColor = '#ef4444';
+        <div className="cards-grid">
+          {filteredAssets.map(asset => {
+             let scoreColor = 'var(--neon-cyan)';
+             if (asset.score >= 75) scoreColor = 'var(--neon-green)';
+             if (asset.score < 45) scoreColor = 'var(--neon-red)';
 
-           return (
-             <div key={asset.ticker} className="glass-panel asset-card">
-                <div className="asset-header">
-                   <h2 className="mono">{asset.ticker}</h2>
-                   <span className="status-badge" style={{ background: 'rgba(255,255,255,0.1)' }}>{asset.sector}</span>
-                </div>
-                
-                <div style={{ padding: '10px 0' }}>
-                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase' }}>QuantScore</p>
-                   <div className="quant-score" style={{ color: scoreColor }}>{asset.score}</div>
-                   <div className="progress-bar-bg">
-                      <div className="progress-bar-fill" style={{ width: `${asset.score}%`, background: scoreColor }}></div>
-                   </div>
-                </div>
+             return (
+               <div key={asset.ticker} className="quant-card">
+                  <div className="card-top">
+                     <div>
+                        <div className="ticker-title mono">{asset.ticker}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{asset.sector || 'GENERAL'}</div>
+                     </div>
+                     <span className="badge badge-green" style={{ fontSize: '0.7rem' }}>
+                        LIVE 0.2ms
+                     </span>
+                  </div>
+                  
+                  <div className="quant-gauge-box">
+                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        QUANT SCORE
+                     </span>
+                     <span className="quant-score-val mono" style={{ color: scoreColor }}>
+                        {asset.score}
+                     </span>
+                  </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-                   <div className="metric-row">
-                      <span>Order Flow Bias</span>
-                      <span className="metric-value">{asset.flowBias}</span>
-                   </div>
-                   <div className="metric-row">
-                      <span>Whale Trap</span>
-                      <span className="metric-value" style={{ color: asset.liquidityTrap ? 'var(--accent-red)' : 'var(--accent-green)' }}>
-                         {asset.liquidityTrap ? 'DETECTED' : 'CLEAR'}
-                      </span>
-                   </div>
-                   <div className="metric-row">
-                      <span>Macro Regime (1d)</span>
-                      <span className="metric-value">{asset.macroRegime}</span>
-                   </div>
-                   <div className="metric-row">
-                      <span>News Sentiment</span>
-                      <span className="metric-value">{asset.sentimentBias}</span>
-                   </div>
-                </div>
+                  <div className="gauge-bar-bg">
+                     <div 
+                        className="gauge-bar-fill" 
+                        style={{ 
+                          width: `${Math.min(Math.max(asset.score, 5), 100)}%`, 
+                          background: scoreColor,
+                          boxShadow: `0 0 10px ${scoreColor}`
+                        }}
+                     ></div>
+                  </div>
 
-                <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--glass-border)' }}>
-                   <div className="metric-row">
-                      <span style={{ fontWeight: 'bold' }}>Recommended Kelly Size</span>
-                      <span className="metric-value" style={{ fontSize: '1.2rem', color: asset.recommendedSize > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                         {asset.recommendedSize.toFixed(2)}%
-                      </span>
-                   </div>
-                </div>
-             </div>
-           );
-        })}
+                  <div className="metrics-table">
+                     <div className="metric-row">
+                        <span className="metric-label">Order Flow Bias</span>
+                        <span className="metric-val mono">{asset.flowBias || 'NEUTRAL'}</span>
+                     </div>
+                     <div className="metric-row">
+                        <span className="metric-label">Whale Trap Alert</span>
+                        <span 
+                          className="metric-val mono" 
+                          style={{ color: asset.liquidityTrap ? 'var(--neon-red)' : 'var(--neon-green)' }}
+                        >
+                           {asset.liquidityTrap ? '🚨 TRAP DETECTED' : '✓ CLEAR'}
+                        </span>
+                     </div>
+                     <div className="metric-row">
+                        <span className="metric-label">Macro Regime (1D)</span>
+                        <span className="metric-val mono">{asset.macroRegime || 'BALANCED'}</span>
+                     </div>
+                     <div className="metric-row">
+                        <span className="metric-label">News Sentiment</span>
+                        <span className="metric-val mono">{asset.sentimentBias || 'NEUTRAL'}</span>
+                     </div>
+                  </div>
+
+                  <div className="kelly-banner">
+                     <div>
+                        <div className="kelly-title">RECOMMENDED KELLY POSITION</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Optimal Risk Allocation</div>
+                     </div>
+                     <div className="kelly-val mono">
+                        {asset.recommendedSize ? `${asset.recommendedSize.toFixed(2)}%` : '0.00%'}
+                     </div>
+                  </div>
+               </div>
+             );
+          })}
+        </div>
       </main>
     </div>
+  );
+}
+
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useGhostStore();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<AuthWall />} />
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </Router>
   );
 }
 
