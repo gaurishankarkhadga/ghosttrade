@@ -2,6 +2,7 @@
 // WEBSOCKET ENGINE — Phase 7 Live Data Pipeline
 // Connects to Binance Combined TCP Streams for 0-latency.
 // Maintains a central Memory Cache that the Scanner reads.
+// Non-blocking: Handles Cloud Server (Render/AWS) 451 Legal Blocks gracefully.
 // =====================================================
 
 import WebSocket from 'ws';
@@ -13,6 +14,8 @@ export const liveMemoryState = {
 };
 
 let ws = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
 
 const TICKER_TO_BINANCE = {
     'BTC-USD': 'btcusdt',
@@ -40,10 +43,10 @@ function normalizeFromStream(streamStr) {
 }
 
 /**
- * Initializes the WebSocket connection and subscribes to streams.
+ * Initializes the WebSocket connection. Non-blocking Promise to ensure server daemon never hangs.
  */
 export function startWebSocketPipeline(tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD']) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         if (ws) {
             console.log(`[WEBSOCKET] Pipeline already running.`);
             return resolve();
@@ -51,50 +54,66 @@ export function startWebSocketPipeline(tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD
 
         console.log(`[WEBSOCKET] Booting Sub-Millisecond Data Pipeline...`);
         
-        // Build combined stream URL
-        const streams = tickers.map(t => `${normalizeToStream(t)}@depth20@100ms`);
-        const streamUrl = `wss://stream.binance.com:9443/stream?streams=${streams.join('/')}`;
-        
-        ws = new WebSocket(streamUrl);
-
-        ws.on('open', () => {
-            liveMemoryState.status = 'CONNECTED';
-            console.log(`[WEBSOCKET] Connected directly to Binance TCP Combined Stream.`);
-            console.log(`[WEBSOCKET] Streaming ${streams.length} assets at 100ms intervals.`);
+        // Safety resolve after 2.5 seconds so daemon execution loop NEVER gets blocked on cloud hosts
+        const safetyTimer = setTimeout(() => {
+            console.warn(`[WEBSOCKET] Pipeline initialization timed out (Cloud IP restriction). Continuing in Fallback Mode.`);
             resolve();
-        });
+        }, 2500);
 
-        ws.on('message', (data) => {
-            try {
-                const parsed = JSON.parse(data);
-                
-                // Route Level 2 Depth data into the Central Memory Cache
-                if (parsed.stream && parsed.data && parsed.data.bids) {
-                    const ticker = normalizeFromStream(parsed.stream);
-                    
-                    // Update cache instantly
-                    liveMemoryState.depth[ticker] = {
-                        bids: parsed.data.bids,
-                        asks: parsed.data.asks,
-                        timestamp: Date.now()
-                    };
+        try {
+            const streams = tickers.map(t => `${normalizeToStream(t)}@depth20@100ms`);
+            const streamUrl = `wss://stream.binance.com:9443/stream?streams=${streams.join('/')}`;
+            
+            ws = new WebSocket(streamUrl);
+
+            ws.on('open', () => {
+                clearTimeout(safetyTimer);
+                liveMemoryState.status = 'CONNECTED';
+                reconnectAttempts = 0;
+                console.log(`[WEBSOCKET] Connected directly to Binance TCP Combined Stream.`);
+                console.log(`[WEBSOCKET] Streaming ${streams.length} assets at 100ms intervals.`);
+                resolve();
+            });
+
+            ws.on('message', (data) => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.stream && parsed.data && parsed.data.bids) {
+                        const ticker = normalizeFromStream(parsed.stream);
+                        liveMemoryState.depth[ticker] = {
+                            bids: parsed.data.bids,
+                            asks: parsed.data.asks,
+                            timestamp: Date.now()
+                        };
+                    }
+                } catch (err) {
+                    console.error(`[WEBSOCKET] Parse error:`, err.message);
                 }
-            } catch (err) {
-                console.error(`[WEBSOCKET] Parse error:`, err.message);
-            }
-        });
+            });
 
-        ws.on('close', () => {
-            console.log(`[WEBSOCKET] Connection dropped. Auto-reconnecting in 2s...`);
-            liveMemoryState.status = 'DISCONNECTED';
-            ws = null;
-            setTimeout(() => startWebSocketPipeline(tickers), 2000);
-        });
+            ws.on('close', () => {
+                liveMemoryState.status = 'DISCONNECTED';
+                ws = null;
+                
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++;
+                    console.log(`[WEBSOCKET] Connection dropped. Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in 5s...`);
+                    setTimeout(() => startWebSocketPipeline(tickers), 5000);
+                } else {
+                    console.warn(`[WEBSOCKET] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}). Remaining in REST/Yahoo Fallback Mode.`);
+                }
+            });
 
-        ws.on('error', (err) => {
-            console.error(`[WEBSOCKET] Fatal Error:`, err.message);
-            ws.close();
-        });
+            ws.on('error', (err) => {
+                clearTimeout(safetyTimer);
+                console.error(`[WEBSOCKET] Cloud Connection Warning: ${err.message}. (Cloud host IPs like Render/AWS use Yahoo REST Fallback).`);
+                resolve();
+            });
+        } catch (e) {
+            clearTimeout(safetyTimer);
+            console.error(`[WEBSOCKET] Failed to initialize WebSocket:`, e.message);
+            resolve();
+        }
     });
 }
 
@@ -108,4 +127,3 @@ export function getLiveDepthFromMemory(ticker) {
     }
     return liveMemoryState.depth[ticker];
 }
-

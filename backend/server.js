@@ -50,6 +50,15 @@ async function runGhostBrainLoop() {
     // Combined multi-market ticker array
     const activeWatchlist = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS'];
 
+    // Run initial scan immediately so connected client gets data instantly
+    try {
+        console.log('[DAEMON] Executing initial multi-market scan...');
+        const initialResults = await runBulkScanPhase4(activeWatchlist);
+        broadcast(initialResults);
+    } catch (e) {
+        console.error('[DAEMON] Initial scan error:', e.message);
+    }
+
     setInterval(async () => {
         if (connectedClients.size === 0) return; // Don't burn CPU if no UI is watching
         try {
