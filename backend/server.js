@@ -11,7 +11,11 @@ const JWT_SECRET = 'ghost-brain-institutional-secret-key-0x123';
 const ACCESS_CODE = 'whalesonly'; // Simple initial auth code
 const fastify = Fastify({ logger: false });
 
-fastify.register(cors, { origin: '*' });
+fastify.register(cors, { 
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept']
+});
 fastify.register(fastifyWebsocket);
 
 const connectedClients = new Set();
