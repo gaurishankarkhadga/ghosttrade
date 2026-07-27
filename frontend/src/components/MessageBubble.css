@@ -2,6 +2,7 @@
 
 .message-wrapper {
   display: flex;
+  align-items: center;
   gap: 12px;
   max-width: 85%;
   animation: messageFadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -18,11 +19,21 @@
 
 .message-wrapper.ai {
   align-self: flex-start;
+  background: linear-gradient(to bottom right, #1e293b, #0f172a);
+  border: 1px solid #334155;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
 .message-wrapper.user {
   align-self: flex-end;
   flex-direction: row-reverse;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
 .avatar {
@@ -33,12 +44,11 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 4px;
 }
 
 .avatar.ai {
-  background: linear-gradient(to bottom right, #1e293b, #0f172a);
-  border: 1px solid #334155;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--color-ghost-accent);
@@ -46,8 +56,8 @@
 }
 
 .avatar.user {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: transparent;
+  border: none;
 }
 
 .avatar-icon {
@@ -76,12 +86,6 @@
 
 .message-wrapper.user .message-text {
   color: #f8fafc;
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  padding: 12px 16px;
-  border-radius: 12px 2px 12px 12px;
-  display: inline-block;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
 /* Trade Execution Card */

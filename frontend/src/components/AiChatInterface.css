@@ -176,12 +176,21 @@
 /* Mobile-Native Adjustments */
 @media (max-width: 768px) {
   .chat-scroll-container {
-    padding: 12rem 1rem 4rem 1rem; /* Massive top padding pushes input box and chips down into the lower half */
+    padding: 2rem 1rem 4rem 1rem;
+    /* Reduced padding so Flexbox naturally centers the entire block */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .chat-scroll-container::-webkit-scrollbar {
+    display: none;
   }
 
   .chat-horizon-glow {
-    width: 200vw; /* Wide arc to sweep gracefully down to the corners */
-    top: 68%; /* Shifted far down to match the new lowered position of the input box */
+    width: 200vw;
+    /* Wide arc to sweep gracefully down to the corners */
+    top: 50%;
+    /* Shifted up to true dead-center of the screen */
     box-shadow: 0px -15px 80px 25px rgba(56, 189, 248, 0.5);
   }
 
@@ -195,7 +204,8 @@
   }
 
   .chat-empty-input-wrapper {
-    margin-top: 8rem; /* Final nudge downward */
+    margin-top: 2rem;
+    /* Standardized margin to lock the input exactly onto the centered curve */
   }
 
   .chat-suggestion-chips {

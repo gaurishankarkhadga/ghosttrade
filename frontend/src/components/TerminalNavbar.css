@@ -1,4 +1,22 @@
-/* Transparent Bottom Left Dock */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap');
+
+/* --- RESPONSIVE TOGGLES --- */
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+}
+
+/* ========================================================================= */
+/* DESKTOP VIEW (BOTTOM LEFT DOCK) */
+/* ========================================================================= */
 .terminal-bottom-controls {
   position: fixed;
   bottom: 1.5rem;
@@ -10,7 +28,6 @@
   gap: 12px;
 }
 
-/* Base Icon Style for all 3 buttons */
 .corner-logo, .status-icon-btn, .icon-action-btn {
   width: 36px;
   height: 36px;
@@ -21,13 +38,12 @@
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  position: relative; /* important for tooltip positioning */
+  position: relative; 
 }
 
-/* Dock Tooltips */
 .dock-tooltip {
   position: absolute;
-  left: calc(100% + 12px); /* 12px gap to the right */
+  left: calc(100% + 12px);
   top: 50%;
   transform: translateY(-50%) translateX(-10px);
   background: rgba(15, 23, 42, 0.9);
@@ -56,7 +72,6 @@
   transform: translateY(-50%) translateX(0);
 }
 
-/* GT Logo */
 .corner-logo {
   background: linear-gradient(135deg, #1e293b, #0f172a);
   font-family: var(--font-display);
@@ -71,7 +86,6 @@
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-/* Frosted Glass Buttons (Status & Lock) */
 .status-icon-btn, .icon-action-btn {
   background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(8px);
@@ -87,7 +101,6 @@
   transform: scale(1.05);
 }
 
-/* Status Dot Glowing */
 .status-dot {
   width: 8px;
   height: 8px;
@@ -102,48 +115,164 @@
   box-shadow: 0 0 8px #ef4444;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
+/* ========================================================================= */
+/* MOBILE VIEW (TOP NAVBAR) */
+/* ========================================================================= */
+
+.terminal-top-navbar {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 2rem);
+  max-width: 1200px;
+  z-index: 1000;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-/* Mobile-Native Adjustments */
+.terminal-brand-text {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Orbitron', var(--font-display, sans-serif);
+  font-weight: 700;
+  color: #fff;
+  font-size: 1.25rem;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+
+.brand-dots {
+  position: relative;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.brand-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+.brand-dot:nth-child(1) { top: 0; left: 50%; transform: translateX(-50%); }
+.brand-dot:nth-child(2) { left: 0; top: 50%; transform: translateY(-50%); }
+.brand-dot:nth-child(3) { right: 0; top: 50%; transform: translateY(-50%); }
+.brand-dot:nth-child(4) { bottom: 0; left: 50%; transform: translateX(-50%); }
+
+.profile-section {
+  position: relative;
+  margin-left: auto;
+}
+
+.profile-trigger {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #d1d5db;
+}
+
+.profile-trigger:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.status-dot-overlay {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #0f172a;
+}
+.status-dot-overlay.online {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  animation: pulse-green 2s infinite;
+}
+.status-dot-overlay.offline {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 1rem);
+  right: 0;
+  width: 220px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 0.5rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+  color: #d1d5db;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.dropdown-item.danger {
+  color: #f87171;
+}
+
+.dropdown-item.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+/* Mobile responsive padding for top navbar */
 @media (max-width: 768px) {
-  .terminal-bottom-controls {
-    top: 0;
-    bottom: auto;
-    left: 0;
-    width: 100%;
-    flex-direction: row;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    z-index: 1000;
-  }
-
-  /* Keep tooltips hidden on touch/mobile devices to avoid getting stuck open */
-  .dock-tooltip {
-    display: none !important;
-  }
-
-  /* Since the layout is row space-between, we want the logo on left, status/lock on right */
-  /* The logo is the first child. Let's group the next two buttons together. */
-  .terminal-bottom-controls::after {
-    /* If we want strict grouping, we could change the DOM, but using margin-left on the second child works */
-  }
-  
-  /* Push the status icon (second element) to the right by using margin-left auto */
-  .status-icon-btn {
-    margin-left: auto;
+  .terminal-top-navbar {
+    top: 1rem;
+    width: calc(100% - 2rem);
+    padding: 0.5rem 1rem;
   }
 }

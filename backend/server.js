@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 
 // Import our existing Ghost Brain daemon
 import { runBulkScanPhase4 } from './scannerEngine.js';
-import { startWebSocketPipeline } from './websocketEngine.js';
+import { startWebSocketPipeline, liveMemoryState } from './websocketEngine.js';
 
 const JWT_SECRET = 'ghost-brain-institutional-secret-key-0x123';
 const ACCESS_CODE = 'whalesonly'; // Simple initial auth code
@@ -87,7 +87,18 @@ async function runGhostBrainLoop() {
     // Combined multi-market ticker array
     const activeWatchlist = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'RELIANCE.NS', 'TCS.NS', 'INFY.NS'];
 
-    // Run initial scan immediately so connected client gets data instantly
+    // Give Binance TCP streams time to populate the zero-latency memory buffers dynamically
+    console.log('[DAEMON] Waiting for initial order flow telemetry buffer to fill...');
+    for (let i = 0; i < 15; i++) {
+        const btcTrades = liveMemoryState.aggTrades['BTC-USD'];
+        if (btcTrades && btcTrades.length > 0) {
+            console.log(`[DAEMON] Telemetry buffer filled (${btcTrades.length} trades). Proceeding to initial scan.`);
+            break;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Run initial scan immediately after buffer fills so connected client gets data instantly
     try {
         console.log('[DAEMON] Executing initial multi-market scan...');
         const initialResults = await runBulkScanPhase4(activeWatchlist);
@@ -96,15 +107,18 @@ async function runGhostBrainLoop() {
         console.error('[DAEMON] Initial scan error:', e.message);
     }
 
-    setInterval(async () => {
-        if (connectedClients.size === 0) return; // Don't burn CPU if no UI is watching
-        try {
-            const results = await runBulkScanPhase4(activeWatchlist);
-            broadcast(results);
-        } catch (e) {
-            console.error('[DAEMON] Loop error:', e.message);
+    // Run sequentially instead of overlapping setInterval
+    while (true) {
+        if (connectedClients.size > 0) {
+            try {
+                const results = await runBulkScanPhase4(activeWatchlist);
+                broadcast(results);
+            } catch (e) {
+                console.error('[DAEMON] Loop error:', e.message);
+            }
         }
-    }, 3000); // Compute every 3 seconds for safe rate limits
+        await new Promise(r => setTimeout(r, 3000));
+    }
 }
 
 // Secure WebSocket endpoint for the React UI

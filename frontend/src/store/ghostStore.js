@@ -111,22 +111,29 @@ const useGhostStore = create(
             }
           }
 
-          if (targetAsset) {
+            if (targetAsset) {
             const formattedPrice = targetAsset.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             
             let summary = '';
+            
+            const regimeText = targetAsset.macroRegime === 'TRENDING' ? 'a strong trending regime' : 
+                               targetAsset.macroRegime === 'MEAN_REVERTING' ? 'a mean-reverting regime' : 
+                               'a random-walk/flat regime';
+                               
             if (targetAsset.flowBias.includes('SELL')) {
-              summary = `${targetAssetKey} exhibits a deteriorating regime. Institutional order flow indicates aggressive distribution at current levels.`;
+              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow indicates aggressive distribution at current levels.`;
             } else if (targetAsset.flowBias.includes('BUY')) {
-              summary = `${targetAssetKey} exhibits a strengthening regime. Institutional order flow indicates accumulation at current levels.`;
+              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow indicates accumulation at current levels.`;
+            } else if (targetAsset.flowBias.includes('UNAVAILABLE')) {
+              summary = `${targetAssetKey} exhibits ${regimeText}. Order flow telemetry is unavailable for this sector, relying on price-action shield.`;
             } else {
-              summary = `${targetAssetKey} exhibits a flat regime. Institutional order flow is mixed (NEUTRAL). No statistical edge detected. Capital preservation recommended.`;
+              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow is mixed (NEUTRAL). Capital preservation recommended unless structural edge triggers.`;
             }
             
             aiResponse.content = summary;
             
             // Generate a Smart UI Card for actionable edges (Long or Short)
-            if (targetAsset.flowBias.includes('BUY')) {
+            if (targetAsset.flowBias.includes('BUY') || (targetAsset.macroRegime === 'TRENDING' && !targetAsset.shieldTriggered)) {
               aiResponse.uiComponent = 'TRADE_CARD';
               aiResponse.tradeData = {
                 asset: targetAssetKey,

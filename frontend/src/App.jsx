@@ -9,7 +9,8 @@ import AiChatInterface from './components/AiChatInterface';
 
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
-  const { isAuthenticated, isConnected, logout } = useGhostStore();
+  const { isAuthenticated, wsStatus, logout } = useGhostStore();
+  const isConnected = wsStatus === 'CONNECTED';
   const location = useLocation();
 
   if (!isAuthenticated) {
