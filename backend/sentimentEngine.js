@@ -59,7 +59,7 @@ async function fetchLiveNews(ticker) {
  * Runs a lightweight NLP keyword matrix over the news headlines to calculate
  * a sentiment multiplier for the Quantitative Score.
  */
-function calculateSentimentMultiplier(headlines) {
+function calculateSentimentMultiplier(headlines, ticker) {
   if (!headlines || headlines.length === 0) {
     return { multiplier: 1.0, bias: 'NEUTRAL', alerts: [] };
   }
@@ -70,11 +70,16 @@ function calculateSentimentMultiplier(headlines) {
   let alerts = [];
 
   const text = headlines.map(h => h.title.toLowerCase()).join(' ');
+  const cleanTicker = ticker.replace('.NS', '').replace('NSE:', '').split('-')[0].toLowerCase();
 
   TOXIC_KEYWORDS.forEach(kw => {
-    if (text.includes(kw)) {
+    // Proximity Regex: Is the toxic keyword within 40 characters (~5 words) of the asset name?
+    const regexStr1 = `${cleanTicker}.{0,40}${kw}`;
+    const regexStr2 = `${kw}.{0,40}${cleanTicker}`;
+    
+    if (new RegExp(regexStr1, 'i').test(text) || new RegExp(regexStr2, 'i').test(text)) {
       toxicHits++;
-      alerts.push(`TOXIC EVENT DETECTED: Mention of '${kw.toUpperCase()}'`);
+      alerts.push(`TOXIC EVENT DETECTED: '${kw.toUpperCase()}' in direct proximity to '${cleanTicker.toUpperCase()}'`);
     }
   });
 
@@ -115,7 +120,7 @@ function calculateSentimentMultiplier(headlines) {
 export async function fetchAssetSentiment(ticker) {
   try {
     const headlines = await fetchLiveNews(ticker);
-    const sentiment = calculateSentimentMultiplier(headlines);
+    const sentiment = calculateSentimentMultiplier(headlines, ticker);
     
     return {
       success: true,

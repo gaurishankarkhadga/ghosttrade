@@ -10,7 +10,7 @@ const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
 // Simple in-memory cache for bulk scanning
 const orderFlowCache = new Map();
 const FLOW_CACHE_TTL_MS = 60 * 1000; // 1 minute
-import { getLiveDepthFromMemory } from './websocketEngine.js';
+import { getLiveDepthFromMemory, liveMemoryState } from './websocketEngine.js';
 
 // Ticker → Binance symbol mapping
 const TICKER_TO_BINANCE = {
@@ -69,31 +69,13 @@ export async function fetchOrderFlow(ticker, limit = 1000) {
     };
   }
 
-  const cacheKey = `${symbol}_${limit}`;
-  const cached = orderFlowCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < FLOW_CACHE_TTL_MS)) {
-    return cached.data;
+  // [PHASE 7] Sub-Millisecond Zero Latency WebSocket Reading
+  const trades = liveMemoryState.aggTrades[ticker.toUpperCase()] || [];
+  if (trades.length > 0) {
+    return analyzeOrderFlow(trades, symbol);
   }
 
-  try {
-    const url = `https://api.binance.com/api/v3/aggTrades?symbol=${symbol.toUpperCase()}&limit=${limit}`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      return { error: `Binance API ${response.status}`, available: false };
-    }
-
-    const trades = await response.json();
-    const finalData = analyzeOrderFlow(trades, symbol);
-    orderFlowCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
-    return finalData;
-  } catch (error) {
-    console.warn(`[ORDER FLOW] Fetch failed for ${ticker}:`, error.message);
-    return { error: error.message, available: false };
-  }
+  return { error: 'WebSocket buffer empty/booting', available: false };
 }
 
 /**
@@ -122,37 +104,10 @@ export async function fetchOrderBookDepth(ticker, limit = 1000) {
   // [PHASE 7] Sub-Millisecond Zero Latency WebSocket Check
   const liveData = getLiveDepthFromMemory(ticker);
   if (!liveData.error) {
-      // Data exists in memory cache from the live stream
-      // We parse it instantly without making an HTTP request
       return analyzeOrderBook(liveData, symbol);
   }
 
-  // Fallback to HTTP REST if WebSocket cache is empty/booting
-  const cacheKey = `depth_${symbol}_${limit}`;
-  const cached = orderFlowCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < FLOW_CACHE_TTL_MS)) {
-    return cached.data;
-  }
-
-  try {
-    const url = `https://api.binance.com/api/v3/depth?symbol=${symbol.toUpperCase()}&limit=${limit}`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      return { error: `Binance Depth API ${response.status}`, available: false };
-    }
-
-    const depthData = await response.json();
-    const finalData = analyzeOrderBook(depthData, symbol);
-    orderFlowCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
-    return finalData;
-  } catch (error) {
-    console.warn(`[ORDER BOOK] Fetch failed for ${ticker}:`, error.message);
-    return { error: error.message, available: false };
-  }
+  return { error: 'WebSocket depth empty/booting', available: false };
 }
 
 /**
@@ -173,15 +128,15 @@ function analyzeOrderFlow(trades, symbol) {
   const LARGE_ORDER_MULTIPLIER = 10; // 10x average = whale
 
   // Calculate average trade size first
-  const totalQty = trades.reduce((s, t) => s + parseFloat(t.q), 0);
+  const totalQty = trades.reduce((s, t) => s + t.qty, 0);
   const avgQty = totalQty / trades.length;
   const whaleThreshold = avgQty * LARGE_ORDER_MULTIPLIER;
 
   for (const trade of trades) {
-    const qty = parseFloat(trade.q);
-    const price = parseFloat(trade.p);
+    const qty = trade.qty;
+    const price = trade.price;
     const value = qty * price;
-    const isBuyerMaker = trade.m; // true = seller is aggressor (sell), false = buyer is aggressor (buy)
+    const isBuyerMaker = trade.maker; // true = seller is aggressor (sell), false = buyer is aggressor (buy)
 
     if (isBuyerMaker) {
       // Seller aggressor = sell pressure
@@ -202,7 +157,7 @@ function analyzeOrderFlow(trades, symbol) {
         qty: qty,
         price: price,
         valueUSD: value,
-        timestamp: trade.T,
+        timestamp: trade.time,
       });
     }
   }
@@ -218,9 +173,8 @@ function analyzeOrderFlow(trades, symbol) {
   const recentTrades = trades.slice(-recentCutoff);
   let recentBuyVol = 0, recentSellVol = 0;
   for (const t of recentTrades) {
-    const qty = parseFloat(t.q);
-    if (t.m) recentSellVol += qty;
-    else recentBuyVol += qty;
+    if (t.maker) recentSellVol += t.qty;
+    else recentBuyVol += t.qty;
   }
   const recentDelta = recentBuyVol - recentSellVol;
   const recentTotal = recentBuyVol + recentSellVol;
@@ -228,7 +182,7 @@ function analyzeOrderFlow(trades, symbol) {
 
   // Trade velocity (trades per second)
   const timeSpan = trades.length > 1
-    ? (trades[trades.length - 1].T - trades[0].T) / 1000
+    ? (trades[trades.length - 1].time - trades[0].time) / 1000
     : 1;
   const tradesPerSecond = trades.length / Math.max(timeSpan, 1);
 

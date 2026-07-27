@@ -6,10 +6,12 @@
 // =====================================================
 
 import WebSocket from 'ws';
+import { DEFAULT_CRYPTO_WATCHLIST } from './scannerEngine.js';
 
 // Centralized Memory Cache (0-latency access)
 export const liveMemoryState = {
-    depth: {},  // { 'BTC-USD': { bids: [], asks: [], timestamp: 12345 } }
+    depth: {},      // { 'BTC-USD': { bids: [], asks: [], timestamp: 12345 } }
+    aggTrades: {},  // { 'BTC-USD': [{ price, qty, maker, time }] }
     status: 'DISCONNECTED'
 };
 
@@ -45,7 +47,7 @@ function normalizeFromStream(streamStr) {
 /**
  * Initializes the WebSocket connection. Non-blocking Promise to ensure server daemon never hangs.
  */
-export function startWebSocketPipeline(tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD']) {
+export function startWebSocketPipeline(tickers = DEFAULT_CRYPTO_WATCHLIST) {
     return new Promise((resolve) => {
         if (ws) {
             console.log(`[WEBSOCKET] Pipeline already running.`);
@@ -61,7 +63,10 @@ export function startWebSocketPipeline(tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD
         }, 2500);
 
         try {
-            const streams = tickers.map(t => `${normalizeToStream(t)}@depth20@100ms`);
+            const streams = tickers.flatMap(t => [
+                `${normalizeToStream(t)}@depth20@100ms`,
+                `${normalizeToStream(t)}@aggTrade`
+            ]);
             const streamUrl = `wss://stream.binance.com:9443/stream?streams=${streams.join('/')}`;
             
             ws = new WebSocket(streamUrl);
@@ -78,18 +83,53 @@ export function startWebSocketPipeline(tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD
             ws.on('message', (data) => {
                 try {
                     const parsed = JSON.parse(data);
-                    if (parsed.stream && parsed.data && parsed.data.bids) {
+                    if (parsed.stream && parsed.data) {
                         const ticker = normalizeFromStream(parsed.stream);
-                        liveMemoryState.depth[ticker] = {
-                            bids: parsed.data.bids,
-                            asks: parsed.data.asks,
-                            timestamp: Date.now()
-                        };
+                        
+                        // Handle Depth payloads
+                        if (parsed.stream.includes('@depth')) {
+                            liveMemoryState.depth[ticker] = {
+                                bids: parsed.data.bids || [],
+                                asks: parsed.data.asks || [],
+                                timestamp: Date.now()
+                            };
+                        }
+                        
+                        // Handle AggTrade payloads
+                        if (parsed.stream.includes('@aggTrade')) {
+                            if (!liveMemoryState.aggTrades[ticker]) {
+                                liveMemoryState.aggTrades[ticker] = [];
+                            }
+                            liveMemoryState.aggTrades[ticker].push({
+                                price: parseFloat(parsed.data.p),
+                                qty: parseFloat(parsed.data.q),
+                                maker: parsed.data.m, // true if maker (sell), false if taker (buy)
+                                time: parsed.data.T
+                            });
+                        }
                     }
                 } catch (err) {
                     console.error(`[WEBSOCKET] Parse error:`, err.message);
                 }
             });
+            
+            // V8 Garbage Collector - Ring Buffer for AggTrades
+            // Runs every 10 seconds to forcefully evict trades older than 15 minutes, preventing RAM overflow
+            setInterval(() => {
+                const cutoff = Date.now() - (15 * 60 * 1000); // 15 mins
+                for (const ticker of Object.keys(liveMemoryState.aggTrades)) {
+                    const trades = liveMemoryState.aggTrades[ticker];
+                    if (!trades || trades.length === 0) continue;
+                    
+                    let sliceIdx = 0;
+                    while (sliceIdx < trades.length && trades[sliceIdx].time < cutoff) { 
+                        sliceIdx++; 
+                    }
+                    if (sliceIdx > 0) {
+                        liveMemoryState.aggTrades[ticker] = trades.slice(sliceIdx);
+                    }
+                }
+            }, 10000);
 
             ws.on('close', () => {
                 liveMemoryState.status = 'DISCONNECTED';

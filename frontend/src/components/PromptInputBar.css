@@ -1,0 +1,209 @@
+/* Bolt Style Chat Input */
+.bolt-prompt-form {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.bolt-prompt-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: rgba(30, 41, 59, 0.5); /* dark slate */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bolt-prompt-container:focus-within {
+  border-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(30, 41, 59, 0.7);
+  box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.4);
+}
+
+.bolt-prompt-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #f1f5f9;
+  outline: none;
+  resize: none;
+  min-height: 40px;
+  padding: 0 0.25rem 0.5rem 0.25rem;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bolt-prompt-textarea::-webkit-scrollbar {
+  display: none;
+}
+
+.bolt-prompt-textarea::placeholder {
+  color: #64748b;
+}
+
+.bolt-prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.25rem;
+}
+
+.bolt-left-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bolt-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bolt-icon-btn:hover:not(:disabled) {
+  color: #f1f5f9;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.bolt-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bolt-icon-btn.round-bg {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: #e2e8f0;
+}
+
+.bolt-model-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.bolt-model-selector:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.bolt-text-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  transition: color 0.2s;
+}
+
+.bolt-text-btn:hover {
+  color: #fff;
+}
+
+.bolt-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bolt-submit-btn-wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bolt-submit-btn-wide.active {
+  background-color: var(--color-ghost-accent);
+  color: var(--color-ghost-obsidian);
+  cursor: pointer;
+}
+
+.bolt-submit-btn-wide.active:hover {
+  background-color: var(--color-ghost-accent-hover);
+  transform: scale(1.02);
+}
+
+.bolt-submit-btn-wide.active:active {
+  transform: scale(0.98);
+}
+
+.bolt-submit-btn-wide.disabled {
+  background-color: var(--color-ghost-accent);
+  color: var(--color-ghost-obsidian);
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Mobile-Native Adjustments */
+@media (max-width: 768px) {
+  .bolt-prompt-container {
+    padding: 0.5rem;
+  }
+
+  .bolt-prompt-textarea {
+    font-size: 0.9rem;
+  }
+
+  .bolt-left-actions {
+    gap: 0.25rem;
+  }
+
+  .bolt-model-selector {
+    padding: 0.25rem 0.35rem;
+    font-size: 0.7rem;
+  }
+
+  .bolt-text-btn {
+    padding: 0.5rem 0.35rem;
+  }
+  
+  /* Hide the text "Deep Scan" on mobile to save space */
+  .bolt-text-btn span {
+    display: none;
+  }
+
+  .bolt-submit-btn-wide {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+  }
+}

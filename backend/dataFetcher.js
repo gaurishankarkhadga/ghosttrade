@@ -223,15 +223,19 @@ export function getClosePrices(ohlcv) {
   return ohlcv.map(b => b.close);
 }
 
-/**
- * Extracts log returns from an OHLCV array (for DFA / Hurst calculation).
- * Log return = ln(close[i] / close[i-1])
- */
 export function getLogReturns(ohlcv) {
   const closes = getClosePrices(ohlcv);
   const returns = [];
   for (let i = 1; i < closes.length; i++) {
-    returns.push(Math.log(closes[i] / closes[i - 1]));
+    const current = closes[i];
+    const prev = closes[i - 1];
+    
+    // Failsafe against exchange data gaps (0 or NaN) preventing NaN poisoning in regression models
+    if (!current || !prev || prev === 0 || isNaN(current) || isNaN(prev)) {
+      returns.push(0);
+    } else {
+      returns.push(Math.log(current / prev));
+    }
   }
   return returns;
 }
