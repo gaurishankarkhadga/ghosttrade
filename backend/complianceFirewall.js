@@ -96,20 +96,23 @@ export async function auditCompliance(fullText, signalHash) {
   
   const violations = [];
   const AUDIT_PATTERNS = [
-    // Phase 2 terms
-    { term: 'buy',        pattern: /\bbuy\b(?!er|ing|back)/gi },
-    { term: 'sell',       pattern: /\bsell\b(?!er|ing|off)/gi },
+    // Phase 2 terms — exclude structural label forms like "Stop Loss: $xxx" and "Take Profit: $xxx"
+    // These are emitted by Module 14 verdict and are data labels, not advisories
+    { term: 'buy',        pattern: /\bbuy\b(?!er|ing|back|s\b)/gi },
+    { term: 'sell',       pattern: /\bsell\b(?!er|ing|off|s\b)/gi },
     { term: 'go long',    pattern: /\bgo\s+long\b/gi },
     { term: 'go short',   pattern: /\bgo\s+short\b/gi },
-    { term: 'take profit',pattern: /\btake\s+profit\b/gi },
-    { term: 'stop loss',  pattern: /\bstop[\s-]?loss\b/gi },
+    // Only flag "take profit" as advisory when NOT followed by a colon (not a label)
+    { term: 'take profit', pattern: /\btake\s+profit\b(?!\s*:)/gi },
+    // Only flag "stop loss" as advisory when NOT followed by a colon (not a label)
+    { term: 'stop loss',  pattern: /\bstop[\s-]?loss\b(?!\s*:)/gi },
     // Phase 3 hard-block terms (PRD §4.5)
-    { term: 'guaranteed',       pattern: /\bguaranteed?\b/gi },
-    { term: 'never lose',       pattern: /\bnever\s+lose\b/gi },
-    { term: '100% accurate',    pattern: /\b100%\s*accurate\b/gi },
-    { term: 'risk-free',        pattern: /\brisk[\s-]?free\b/gi },
+    { term: 'guaranteed',        pattern: /\bguaranteed?\b/gi },
+    { term: 'never lose',        pattern: /\bnever\s+lose\b/gi },
+    { term: '100% accurate',     pattern: /\b100%\s*accurate\b/gi },
+    { term: 'risk-free',         pattern: /\brisk[\s-]?free\b/gi },
     { term: 'always profitable', pattern: /\balways\s+profitable\b/gi },
-    { term: 'zero risk',        pattern: /\bzero[\s-]?risk\b/gi },
+    { term: 'zero risk',         pattern: /\bzero[\s-]?risk\b/gi },
   ];
   
   for (const check of AUDIT_PATTERNS) {

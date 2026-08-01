@@ -9,6 +9,108 @@ const useGhostStore = create(
       wsStatus: 'DISCONNECTED',
       assets: {}, // { 'BTC-USD': { score: 50, flowBias: 'NEUTRAL', kellySize: 10, ... } }
       
+      // --- Paper Trading State ---
+      activePaperTrades: [],
+      closedPaperTrades: [],
+      
+      // --- Audit State ---
+      promptLogs: [],
+      
+      initAuditData: async () => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const res = await fetch(`${baseUrl}/api/audit`);
+          const data = await res.json();
+          if (res.ok) {
+            set({
+              activePaperTrades: data.activePaperTrades || [],
+              closedPaperTrades: data.closedPaperTrades || [],
+              promptLogs: data.promptLogs || []
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load audit data from DB:", e);
+        }
+      },
+
+      executeTrade: async (tradeData) => {
+        const newTrade = {
+          ...tradeData,
+          id: `trade_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          status: 'OPEN',
+          executedAt: new Date().toISOString()
+        };
+        
+        // Optimistic update
+        set((state) => ({
+          activePaperTrades: [...state.activePaperTrades, newTrade]
+        }));
+        
+        // Sync to backend
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          await fetch(`${baseUrl}/api/audit/trade`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newTrade)
+          });
+        } catch (e) {
+          console.error("Failed to sync trade to DB:", e);
+        }
+      },
+
+      approveTrade: async (tradeId) => {
+        let tradeToApprove = null;
+        set((state) => {
+          tradeToApprove = state.activePaperTrades.find(t => t.id === tradeId);
+          if (!tradeToApprove) return state;
+          
+          return {
+            activePaperTrades: state.activePaperTrades.map(t => 
+              t.id === tradeId ? { ...t, status: 'OPEN', executedAt: new Date().toISOString() } : t
+            )
+          };
+        });
+        
+        if (tradeToApprove) {
+          try {
+            const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+            await fetch(`${baseUrl}/api/audit/trade/${tradeId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'OPEN', executedAt: new Date().toISOString() })
+            });
+          } catch (e) {
+            console.error("Failed to sync approve to DB:", e);
+          }
+        }
+      },
+
+      cancelTrade: async (tradeId) => {
+        let tradeToCancel = null;
+        set((state) => {
+          tradeToCancel = state.activePaperTrades.find(t => t.id === tradeId);
+          if (!tradeToCancel) return state;
+          
+          return {
+            activePaperTrades: state.activePaperTrades.filter(t => t.id !== tradeId),
+            closedPaperTrades: [...state.closedPaperTrades, { ...tradeToCancel, status: 'CANCELLED', closedAt: new Date().toISOString() }]
+          };
+        });
+        
+        if (tradeToCancel) {
+          try {
+            const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+            await fetch(`${baseUrl}/api/audit/trade/${tradeId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'CANCELLED', closedAt: new Date().toISOString() })
+            });
+          } catch (e) {
+            console.error("Failed to sync cancel to DB:", e);
+          }
+        }
+      },
       login: async (credentials) => {
         try {
           const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -29,6 +131,7 @@ const useGhostStore = create(
           if (res.ok && data.token) {
             set({ isAuthenticated: true, token: data.token });
             get().connectWebSocket(data.token);
+            get().initAuditData(); // Fetch global DB on login
             return { success: true, message: 'Authentication successful.' };
           }
           
@@ -39,7 +142,12 @@ const useGhostStore = create(
         }
       },
 
-      connectWebSocket: (token) => {
+      connectWebSocket: (tokenArg) => {
+        const token = tokenArg || get().token;
+        if (!token) {
+          console.warn('[WS] No token available for WebSocket connection');
+          return;
+        }
         set({ wsStatus: 'CONNECTING' });
         
         // Dynamically resolve WebSocket URL (wss:// for https://, ws:// for http://)
@@ -61,12 +169,17 @@ const useGhostStore = create(
           try {
             const data = JSON.parse(event.data);
             if (data.type === 'GHOST_BRAIN_UPDATE') {
-              // data.payload is array of asset results from the Phase 4 bulk scan
-              const newAssets = { ...get().assets };
+              // data.payload is array of perfectly filtered asset results from the Phase 4 bulk scan
+              const newAssets = {};
               data.payload.forEach(asset => {
                  newAssets[asset.ticker] = asset;
               });
-              set({ assets: newAssets });
+              
+              set((state) => {
+                return { 
+                  assets: { ...state.assets, ...newAssets }
+                };
+              });
             }
           } catch (e) {
             console.error('WS Parse Error', e);
@@ -76,104 +189,113 @@ const useGhostStore = create(
       // --- AI Chat Logic ---
       chatHistory: [],
       isThinking: false,
+      clearChat: () => set({ chatHistory: [], isThinking: false }),
 
-      sendPrompt: async (prompt) => {
-        // 1. Add user prompt to history
+      sendPrompt: async (promptData) => {
+        const { text, imageBase64 } = typeof promptData === 'string' ? { text: promptData, imageBase64: null } : promptData;
+
+        // 1. Check for command overrides
+        if (text.toLowerCase().includes('clear') || text.toLowerCase().includes('reset')) {
+          set({ chatHistory: [], isThinking: false });
+          return;
+        }
+
+        // 2. Add user prompt to history
         set((state) => ({
-          chatHistory: [...state.chatHistory, { role: 'user', content: prompt }],
+          chatHistory: [...state.chatHistory, { role: 'user', content: text, imageBase64: imageBase64 }],
           isThinking: true
         }));
 
-        // 2. Simulate AI Processing & Backend Latency (Zero-Friction Context)
-        setTimeout(() => {
-          const state = get();
-          const assets = state.assets;
-          let aiResponse = { role: 'ai', content: '' };
-          
-          // 1. Check for command overrides
-          if (prompt.toLowerCase().includes('clear') || prompt.toLowerCase().includes('reset')) {
-            set({ chatHistory: [], isThinking: false });
-            return;
-          }
+        const aiMessageId = Date.now();
+        set((state) => ({
+          chatHistory: [...state.chatHistory, { id: aiMessageId, role: 'ai', content: '' }]
+        }));
 
-          // 2. Dynamic Asset NLP (No hardcoding)
-          const availableKeys = Object.keys(assets);
-          let targetAsset = null;
-          let targetAssetKey = null;
+        const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/chat/stream';
+        
+        const chatWs = new WebSocket(wsUrl);
+        let accumulatedContent = '';
 
-          for (const key of availableKeys) {
-            // Strip suffixes to match conversational prompts (e.g., "RELIANCE.NS" -> "RELIANCE", "BTC-USD" -> "BTC")
-            const tickerToken = key.split('-')[0].split('.')[0].toLowerCase();
-            if (prompt.toLowerCase().includes(tickerToken) || prompt.toLowerCase().includes(key.toLowerCase())) {
-              targetAsset = assets[key];
-              targetAssetKey = key;
-              break;
-            }
-          }
-
-            if (targetAsset) {
-            const formattedPrice = targetAsset.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            
-            let summary = '';
-            
-            const regimeText = targetAsset.macroRegime === 'TRENDING' ? 'a strong trending regime' : 
-                               targetAsset.macroRegime === 'MEAN_REVERTING' ? 'a mean-reverting regime' : 
-                               'a random-walk/flat regime';
-                               
-            if (targetAsset.flowBias.includes('SELL')) {
-              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow indicates aggressive distribution at current levels.`;
-            } else if (targetAsset.flowBias.includes('BUY')) {
-              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow indicates accumulation at current levels.`;
-            } else if (targetAsset.flowBias.includes('UNAVAILABLE')) {
-              summary = `${targetAssetKey} exhibits ${regimeText}. Order flow telemetry is unavailable for this sector, relying on price-action shield.`;
-            } else {
-              summary = `${targetAssetKey} exhibits ${regimeText}. Institutional order flow is mixed (NEUTRAL). Capital preservation recommended unless structural edge triggers.`;
-            }
-            
-            aiResponse.content = summary;
-            
-            // Generate a Smart UI Card for actionable edges (Long or Short)
-            if (targetAsset.flowBias.includes('BUY') || (targetAsset.macroRegime === 'TRENDING' && !targetAsset.shieldTriggered)) {
-              aiResponse.uiComponent = 'TRADE_CARD';
-              aiResponse.tradeData = {
-                asset: targetAssetKey,
-                side: 'LONG',
-                price: formattedPrice,
-                kellySize: targetAsset.recommendedSize
-              };
-            } else if (targetAsset.flowBias.includes('SELL')) {
-              aiResponse.uiComponent = 'TRADE_CARD';
-              aiResponse.tradeData = {
-                asset: targetAssetKey,
-                side: 'SHORT',
-                price: formattedPrice,
-                kellySize: targetAsset.recommendedSize
-              };
-            }
-          } else {
-            const availableList = availableKeys.length > 0 
-              ? availableKeys.map(k => k.split('-')[0].split('.')[0]).join(', ') 
-              : 'None (Awaiting Node Sync)';
-            aiResponse.content = `[SYSTEM] Command unparseable or asset not found in active data stream.\nCurrently buffering: ${availableList}.`;
-          }
-
-          set((state) => ({
-            chatHistory: [...state.chatHistory, aiResponse],
-            isThinking: false
+        chatWs.onopen = () => {
+          chatWs.send(JSON.stringify({ 
+             type: 'START_ANALYSIS', 
+             prompt: text, 
+             image: imageBase64,
+             language: 'English' 
           }));
-        }, 800); // 800ms synthetic processing time for MVP
+        };
+
+        chatWs.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.status === 'update') {
+               accumulatedContent += data.text;
+               set((state) => ({
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent } : msg
+                 ),
+                 isThinking: false
+               }));
+            } else if (data.status === 'trade_card') {
+               set((state) => ({
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, uiComponent: 'TRADE_CARD', tradeData: data.tradeData } : msg
+                 )
+               }));
+            } else if (data.status === 'complete') {
+               chatWs.close();
+               
+               const finalMessage = get().chatHistory.find(m => m.id === aiMessageId);
+               const newPromptLog = {
+                 id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                 timestamp: new Date().toISOString(),
+                 prompt: text,
+                 resultType: finalMessage.uiComponent === 'TRADE_CARD' ? 'TRADE_CARD' : 'TEXT',
+                 aiOutput: finalMessage.content
+               };
+               set(state => ({ promptLogs: [...state.promptLogs, newPromptLog] }));
+               
+               fetch(`${baseUrl}/api/audit/prompt`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify(newPromptLog)
+               }).catch(e => console.error("Failed to sync prompt to DB:", e));
+            } else if (data.status === 'error') {
+               accumulatedContent += `\n\n[SYSTEM ERROR] ${data.message}`;
+               set((state) => ({
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent } : msg
+                 ),
+                 isThinking: false
+               }));
+               chatWs.close();
+            }
+          } catch (e) {
+             console.error('Chat Stream Parse Error', e);
+          }
+        };
+
+        chatWs.onerror = () => {
+           set((state) => ({
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent + "\n\n[SYSTEM ERROR] Failed to connect to analysis engine." } : msg
+                 ),
+                 isThinking: false
+           }));
+        };
       },
       
       logout: () => {
-        set({ isAuthenticated: false, token: null, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [] });
+        set({ isAuthenticated: false, token: null, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [], activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
       }
     }),
     {
-      name: 'ghosttrade-auth-storage',
-      partialize: (state) => ({ 
-        isAuthenticated: state.isAuthenticated, 
+      name: 'ghosttrade-auth', // localStorage key
+      partialize: (state) => ({
+        // Only persist auth credentials — all other state is fetched fresh from DB
+        isAuthenticated: state.isAuthenticated,
         token: state.token,
-        chatHistory: state.chatHistory
       }),
     }
   )

@@ -173,6 +173,50 @@
   margin: 0 auto;
 }
 
+.quick-action-row {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.quick-action-row::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-action-chip {
+  flex-shrink: 0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 2rem;
+  background-color: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.75rem;
+  transition: all 0.2s;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.quick-action-chip:hover {
+  background-color: rgba(56, 189, 248, 0.15);
+  color: #f1f5f9;
+  border-color: rgba(56, 189, 248, 0.3);
+  transform: translateY(-1px);
+}
+
+.quick-action-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Mobile-Native Adjustments */
 @media (max-width: 768px) {
   .chat-scroll-container {
@@ -221,4 +265,56 @@
   .chat-dock {
     padding: 0.75rem 1rem 1.5rem 1rem;
   }
+
+  .new-chat-icon-btn {
+    top: 1rem;
+    left: 1rem;
+  }
+}
+
+/* New Chat Icon Button (Inherits base styles from .icon-action-btn) */
+.new-chat-icon-btn {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 50;
+}
+
+/* Thinking Indicator (replaces Tailwind utilities) */
+.thinking-indicator {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(30, 41, 59, 0.2);
+  border-radius: 1rem;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.thinking-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #38bdf8;
+  animation: thinking-bounce 1.4s ease-in-out infinite;
+}
+
+.thinking-text {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.75rem;
+  color: rgba(56, 189, 248, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
 }

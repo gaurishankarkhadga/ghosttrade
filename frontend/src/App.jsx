@@ -6,6 +6,7 @@ import './App.css';
 import { SignInPage } from './components/ui/SignInFlow';
 import TerminalNavbar from './components/TerminalNavbar';
 import AiChatInterface from './components/AiChatInterface';
+import PerformanceDashboard from './components/PerformanceDashboard';
 
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
@@ -31,13 +32,14 @@ const ProtectedLayout = ({ children }) => {
 };
 
 export default function App() {
-  const { isAuthenticated, connectWebSocket, login } = useGhostStore();
+  const { isAuthenticated, connectWebSocket, initAuditData, login } = useGhostStore();
 
   useEffect(() => {
     if (isAuthenticated) {
       connectWebSocket();
+      initAuditData();
     }
-  }, [isAuthenticated, connectWebSocket]);
+  }, [isAuthenticated, connectWebSocket, initAuditData]);
 
   return (
     <Routes>
@@ -59,6 +61,16 @@ export default function App() {
         element={
           <ProtectedLayout>
             <AiChatInterface />
+          </ProtectedLayout>
+        } 
+      />
+
+      {/* Protected Performance & Audit Route */}
+      <Route 
+        path="/audit" 
+        element={
+          <ProtectedLayout>
+             <PerformanceDashboard />
           </ProtectedLayout>
         } 
       />

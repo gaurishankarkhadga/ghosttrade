@@ -1,12 +1,43 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Zap, ChevronDown, Activity, ArrowRight, BrainCircuit } from 'lucide-react';
+import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
 
 export default function PromptInputBar({ onSend, disabled }) {
   const [prompt, setPrompt] = useState('');
-  const [engine, setEngine] = useState('Ghost Engine v3');
+  const [market, setMarket] = useState('Global');
+  const [isMarketDropdownOpen, setIsMarketDropdownOpen] = useState(false);
+  const [attachedImage, setAttachedImage] = useState(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  const MARKETS = ['Global', 'India', 'AngelOne', 'Groww', 'Zerodha', 'Robinhood'];
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsMarketDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+  
+  const { assets } = useGhostStore();
+  
+  // Filter activeTickers based on selected market
+  let activeTickers = Object.keys(assets);
+  if (market === 'Global' || market === 'Robinhood') {
+    activeTickers = activeTickers.filter(t => t.endsWith('-USD') || !t.includes('.'));
+  } else if (market === 'India' || market === 'AngelOne' || market === 'Groww' || market === 'Zerodha') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.NS'));
+  }
+
+  // Show ALL assets without any filtering limits.
+  // The winning assets will be highlighted green automatically via CSS.
+  let displayTickers = activeTickers;
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -17,9 +48,10 @@ export default function PromptInputBar({ onSend, disabled }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (prompt.trim() && !disabled) {
-      onSend(prompt.trim());
+    if ((prompt.trim() || attachedImage) && !disabled) {
+      onSend({ text: prompt.trim(), imageBase64: attachedImage });
       setPrompt('');
+      setAttachedImage(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -33,13 +65,9 @@ export default function PromptInputBar({ onSend, disabled }) {
     }
   };
 
-  const toggleEngine = () => {
-    setEngine(prev => prev === 'Ghost Engine v3' ? 'Hurst Matrix' : 'Ghost Engine v3');
-  };
-
   const handleDeepScan = () => {
     if (!disabled) {
-      onSend('Execute Deep Scan across all quantitative regimes');
+      onSend({ text: 'Execute Deep Scan across all quantitative regimes', imageBase64: null });
     }
   };
 
@@ -49,11 +77,61 @@ export default function PromptInputBar({ onSend, disabled }) {
     }
   };
 
-  const isActive = prompt.trim() && !disabled;
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // Output base64 without the data URL prefix if backend expects raw base64, 
+        // but backend usually wants the prefix or we can strip it later. Let's keep the prefix for preview.
+        setAttachedImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset input so the same file can be selected again
+    e.target.value = '';
+  };
+
+  const removeAttachment = () => {
+    setAttachedImage(null);
+  };
+
+  const isActive = (prompt.trim() || attachedImage) && !disabled;
 
   return (
     <form onSubmit={handleSubmit} className="bolt-prompt-form">
       <div className="bolt-prompt-container">
+        {/* Integrated Quick Action Chips (Prompt-Less Execution) */}
+        <div className="quick-action-row-integrated">
+          {displayTickers.length > 0 ? (
+            displayTickers.map(ticker => (
+               <button 
+                 key={ticker}
+                 type="button"
+                 className={`quick-action-chip-integrated ${assets[ticker]?.recommendedSize > 0 ? 'winning-chip' : assets[ticker]?.status === 'error' ? 'error-chip' : ''}`} 
+                 onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null })}
+                 disabled={disabled}
+                 title={assets[ticker]?.status === 'error' ? 'API Rate Limited' : ''}
+               >
+                 {assets[ticker]?.status === 'error' ? '⚠️ ' : '⚡ '}{ticker}
+               </button>
+            ))
+          ) : (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="quick-action-chip-skeleton"></div>
+            ))
+          )}
+        </div>
+
+        {attachedImage && (
+          <div className="prompt-attachment-preview">
+            <img src={attachedImage} alt="Attachment" />
+            <button type="button" className="remove-attachment-btn" onClick={removeAttachment}>
+              <Plus size={12} style={{ transform: 'rotate(45deg)' }} />
+            </button>
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -66,16 +144,39 @@ export default function PromptInputBar({ onSend, disabled }) {
         />
         
         {/* Hidden File Input for native attachment dialog */}
-        <input type="file" ref={fileInputRef} style={{ display: 'none' }} />
+        <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={handleFileChange} />
 
         <div className="bolt-prompt-footer">
           <div className="bolt-left-actions">
             <button type="button" onClick={handleAttachClick} className="bolt-icon-btn round-bg" title="Attach file" disabled={disabled}>
               <Plus size={16} strokeWidth={2.5} />
             </button>
-            <div className="bolt-model-selector" onClick={toggleEngine}>
-              {engine === 'Ghost Engine v3' ? <Zap size={14} fill="currentColor" /> : <BrainCircuit size={14} />} 
-              {engine} <ChevronDown size={14} />
+            <div className="market-dropdown-container" ref={dropdownRef}>
+              <div className="bolt-model-selector" onClick={() => setIsMarketDropdownOpen(!isMarketDropdownOpen)}>
+                <Globe size={14} fill="none" stroke="currentColor" strokeWidth={2} /> 
+                {market} <ChevronDown size={14} />
+              </div>
+              <AnimatePresence>
+                {isMarketDropdownOpen && (
+                  <motion.div 
+                    className="market-dropdown-menu"
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {MARKETS.map(m => (
+                      <div 
+                        key={m} 
+                        className={`market-dropdown-item ${market === m ? 'active' : ''}`}
+                        onClick={() => { setMarket(m); setIsMarketDropdownOpen(false); }}
+                      >
+                        {m}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
           <div className="bolt-right-actions">

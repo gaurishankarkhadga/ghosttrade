@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import PromptInputBar from './PromptInputBar';
 import AiMessageBubble from './AiMessageBubble';
@@ -7,7 +8,7 @@ import { CanvasRevealEffect } from './ui/SignInFlow';
 import './AiChatInterface.css';
 
 export default function AiChatInterface() {
-  const { chatHistory, isThinking, sendPrompt } = useGhostStore();
+  const { chatHistory, isThinking, sendPrompt, assets, clearChat } = useGhostStore();
   const chatEndRef = useRef(null);
 
   // Auto-scroll to the bottom when a new message arrives
@@ -16,9 +17,19 @@ export default function AiChatInterface() {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatHistory, isThinking]);
+  
+  const activeTickers = Object.keys(assets);
 
   return (
     <div className="ai-chat-interface">
+      {/* Top Left New Chat Button */}
+      <button 
+        className="icon-action-btn new-chat-icon-btn" 
+        onClick={clearChat}
+      >
+        <Plus size={16} />
+        <span className="dock-tooltip">New Chat</span>
+      </button>
 
       {chatHistory.length === 0 && (
         <div className="chat-horizon-glow">
@@ -46,41 +57,25 @@ export default function AiChatInterface() {
             {/* Input is in the middle of the screen when empty */}
             <div className="chat-empty-input-wrapper">
               <PromptInputBar onSend={sendPrompt} disabled={isThinking} />
-
-              <div className="chat-suggestion-chips">
-                {[
-                  { label: 'Analyze Macro Regime' },
-                  { label: 'Scan Order Flow' },
-                  { label: 'Identify Kelly Setups' }
-                ].map((chip, i) => (
-                  <button
-                    key={i}
-                    onClick={() => sendPrompt(chip.label)}
-                    className="chat-chip"
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         ) : (
           <div className="chat-messages-container">
             {chatHistory.map((msg, index) => {
               if (msg.role === 'user') {
-                return <UserMessageBubble key={`msg-${index}`} content={msg.content} />;
+                return <UserMessageBubble key={`msg-${index}`} content={msg.content} imageBase64={msg.imageBase64} />;
               }
               return <AiMessageBubble key={`msg-${index}`} message={msg} />;
             })}
 
             {isThinking && (
-              <div className="self-start flex items-center gap-4 py-4 px-6 bg-slate-800/20 rounded-2xl border border-slate-700/30 backdrop-blur-sm" style={{ alignSelf: 'flex-start' }}>
-                <div className="flex gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-ghost-accent animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 rounded-full bg-ghost-accent animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 rounded-full bg-ghost-accent animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              <div className="thinking-indicator">
+                <div className="thinking-dots">
+                  <span className="thinking-dot" style={{ animationDelay: '0ms' }}></span>
+                  <span className="thinking-dot" style={{ animationDelay: '150ms' }}></span>
+                  <span className="thinking-dot" style={{ animationDelay: '300ms' }}></span>
                 </div>
-                <span className="font-mono text-xs text-ghost-accent/80 uppercase tracking-widest">
+                <span className="thinking-text">
                   Synthesizing Math Matrix...
                 </span>
               </div>

@@ -6,7 +6,7 @@
 // =====================================================
 
 import WebSocket from 'ws';
-import { DEFAULT_CRYPTO_WATCHLIST } from './scannerEngine.js';
+import { DEFAULT_CRYPTO_WATCHLIST } from './sharedConfig.js';
 
 // Centralized Memory Cache (0-latency access)
 export const liveMemoryState = {
@@ -19,21 +19,8 @@ let ws = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
 
-const TICKER_TO_BINANCE = {
-    'BTC-USD': 'btcusdt',
-    'ETH-USD': 'ethusdt',
-    'SOL-USD': 'solusdt',
-    'XRP-USD': 'xrpusdt',
-    'DOGE-USD': 'dogeusdt'
-};
-
-const BINANCE_TO_TICKER = {
-    'btcusdt': 'BTC-USD',
-    'ethusdt': 'ETH-USD',
-    'solusdt': 'SOL-USD',
-    'xrpusdt': 'XRP-USD',
-    'dogeusdt': 'DOGE-USD'
-};
+const TICKER_TO_BINANCE = Object.fromEntries(DEFAULT_CRYPTO_WATCHLIST.map(t => [t, t.replace('-USD', 'USDT').toLowerCase()]));
+const BINANCE_TO_TICKER = Object.fromEntries(DEFAULT_CRYPTO_WATCHLIST.map(t => [t.replace('-USD', 'USDT').toLowerCase(), t]));
 
 function normalizeToStream(ticker) {
     return TICKER_TO_BINANCE[ticker] || ticker.replace('-', '').toLowerCase(); 

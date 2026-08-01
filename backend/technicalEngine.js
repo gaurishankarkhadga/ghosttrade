@@ -261,6 +261,7 @@ export function volumeAnalysis(bars, lookback = 20) {
     avgVolume: Math.round(avgVolume),
     currentVolume: Math.round(currentVolume),
     relativeVolume: parseFloat(relativeVolume.toFixed(2)),
+    isSpike: relativeVolume >= 2.0, // Institutional activity marker — 2x+ avg volume
     trend,
     divergence,
     interpretation,
@@ -380,4 +381,33 @@ export function calculateAllIndicators(bars) {
   block += `\nUse these computed values in your analysis. DO NOT guess indicator values — use the numbers above.\n`;
 
   return block;
+}
+
+export function vwap(candles) {
+  if (!candles || candles.length === 0) return 0;
+  let cumVol = 0;
+  let cumVolPrice = 0;
+  
+  // Anchor VWAP to the current trading session (Day)
+  const lastCandle = candles[candles.length - 1];
+  if (!lastCandle.date) return 0; // Failsafe if date is missing
+  
+  const sessionStartStr = new Date(lastCandle.date).toISOString().split('T')[0];
+  
+  let startIndex = 0;
+  for (let i = candles.length - 1; i >= 0; i--) {
+    const cDate = new Date(candles[i].date);
+    if (cDate.toISOString().split('T')[0] !== sessionStartStr) {
+      startIndex = i + 1;
+      break;
+    }
+  }
+
+  for (let i = startIndex; i < candles.length; i++) {
+    const c = candles[i];
+    const typical = (c.high + c.low + c.close) / 3;
+    cumVolPrice += typical * c.volume;
+    cumVol += c.volume;
+  }
+  return cumVol > 0 ? cumVolPrice / cumVol : 0;
 }

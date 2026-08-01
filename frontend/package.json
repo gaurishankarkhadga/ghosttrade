@@ -14,7 +14,6 @@
   "type": "module",
   "dependencies": {
     "@react-three/fiber": "^9.6.1",
-    "@tailwindcss/oxide-linux-x64-gnu": "^4.0.0",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",
     "react": "^19.2.8",

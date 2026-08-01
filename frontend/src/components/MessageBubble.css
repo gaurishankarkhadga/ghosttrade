@@ -177,3 +177,188 @@
 .trade-btn.sell:hover, .trade-btn.short:hover {
   background-color: rgba(239, 68, 68, 0.2);
 }
+
+/* -------------------------------------
+   EXECUTION TERMINAL (Expanded)
+------------------------------------- */
+.trade-card.expanded {
+  max-width: 400px;
+  background-color: var(--color-ghost-obsidian);
+  border: 1px solid var(--border-medium);
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 10px;
+}
+
+.terminal-title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-ghost-accent);
+  letter-spacing: 0.1em;
+}
+
+.mode-toggle {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.mode-toggle button {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-toggle button.active {
+  background-color: #334155;
+  color: white;
+}
+
+/* Guided Mode */
+.terminal-guided {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.guided-text {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.guided-text strong {
+  color: white;
+}
+
+/* No pulse animation for rigid professional feel */
+.trade-btn.pulse {
+  /* static state */
+}
+
+/* Pro Mode */
+.terminal-pro {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pro-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pro-field label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.pro-field input, .pro-field select {
+  background-color: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.pro-field input:focus, .pro-field select:focus {
+  border-color: #64748b;
+}
+
+.pro-field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2364748b%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7em top 50%;
+  background-size: 0.65em auto;
+  cursor: pointer;
+}
+
+.pro-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pro-actions .trade-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 10px 0;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  flex: 0.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+}
+
+/* Executed State */
+.trade-card.executed {
+  border-color: rgba(56, 189, 248, 0.4);
+  background-color: rgba(15, 23, 42, 0.9);
+}
+
+.trade-status-badge {
+  background-color: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.trade-success-msg {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.5;
+}

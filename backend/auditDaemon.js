@@ -12,7 +12,8 @@
 import { getDb } from './mongoConfig.js';
 import { writeErrorVector } from './memoryLedger.js';
 import { resolveYahooSymbol } from './dataFetcher.js';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance();
 
 const AUDIT_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 let intervalId = null;

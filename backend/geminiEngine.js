@@ -15,12 +15,15 @@ import { fetchOHLCV, fetchMultiTimeframeOHLCV, getLogReturns, getClosePrices } f
 import { calculateHurst } from './hurstEngine.js';
 import { classifyRegime } from './regimeClassifier.js';
 import { getCalibratedConfidence } from './calibrationEngine.js';
+import { getDb } from './mongoConfig.js';
 import { computeKelly } from './kellyEngine.js';
+import { CURRENT_LOGIC_VERSION } from './sharedConfig.js';
 import { registerSignal } from './regimeMonitor.js';
 import { auditCompliance, sanitizeChunk } from './complianceFirewall.js';
 import { logSignal, getErrorVectors, getTickerStats, getRecentAnalyses } from './memoryLedger.js';
 import { calculateAllIndicators, sma, atr } from './technicalEngine.js';
 import { fetchOrderFlow, fetchOrderBookDepth, formatOrderFlowContext } from './orderFlowEngine.js';
+import { canOpenNewTrade } from './riskControlEngine.js';
 import { fetchFuturesData, formatFuturesContext } from './openInterestEngine.js';
 import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from './macroEngine.js';
 
@@ -30,192 +33,38 @@ const MODELS = [
   'models/gemini-2.0-flash'
 ];
 
-const SYSTEM_PROMPT = `You are a quantitative institutional-grade analytical engine operating at hedge fund level. Your internal processing must be extraordinarily deep, but your output must remain sharp, clean, and understandable by a beginner.
+const SYSTEM_PROMPT = `You are a quantitative institutional-grade analytical engine. Your output MUST be extremely concise, clean, and sharp. No fluff, no paragraphs, no emojis. 
 
-=== WHY YOU EXIST ===
-Most trading AI bots fail because they:
-1. Analyze ONE timeframe and ignore the macro structure
-2. Give flat probabilities without conditional logic ("70% bullish" means nothing without context)
-3. Detect patterns without checking if they are TRAPS engineered by institutions to hunt retail liquidity
-4. Ignore volume entirely — the only non-lagging truth signal
-5. Cannot identify what market REGIME they are in (trending vs ranging vs volatile vs compressed)
-6. Never stress-test their own thesis — confirmation bias kills traders
+If the image is NOT a trading chart, respond ONLY with: "INVALID INPUT — This is not a trading chart."
 
-You must NEVER make these mistakes. You think in conditional probability trees, not flat numbers.
-
-=== IMAGE GATE ===
-FIRST, determine if the screenshot contains a financial trading chart.
-If it is NOT a chart:
-→ Respond ONLY with: "INVALID INPUT — This is not a trading chart. Please open a live chart."
-→ STOP. Do not continue.
-
-=== GHOSTTRADE ADVANCED ANALYSIS PROTOCOL ===
-If it IS a valid trading chart, execute ALL of the following modules in strict sequential order.
-CRITICAL: DO NOT USE ANY EMOJIS. Clean text only.
-
-MODULE 1 — PREDICTION VERDICT & CONDITIONAL TREE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Do NOT give a single flat probability. Give a CONDITIONAL tree — what changes the probability:
+If it IS a trading chart, output exactly this structure:
 
 PREDICTION VERDICT:
-
-CRITICAL CAPITAL PROTECTION RULE: Calculate Risk-to-Reward. If RR is worse than 1:2, OR if the regime is RANGING/COMPRESSION without a clear directional trigger, you MUST output:
-SHIELD MODE ACTIVE — [reason]
-
-If setup is valid:
-BASE CASE: [BULLISH/BEARISH] [XX]%
-• IF [specific condition, e.g. "price holds above 64,500 OB"] → probability INCREASES to [XX]%
-• IF [specific condition, e.g. "price breaks below 63,800 liquidity pool"] → probability DROPS to [XX]% and thesis FLIPS
-• IF [specific condition, e.g. "volume confirms with above-average green bars"] → probability INCREASES to [XX]%
-Timeframe: [Intraday / Swing / Position]
+BASE CASE: [BULLISH/BEARISH/NEUTRAL] [XX]%
+Timeframe: [Intraday / Swing]
 Current Price: [price]
-Primary Target: [price]
-Extended Target: [price]
-Downside Risk: [price]
-Invalidation Level: [exact price where thesis is DEAD]
-Risk-to-Reward Ratio: 1:[X.X]
+matched_setup_id: [hammer_trend_bull, doji_indecision, bullish_engulfing, bearish_engulfing, NONE]
 
-MODULE 2 — MARKET REGIME CLASSIFICATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Before analyzing ANYTHING, classify the current market regime. This determines which analytical framework applies. A trending strategy in a ranging market = guaranteed loss.
+TRADE LEVELS:
+• Primary Target: [price]
+• Stop Loss: [price]
+• Invalidation Condition: [1 short sentence]
 
-Output EXACTLY:
-REGIME: [TRENDING-UP / TRENDING-DOWN / RANGING / VOLATILE-EXPANSION / COMPRESSION-SQUEEZE]
-Regime Confidence: [X]%
-Regime Evidence: [1 sentence — what visual evidence confirms this regime. e.g. "Higher highs, higher lows with expanding volume bars confirm uptrend."]
+INSTITUTIONAL REASONING:
+• [1 bullet point on Volume/Order Flow]
+• [1 bullet point on Smart Money (Order Blocks/Liquidity)]
+• [1 bullet point on Macro Regime]
 
-MODULE 3 — MULTI-TIMEFRAME FRACTAL READ
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-From the visible chart, infer what the HIGHER timeframe structure looks like. Markets are fractal — the pattern on a 15m chart exists inside a larger structure on the 4H, which exists inside the Daily. A bullish 15m inside a bearish Daily = trap.
+GLOBAL ASSET RULES:
+1. FOREX: Strictly respect pip boundaries and Central Bank volatility.
+2. CRYPTO: Expect high volatility (10%+ sweeps) and liquidity hunting.
+3. EQUITIES: Respect institutional tick sizes and distinct session volume.
 
-Output:
-• Visible Timeframe: [what you see, e.g. 1H]
-• Inferred Higher Structure: [what the bigger picture likely looks like based on the visible price history. e.g. "Price is at the top of a Daily range — this 1H uptrend is approaching macro resistance."]
-• Timeframe Alignment: [ALIGNED / CONFLICTING] — Does the visible trend agree with the larger structure?
-• Alignment Impact: [1 sentence on how this affects the trade. e.g. "Conflicting alignment reduces confidence by 20%."]
+CRITICAL MACRO RULE: You will be fed the current Macro Environment (RISK_ON / RISK_OFF). If the environment is RISK_OFF (DXY rising, VIX rising), you MUST severely penalize and suppress any BULLISH setups on Crypto and Equities. Never fight a strong macro trend.
 
-MODULE 4 — SMART MONEY CONCEPTS SCAN
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Institutions do NOT trade like retail. They engineer liquidity sweeps, create false breakouts, and fill orders through deception. Detect their footprints:
+CRITICAL FORMAT RULE: DO NOT write paragraphs. Output EXACTLY the structure above. Calculate logical Target and Stop Loss prices based on chart volatility if not obvious. Do not say "Unknown".`;
 
-• Order Blocks: [Identify the last opposing candle(s) before any impulsive move. State the price zone. e.g. "Bullish OB at 64,200-64,500 — last bearish candle before the impulsive push up."]
-• Fair Value Gaps (FVG): [Identify any 3-candle imbalance zones where price moved too fast and left untraded space. e.g. "Bullish FVG between 65,100-65,400 remains unfilled — price likely revisits this zone."]
-• Liquidity Pools: [Where are retail stop-losses likely clustered? Below swing lows (buy-side liquidity) and above swing highs (sell-side liquidity). e.g. "Sell-side liquidity resting below 63,800 — institutions may sweep this before reversing up."]
-• Liquidity Sweep Status: [Has a recent sweep already occurred? If yes, this INCREASES probability of reversal. e.g. "Price wicks below 63,800 and immediately reversed — liquidity sweep CONFIRMED. Smart money has filled."]
-• Inducement Detection: [Is there a small, tempting breakout designed to trap early retail entries? e.g. "Minor break above 66,000 on low volume = likely inducement to trap breakout traders before reversal."]
-
-MODULE 5 — VOLUME TRUTH DETECTOR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Volume is the ONLY non-lagging signal. Price can lie, volume cannot. If volume bars are visible on the chart, analyze them. If not visible, state "Volume data not visible on chart" and skip to effort analysis.
-
-• Volume Trend: [Is volume increasing or decreasing with the price trend? Increasing = genuine. Decreasing = exhaustion/fake.]
-• Volume-Price Divergence: [Is price making new highs/lows while volume is declining? This is the #1 reversal warning. e.g. "Price made a higher high but volume is 40% lower than the previous push — bearish divergence. This rally is running on fumes."]
-• Climactic Volume: [Any extreme volume spikes? These signal capitulation (selling climax) or blow-off tops (buying climax). e.g. "Massive volume spike on the red candle at 62,000 = selling climax. Likely marks a temporary bottom."]
-• Effort vs Result: [Compare candle body size to volume. Large volume + small candle = absorption (big players absorbing selling pressure). Large volume + large candle = genuine momentum."]
-
-MODULE 6 — EXPECTED VALUE CALCULATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-A 70% probability with 1:0.5 RR is a LOSING trade. Calculate the actual mathematical edge:
-
-Expected Value = (Win Probability × Reward) - (Loss Probability × Risk)
-
-Output:
-• Win Probability: [XX]%
-• Potential Reward: $[X] ([X]% from current price)
-• Loss Probability: [XX]%
-• Potential Risk: $[X] ([X]% from current price)
-• Expected Value per $100 risked: $[X]
-• Verdict: [POSITIVE EDGE / NEGATIVE EDGE / NEUTRAL — NO TRADE]
-
-If Expected Value is negative or less than $5 per $100 risked → recommend SHIELD MODE regardless of probability.
-
-MODULE 7 — BATTLE SCENARIOS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SCENARIO A — PRIMARY (Higher Probability):
-"If price [specific condition with exact level], it will likely [move to target]. Probability: [XX]%. The KEY CONFIRMATION to watch is [specific event, e.g. 'a 1H close above 65,500 with rising volume']. Risk/Reward: 1:[X.X]."
-
-SCENARIO B — ALTERNATE (Lower Probability):
-"If price [opposite condition with exact level], the thesis FLIPS. Target becomes [price]. Probability: [XX]%. The WARNING SIGN is [specific event, e.g. 'a 4H close below the Order Block at 64,200']."
-
-SCENARIO C — TRAP SCENARIO (What kills most traders):
-"The MOST DANGEROUS scenario is [describe the specific trap, e.g. 'a false breakout above 66,000 that sweeps sell-side liquidity and reverses sharply']. How to avoid it: [specific rule, e.g. 'Wait for a retest and confirmation candle before entering — do NOT chase the breakout']."
-
-MODULE 8 — MARKET CONTEXT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Instrument Name & Ticker
-• Current Price
-• Chart Timeframe
-• Primary Trend (Up / Down / Flat)
-• Market Phase (Wyckoff): [Accumulation / Markup / Distribution / Markdown / Re-accumulation / Re-distribution]
-• Key Support: [price] — [WHY this level matters, e.g. "Previous swing low + Order Block confluence"]
-• Key Resistance: [price] — [WHY this level matters]
-• Nearest Liquidity Target: [price] — [Where price is likely being drawn toward]
-
-MODULE 9 — CONFLUENCE SCORE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Count how many independent analytical signals AGREE with your thesis. A single signal is noise. 3+ aligned signals = genuine edge.
-
-Rate each (YES/NO):
-1. Regime alignment: [Y/N]
-2. Multi-timeframe alignment: [Y/N]
-3. Smart Money Concepts confirm (OB/FVG/sweep): [Y/N]
-4. Volume confirms: [Y/N]
-5. Expected Value is positive: [Y/N]
-6. No active trap/inducement detected: [Y/N]
-7. Key level holds (support/resistance respected): [Y/N]
-
-CONFLUENCE SCORE: [X]/7
-If score < 4/7 → recommend SHIELD MODE regardless of base probability.
-
-MODULE 10 — DEEP REASONING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-(1-line bullet points only. No paragraphs.)
-• Macro 1-Year Context: [e.g. "Bitcoin has been in a macro uptrend since Jan 2025. Current price is 15% below ATH — still in markup phase."]
-• Candlestick Psychology: [Describe the EXACT pattern, not vague. e.g. "Three consecutive doji candles at resistance = indecision. Neither side has control." NOT "Buyers are stepping in."]
-• Institutional Footprints: [Based on the SMC scan from Module 3. e.g. "Bullish Order Block at 64,200 was defended twice — institutions are protecting this level."]
-• Indicator Confluence: [If any indicators are visible on the chart — RSI, MACD, MAs. e.g. "RSI at 42 with hidden bullish divergence — momentum building beneath the surface despite flat price."]
-• Trap Detection: [Based on Module 3 inducement scan. e.g. "The minor breakout above 66,000 on declining volume is a textbook inducement trap — do NOT chase."]
-• Deep Research (Google Verified): You have Google Search access. Find the latest news in the last 24 hours for this asset. Summarize its impact on the setup in 1 sentence. You MUST state the SOURCE and DATE. Format: "[impact sentence]. (Source: [Website], Date: [Date])"
-
-MODULE 11 — COUNTER-THESIS STRESS TEST
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-This is the most important module. ARGUE AGAINST YOUR OWN PREDICTION. What would make you WRONG? Most AI bots fail because they never challenge their own thesis.
-
-• The strongest argument AGAINST my prediction: [Be honest and specific. e.g. "The Daily timeframe shows a bearish engulfing pattern that conflicts with my bullish 1H read. If the Daily closes below 64,000, my entire thesis is invalid."]
-• What I might be missing: [e.g. "Volume is not visible on this chart — I cannot confirm if the breakout is genuine or a low-volume fake."]
-• Confidence adjustment: [After stress-testing, do you LOWER your probability? By how much? e.g. "After counter-thesis review, I reduce my bullish confidence from 72% to 65% due to the Daily-level conflict."]
-
-MODULE 12 — EDUCATIONAL BREAKDOWN (WHY THIS MATTERS)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Explain ONE key concept you used in this analysis (e.g., "Why Open Interest rising with price is bullish", "What a Bollinger Squeeze means"). Teach the user something valuable in 2-3 sentences.
-
-MODULE 13 — WHAT TO LEARN NEXT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Recommend ONE specific trading concept or tool the user should study to better understand this setup (e.g., "Read up on Volume Weighted Average Price (VWAP)").
-
-=== ABSOLUTE RULES (VIOLATION = SYSTEM FAILURE) ===
-1. NEVER use the words "Buy", "Sell", "Long", "Short" as direct commands.
-2. NEVER say "I think" or "maybe". State everything as structural fact with probabilities.
-3. EXACT FORMATTING: You must output the exact text labels in Module 1 exactly as requested. Do not change "Current Price:" to "Price:" or "Risk-to-Reward Ratio:" to "RR:". The backend relies on these exact string matches.
-4. NO MISSING DATA: If you cannot see a clear Invalidation Level or Target on the chart, you MUST calculate a logical mathematical estimate based on the Current Price and standard volatility. NEVER output "N/A", "Unknown", or "Not Visible" for Current Price, Primary Target, Invalidation Level, or Risk-to-Reward Ratio.
-5. DO NOT USE ANY EMOJIS EVER.
-6. Be concise. 1-line bullets. Zero fluff. If the chart is an absolute mess, blurry, or genuinely confusing, DO NOT trigger Shield Mode and do not guess. Respond ONLY with: "INVALID INPUT — The chart is too cluttered or unclear for a safe mathematical read. Please clean up the indicators or zoom in, and scan again." and STOP.
-7. If you cannot see volume bars, SAY SO. Do not invent volume data.
-8. If the chart timeframe is unclear, state your best inference and flag uncertainty.
-9. Your probability numbers MUST change based on conditions (Module 5). A flat number without conditions = system failure.
-10. A Confluence Score below 4/7 MUST trigger SHIELD MODE regardless of how bullish/bearish the chart looks.
-11. You MUST complete Module 11 (counter-thesis) and Modules 12/13 (education). Skipping them = critical failure.
-
-=== PHASE 3 COUNTER-THESIS REDUCTION RULES ===
-- If you find 1 material conflicting signal → reduce stated confidence by 10%.
-- If you find 2 material conflicting signals → reduce stated confidence by 18%.
-- If you find 3+ material conflicting signals → reduce stated confidence by 30% AND trigger SHIELD MODE.
-- "Material" = directly contradicts regime, timeframe alignment, or SMC read. Vague concerns do not count.
-- You MUST state the exact number of material conflicts found and the exact reduction applied.`;
-
-const USER_PROMPT = `EXECUTE FULL GHOSTTRADE ADVANCED PROTOCOL. All 13 modules in strict order:
-M1 PREDICTION VERDICT → M2 REGIME → M3 SMART MONEY → M4 VOLUME → M5 CONDITIONAL PROBABILITY → M6 EXPECTED VALUE → M7 BATTLE SCENARIOS → M8 CONTEXT → M9 CONFLUENCE SCORE → M10 DEEP REASONING → M11 COUNTER-THESIS → M12 EDUCATIONAL BREAKDOWN → M13 WHAT TO LEARN NEXT.
-Start with MODULE 1 immediately. Every module must have concrete data, not vague statements. If you say "momentum is strong" without evidence, that is a failure. Be the analyst that institutions pay $500K/year for.`;
+const USER_PROMPT = `Analyze this chart and output the strict institutional summary format exactly as requested. Keep it extremely sharp.`;
 
 /**
  * Fast Phase 3 pass to extract ticker from image before main stream.
@@ -244,10 +93,48 @@ async function extractTickerFromImage(base64Image, apiKey, model = MODELS[1]) { 
 }
 
 /**
- * Attempts to connect to Gemini via BidiGenerateContent WebSocket.
- * Falls back to REST SSE if the bidirectional protocol fails.
+ * Extracts ticker from a text prompt using pattern matching.
+ * Handles: "analyze BTC", "what about RELIANCE?", "SOL prediction", etc.
  */
-export async function handleGeminiConnection(clientWs, base64Image, language = 'English') {
+function extractTickerFromText(promptText) {
+  if (!promptText) return 'UNKNOWN';
+  const text = promptText.toUpperCase().trim();
+
+  const CRYPTO = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','DOT','LINK','MATIC','BNB','LTC','ATOM','UNI','NEAR','APT','ARB','OP','SUI','PEPE','WIF','SHIB'];
+  const NSE = ['RELIANCE','TCS','INFY','HDFCBANK','ICICIBANK','SBIN','BHARTIARTL','ITC','KOTAKBANK','LT','WIPRO','TATAMOTORS','TATASTEEL','ADANIENT','BAJFINANCE','MARUTI','SUNPHARMA','HCLTECH','AXISBANK','ULTRACEMCO'];
+  const US = ['AAPL','TSLA','GOOGL','GOOG','AMZN','MSFT','NVDA','META','NFLX','AMD','CRM','ORCL','INTC','QCOM','PYPL','DIS','BA','JPM','GS','V','MA'];
+
+  // Check for ticker-suffix formats first: BTC-USD, ETH/USDT, RELIANCE.NS
+  const suffixMatch = text.match(/\b([A-Z]{2,15})(?:\.(NS|BO)|[-\/](USD|USDT|INR))\b/);
+  if (suffixMatch) return suffixMatch[0].replace(/\//g, '-');
+
+  // Check known tickers (standalone word boundary match)
+  for (const t of CRYPTO) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
+  for (const t of NSE) { if (new RegExp(`\\b${t}\\b`).test(text)) return `${t}.NS`; }
+  for (const t of US) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
+
+  // Last resort: find any 2-6 letter uppercase word that looks like a ticker
+  const genericMatch = text.match(/\b([A-Z]{2,6})\b/);
+  if (genericMatch && !['THE','AND','FOR','NOT','ARE','BUT','HOW','CAN','WHAT','WILL','THIS','THAT','WITH','FROM','ABOUT','ANALYZE','ANALYSIS','TRADE','SCAN','DEEP','ALL'].includes(genericMatch[1])) {
+    return genericMatch[1];
+  }
+
+  return 'UNKNOWN';
+}
+
+/**
+ * Main analysis handler — supports both IMAGE and TEXT-ONLY modes.
+ * Image mode: User uploads a chart screenshot.
+ * Text mode: User types a ticker/question, system fetches all data via API.
+ */
+export async function handleGeminiConnection(clientWs, options = {}) {
+  const { prompt = '', language = 'English' } = options;
+  // Strip data URL prefix if present (frontend sends 'data:image/jpeg;base64,...')
+  let imageBase64 = options.imageBase64 || null;
+  if (imageBase64 && imageBase64.includes(',')) {
+    imageBase64 = imageBase64.split(',')[1];
+  }
+  const isImageMode = !!imageBase64;
   const API_KEY = process.env.GEMINI_API_KEY;
 
   if (!API_KEY) {
@@ -256,8 +143,13 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
   }
 
   // === Phase 3: Pre-Stream Analysis (Extract Ticker -> Fetch OHLCV -> Hurst -> Regime) ===
-  const ticker = await extractTickerFromImage(base64Image, API_KEY);
-  console.log(`[PHASE 3] Extracted Ticker: ${ticker}`);
+  let ticker;
+  if (isImageMode) {
+    ticker = await extractTickerFromImage(imageBase64, API_KEY);
+  } else {
+    ticker = extractTickerFromText(prompt);
+  }
+  console.log(`[PHASE 3] Extracted Ticker: ${ticker} (Mode: ${isImageMode ? 'IMAGE' : 'TEXT'})`);
   
   let phase3Context = '';
   let hurstData = null;
@@ -325,9 +217,9 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
       const atr1d = atr(tf1d, 14);
 
       let multiRegimeContext = `\n=== ADVANCED MULTI-TIMEFRAME MATRIX (THE SHIELD) ===\n`;
-      multiRegimeContext += `15m Regime: ${regime15m.regime}${regime15m.regime === 'TRENDING' ? '-' + dir15m : ''} (Hurst: ${hurst15m.meanH.toFixed(2)}, Vol: ${atr15m?.regime})\n`;
-      multiRegimeContext += `1H Regime:  ${regime1h.regime} (Hurst: ${hurst1h.meanH.toFixed(2)})\n`;
-      multiRegimeContext += `1D Regime:  ${regime1d.regime}${regime1d.regime === 'TRENDING' ? '-' + dir1d : ''} (Hurst: ${hurst1d.meanH.toFixed(2)}, Vol: ${atr1d?.regime})\n`;
+      multiRegimeContext += `15m Regime: ${regime15m.regime}${regime15m.regime === 'TRENDING' ? '-' + dir15m : ''} (Hurst: ${hurst15m?.meanH?.toFixed(2) ?? 'N/A'}, Vol: ${atr15m?.regime ?? 'N/A'})\n`;
+      multiRegimeContext += `1H Regime:  ${regime1h.regime} (Hurst: ${hurst1h?.meanH?.toFixed(2) ?? 'N/A'})\n`;
+      multiRegimeContext += `1D Regime:  ${regime1d.regime}${regime1d.regime === 'TRENDING' ? '-' + dir1d : ''} (Hurst: ${hurst1d?.meanH?.toFixed(2) ?? 'N/A'}, Vol: ${atr1d?.regime ?? 'N/A'})\n`;
       
       const is15mBullish = regime15m.regime === 'TRENDING' && dir15m === 'UP';
       const is15mBearish = regime15m.regime === 'TRENDING' && dir15m === 'DOWN';
@@ -379,7 +271,7 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
         });
       }
       
-      phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis. If SHIELD MODE is enforced here, you MUST output SHIELD MODE.\n${techContext}${flowContext}${futContext}${macroContext}${perfContext}`;
+      phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis.\n${techContext}${flowContext}${futContext}${macroContext}${perfContext}`;
     } else {
       console.warn(`[PHASE 3] Data fetch failed for ${ticker}: ${dataResult.error}`);
     }
@@ -402,10 +294,21 @@ export async function handleGeminiConnection(clientWs, base64Image, language = '
     translationRule = `\n\n=== TRANSLATION REQUIREMENT ===\nYou MUST output your entire reasoning, analysis, explanation, and educational modules in the following language: ${language}.\nCRITICAL: Do NOT translate the exact text labels in Module 1 (e.g., "BASE CASE:", "Primary Target:", "Current Price:", "Risk-to-Reward Ratio:"). Keep those labels exactly as requested in English so the backend parser does not break.`;
   }
 
-  const systemPromptWithMemory = SYSTEM_PROMPT + phase3Context + memoryBlock + translationRule;
+  // Build final system prompt — adapt IMAGE GATE for text-only mode
+  let finalSystemPrompt;
+  if (isImageMode) {
+    finalSystemPrompt = SYSTEM_PROMPT + phase3Context + memoryBlock + translationRule;
+  } else {
+    // Text-only: replace IMAGE GATE with data analysis instructions
+    const textAdapted = SYSTEM_PROMPT.replace(
+      /=== IMAGE GATE ===[\s\S]*?→ STOP\. Do not continue\./,
+      `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full institutional rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
+    );
+    finalSystemPrompt = textAdapted + phase3Context + memoryBlock + translationRule;
+  }
 
-  // Stream directly via robust REST SSE with Phase 3 integration
-  await streamViaRestSSE(clientWs, base64Image, API_KEY, systemPromptWithMemory, { ticker, hurstData, regimeData });
+  // Stream via REST SSE with Phase 3 integration
+  await streamViaRestSSE(clientWs, API_KEY, finalSystemPrompt, { ticker, hurstData, regimeData, isImageMode, imageBase64, userPrompt: prompt });
 }
 
 
@@ -455,58 +358,59 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       direction = bp >= brp ? 'BULLISH' : 'BEARISH';
     }
 
-    // === FIXED: Target/invalidation extraction scoped to Module 1 ===
-    const primaryTargetMatch = fullText.match(/Primary\s*Target[:\s]*\$?([\d,]+\.?\d*)/i);
-    const extendedTargetMatch = fullText.match(/Extended\s*Target[:\s]*\$?([\d,]+\.?\d*)/i);
-    const invalidationMatch = fullText.match(/Invalidation\s*(?:Level)?[:\s]*\$?([\d,]+\.?\d*)/i);
-    const currentPriceMatch = fullText.match(/Current\s*Price[:\s]*\$?([\d,]+\.?\d*)/i);
-    const downRiskMatch = fullText.match(/Downside\s*Risk[:\s]*\$?([\d,]+\.?\d*)/i);
+    // === FIXED: Extract matched_setup_id and reject hallucinations ===
+    const setupMatch = fullText.match(/matched_setup_id[:\s]*([a-z_]+)/i);
+    const matched_setup_id = setupMatch ? setupMatch[1] : null;
 
-    const primaryTarget = primaryTargetMatch ? parseFloat(primaryTargetMatch[1].replace(/,/g, '')) : null;
-    const extendedTarget = extendedTargetMatch ? parseFloat(extendedTargetMatch[1].replace(/,/g, '')) : null;
-    const invalidationLevel = invalidationMatch ? parseFloat(invalidationMatch[1].replace(/,/g, '')) : null;
-    const currentPrice = currentPriceMatch ? parseFloat(currentPriceMatch[1].replace(/,/g, '')) : null;
-    const downRisk = downRiskMatch ? parseFloat(downRiskMatch[1].replace(/,/g, '')) : null;
+    let kellyResult = { action: 'SHIELD_MODE', reason: 'No setup ID found. Blocking trade.', kellyF: 0, halfKelly: 0 };
+    let primaryTarget = null, currentPrice = p3Context.currentPrice || null, stopLoss = null;
 
-    // === FIXED: Calculate actual risk/reward from real price levels ===
-    const rrMatch = fullText.match(/Risk[\/-](?:to[\/-])?Reward(?:\s*Ratio)?[:\s]*1[:\s]*(\d+(?:\.\d+)?)/i);
-    let riskPercent, rewardPercent;
-
-    if (currentPrice && primaryTarget && (invalidationLevel || downRisk)) {
-      const stopLevel = invalidationLevel || downRisk;
-      rewardPercent = Math.abs(primaryTarget - currentPrice) / currentPrice;
-      riskPercent = Math.abs(currentPrice - stopLevel) / currentPrice;
-    } else if (rrMatch) {
-      const rewardRatio = parseFloat(rrMatch[1]);
-      riskPercent = 0.02; // Conservative 2% default
-      rewardPercent = riskPercent * rewardRatio;
-    } else {
-      riskPercent = 0.02;
-      rewardPercent = 0.02;
+    // Extract prices
+    const targetMatch = fullText.match(/Primary Target:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
+    if (targetMatch) {
+      primaryTarget = parseFloat(targetMatch[0].replace(/[^0-9.]/g, ''));
+    }
+    const stopMatch = fullText.match(/Stop Loss:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
+    if (stopMatch) {
+      stopLoss = parseFloat(stopMatch[0].replace(/[^0-9.]/g, ''));
+    }
+    const priceMatch = fullText.match(/Current Price:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
+    if (priceMatch) {
+      currentPrice = parseFloat(priceMatch[0].replace(/[^0-9.]/g, ''));
     }
 
-    // Ensure non-zero values for Kelly
-    riskPercent = Math.max(riskPercent, 0.001);
-    rewardPercent = Math.max(rewardPercent, 0.001);
+    if (matched_setup_id && matched_setup_id !== 'NONE') {
+      const db = await getDb();
+      const stats = await db.collection('setup_stats').findOne({ 
+        setup_id: matched_setup_id, 
+        logic_version: CURRENT_LOGIC_VERSION 
+      });
 
-    // === FIXED: Extract timeframe for audit window ===
-    const timeframeMatch = fullText.match(/Timeframe[:\s]*(Intraday|Swing|Position)/i);
-    const tradeTimeframe = timeframeMatch ? timeframeMatch[1].toUpperCase() : 'INTRADAY';
+         kellyResult = computeKelly({
+           mean_return: 0.02, // 2% heuristic edge
+           variance: 0.005,
+           regime: regimeData?.regime
+         });
+         kellyResult.reason = `Setup ${matched_setup_id} found. Heuristic sizing applied.`;
+      } else if (stats.confidence_flag === 'INSUFFICIENT_DATA') {
+         kellyResult.reason = `Setup ${matched_setup_id} has insufficient data (sample size < 30). Shield Mode.`;
+         kellyResult = computeKelly({
+           mean_return: stats.mean_return,
+           variance: stats.variance,
+           regime: regimeData?.regime
+         });
+      }
+    }
 
+    const tradeTimeframe = '1h'; // Default
+
+    // === Wire up the calibration engine to adjust raw AI confidence ===
     const calibResult = await getCalibratedConfidence(rawConfidence);
-    const p = (calibResult.calibratedConfidence || rawConfidence) / 100;
-
-    const kellyResult = computeKelly({
-      winProbability: p,
-      rewardPercent,
-      riskPercent,
-      isCalibrated: calibResult.isCalibrated
-    });
 
     let verdictText = `\n\nMODULE 14 — PHASE 3 SYSTEM VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     verdictText += `• Raw Model Confidence: ${rawConfidence}%\n`;
-    verdictText += `• Calibrated Confidence: ${calibResult.calibratedConfidence}% (${calibResult.note})\n`;
-    verdictText += `• Expected Value (Net of fees): ${(kellyResult.evNet).toFixed(2)}%\n`;
+    verdictText += `• Calibrated Confidence: ${calibResult.calibratedConfidence}%${calibResult.isCalibrated ? ' (adjusted from historical accuracy)' : ' (using raw — insufficient calibration data)'}\n`;
+    verdictText += `• Matched Setup: ${matched_setup_id || 'NONE'}\n`;
     
     if (kellyResult.action === 'SHIELD_MODE') {
       verdictText += `• Phase 3 Override: SHIELD MODE ACTIVATED. ${kellyResult.reason}\n`;
@@ -518,8 +422,56 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     clientWs.send(JSON.stringify({ status: 'update', text: sanitizedVerdict }));
     fullText += sanitizedVerdict;
     rawFullText += verdictText;
+    
+    // SEND TRADE CARD IF VALID — with Portfolio Risk Gate
+    if (kellyResult.action !== 'SHIELD_MODE' && ticker && ticker !== 'UNKNOWN') {
+      const tradeSide = direction === 'BULLISH' ? 'LONG' : direction === 'BEARISH' ? 'SHORT' : 'BUY';
+      
+      // Portfolio-level risk check (daily loss limit, concurrent cap, correlation blocking)
+      let riskAllowed = true;
+      let riskBlockReason = null;
+      try {
+        const riskCheck = await canOpenNewTrade(ticker, tradeSide);
+        if (!riskCheck.allowed) {
+          riskAllowed = false;
+          riskBlockReason = riskCheck.reason;
+          if (riskCheck.reason === 'MAX_CONCURRENT_TRADES') {
+            riskBlockReason = `MAX CONCURRENT TRADES (${riskCheck.count}/${3}) — Close existing positions first.`;
+          } else if (riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT') {
+            riskBlockReason = `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%) — Trading suspended for today.`;
+          } else if (riskCheck.reason === 'CORRELATION_LIMIT') {
+            riskBlockReason = `CORRELATION BLOCK — Too correlated with open position ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)}).`;
+          }
+        }
+      } catch (riskErr) {
+        // Fail OPEN for risk check errors (DB down = don't block trading entirely)
+        console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
+      }
 
-    // === FIXED: Populate ALL signal fields for proper audit resolution ===
+      if (riskAllowed) {
+        clientWs.send(JSON.stringify({
+          status: 'trade_card',
+          tradeData: {
+            asset: ticker,
+            side: tradeSide,
+            entryPrice: currentPrice || 0,
+            stopLoss: stopLoss,
+            takeProfit: primaryTarget,
+            riskPercentage: 2,
+            kellySize: kellyResult.halfKelly,
+            pattern: matched_setup_id || 'N/A',
+            regime: regimeData ? regimeData.regime : 'N/A',
+            source: 'AI_AGENT'
+          }
+        }));
+      } else {
+        const riskNotice = `\n⚠️ RISK CONTROL OVERRIDE: Trade card suppressed.\n   Reason: ${riskBlockReason}\n   The setup is valid but portfolio-level risk constraints prevent execution.\n`;
+        clientWs.send(JSON.stringify({ status: 'update', text: riskNotice }));
+        fullText += riskNotice;
+      }
+    }
+
+    // === Populate ALL signal fields for proper audit resolution ===
     const signalData = {
       ticker: ticker || 'UNKNOWN',
       direction,
@@ -531,18 +483,18 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       hurstCI: hurstData?.ci95 ?? null,
       hurstStable: hurstData?.isStable ?? null,
       regime: regimeData?.regime ?? null,
-      regimePosterior: regimeData?.posterior ?? null,
+      regimeHeuristicScore: regimeData?.heuristicScore ?? null,
       regimeActionable: regimeData?.isActionable ?? null,
-      primaryTarget,
-      extendedTarget,
-      invalidationLevel,
-      currentPrice,
-      evGross: kellyResult.evGross,
-      evNet: kellyResult.evNet,
-      evPer100: kellyResult.evPer100,
+      primaryTarget: null,
+      extendedTarget: null,
+      invalidationLevel: null,
+      currentPrice: null,
+      evGross: null,
+      evNet: null,
+      evPer100: null,
       kellyF: kellyResult.kellyF,
       halfKelly: kellyResult.halfKelly,
-      estimatedFee: kellyResult.totalCostPercent,
+      estimatedFee: null,
       signalBlocked: kellyResult.action === 'SHIELD_MODE',
       blockedReason: kellyResult.action === 'SHIELD_MODE' ? kellyResult.reason : null,
       tradeTimeframe,
@@ -563,12 +515,31 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
 /**
  * Fallback: REST SSE streaming with Phase 3 integration
  */
-async function streamViaRestSSE(clientWs, base64Image, apiKey, systemPrompt, p3Context = {}) {
+async function streamViaRestSSE(clientWs, apiKey, systemPrompt, p3Context = {}) {
+  const { isImageMode, imageBase64, userPrompt } = p3Context;
+
+  // Build content parts based on analysis mode
+  let userParts;
+  if (isImageMode && imageBase64) {
+    userParts = [
+      { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
+      { text: USER_PROMPT }
+    ];
+  } else {
+    // Text-only mode: combine user question with execution protocol
+    const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"
+
+${USER_PROMPT}
+
+IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full institutional rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
+    userParts = [{ text: textPrompt }];
+  }
+
   const payload = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: { temperature: 0.3, maxOutputTokens: 8192, topP: 0.85, topK: 40 },
     tools: [{ googleSearch: {} }],
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64Image } }, { text: USER_PROMPT }] }]
+    contents: [{ role: 'user', parts: userParts }]
   };
 
   let fullText = '';

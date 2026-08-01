@@ -1,7 +1,7 @@
 import React from 'react';
 import './MessageBubble.css';
 
-export default function UserMessageBubble({ content }) {
+export default function UserMessageBubble({ content, imageBase64 }) {
   return (
     <div className="message-wrapper user">
       <div className="avatar user">
@@ -10,7 +10,10 @@ export default function UserMessageBubble({ content }) {
           <circle cx="12" cy="7" r="4"></circle>
         </svg>
       </div>
-      <div className="message-content">
+      <div className="message-content" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+        {imageBase64 && (
+          <img src={imageBase64} alt="Attached Chart" style={{ maxWidth: '300px', borderRadius: '8px', border: '1px solid var(--ghost-border)' }} />
+        )}
         <p className="message-text">
           {content}
         </p>

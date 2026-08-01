@@ -14,19 +14,12 @@ import { computeKelly } from './kellyEngine.js';
 import { fetchAssetSentiment } from './sentimentEngine.js';
 import { calculateRotationImpacts, SECTOR_MAP } from './correlationEngine.js';
 import { sendDiscordSignal } from './discordEngine.js';
+import { detectPatterns } from './patternEngine.js';
+import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_NSE_WATCHLIST } from './sharedConfig.js';
+import { computeStopLossTakeProfit } from './slTpCalculator.js';
+import { getDb } from './mongoConfig.js';
+import { canOpenNewTrade } from './riskControlEngine.js';
 import fs from 'fs';
-
-// Top 20 Crypto Watchlist
-export const DEFAULT_CRYPTO_WATCHLIST = [
-  'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'BNB-USD', 'DOGE-USD', 'ADA-USD', 'AVAX-USD',
-  'LINK-USD', 'MATIC-USD', 'LTC-USD', 'DOT-USD', 'UNI-USD', 'ATOM-USD', 'NEAR-USD',
-  'APT-USD', 'ARB-USD', 'OP-USD', 'SUI-USD', 'PEPE-USD'
-];
-
-// Indian Market NSE Watchlist
-export const DEFAULT_NSE_WATCHLIST = [
-  'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'TATAMOTORS.NS', '^NSEI'
-];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -55,9 +48,10 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     
     // Institutional Volatility Shield (ATR Keltner Bands)
     const sma20_15m = sma(closes15m, 20) || price;
-    const atr15m = atr(closes15m, 14) || 0;
-    const upperBand = sma20_15m + (1.5 * atr15m);
-    const lowerBand = sma20_15m - (1.5 * atr15m);
+    const atrResult15m = atr(tf15m, 14); // Pass OHLCV objects, not closes array
+    const atr15mValue = atrResult15m ? atrResult15m.value : 0;
+    const upperBand = sma20_15m + (1.5 * atr15mValue);
+    const lowerBand = sma20_15m - (1.5 * atr15mValue);
     
     let shieldTriggered = false;
     // Trigger shield if price is breaking out aggressively against the macro regime trend
@@ -93,55 +87,60 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     // Cap at 100 max
     if (score > 100) score = 100;
 
-    // [PHASE 4] Kelly Engine Position Sizing
-    // Win probability derived empirically from structural edges, not arbitrary points
-    let empiricalWinProb = 0.45; // Default negative edge (Random Walk)
+    // [PHASE 4] Quantitative Scanner Rewire (Institutional Pattern + Regime gating)
+    // detectPatterns() computes VWAP and volume analysis internally from candles
+    const pattern = detectPatterns(tf15m);
+    if (!pattern) return { ticker, status: 'skipped', reason: 'No geometric pattern footprint' };
+
+    const setup_id = constructSetupId(pattern, regime15m.regime, closes15m);
     
-    if (regime1d.regime === 'TRENDING') {
-      if (flowData && (flowData.flowBias === 'STRONG_BUY' || flowData.flowBias === 'STRONG_SELL')) empiricalWinProb = 0.61;
-      else if (flowData && (flowData.flowBias === 'MODERATE_BUY' || flowData.flowBias === 'MODERATE_SELL')) empiricalWinProb = 0.55;
-      else empiricalWinProb = 0.52; // Trending but neutral flow
-    } else if (regime1d.regime === 'MEAN_REVERTING') {
-      if (flowData && (flowData.flowBias === 'STRONG_BUY' || flowData.flowBias === 'STRONG_SELL')) empiricalWinProb = 0.53; // Fade edge
+    let dbKellyResult = { action: 'SHIELD_MODE', reason: 'No setup found', kellyF: 0, halfKelly: 0 };
+    let sl = null, tp = null, finalSize = 0;
+    
+    const db = await getDb();
+    const stats = await db.collection('setup_stats').findOne({
+        setup_id,
+        logic_version: CURRENT_LOGIC_VERSION
+    });
+
+    if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA') {
+        dbKellyResult = computeKelly({ 
+           mean_return: stats.mean_return, 
+           variance: stats.variance,
+           regime: regime
+        });
+        if (dbKellyResult.action !== 'SHIELD_MODE') {
+             finalSize = dbKellyResult.halfKelly;
+        }
+    } else {
+        dbKellyResult.reason = stats ? 'INSUFFICIENT_DATA flag blocks execution' : `Setup ${setup_id} not found in verified backtest database`;
     }
-    
-    // Total capital protection if shield triggered
-    if (shieldTriggered) empiricalWinProb = 0.40;
 
-    const kelly = computeKelly({ winProbability: empiricalWinProb, rewardPercent: 0.05, riskPercent: 0.02 });
-    
-    // Force SHIELD MODE visually if edge is < 50%
-    const finalSize = (kelly.action === 'SHIELD_MODE' || empiricalWinProb < 0.50) ? 0 : kelly.halfKelly;
+    // Force SHIELD MODE if system constraints are hit
+    if (shieldTriggered || liquidityTrap || !regime1d.isActionable) finalSize = 0;
 
-    // [PHASE 7] Institutional Risk Management Envelopes
+    // Calculate pure ATR exits using candles array (same as backtester)
+    const tradeSide = (setup_id.includes('bull')) ? 'LONG' : 'SHORT';
+    const exits = computeStopLossTakeProfit(tf15m, tradeSide);
+    if (exits) { sl = exits.stopLoss; tp = exits.takeProfit; }
+
     const validUntil = new Date(Date.now() + 15 * 60000).toISOString();
-    // Invalidation price is trailing the opposite side of the 15m ATR band
-    const invalidationPrice = regime15m.regime === 'DOWN' ? price + (1.5 * atr15m) : price - (1.5 * atr15m);
-    // Probability of hitting a 3-trade losing streak
-    const lossStreak3xChance = Math.pow((1 - empiricalWinProb), 3) * 100;
 
     return {
       ticker,
       status: 'success',
+      setup_id,
       score,
       currentPrice: price,
-      shieldTriggered,
-      liquidityTrap,
-      flowBias: (flowData && flowData.available) ? flowData.flowBias : 'UNAVAILABLE (NSE)',
+      shieldTriggered: finalSize === 0,
       macroRegime: regime1d.regime,
       microRegime: regime15m.regime,
-      sentimentBias: rotationImpact.bias,
-      sentimentAlerts: rotationImpact.alerts,
       recommendedSize: finalSize,
-      evNet: kelly.evNet,
       sector: SECTOR_MAP[ticker] || 'UNKNOWN',
-      // Institutional Risk Armor
       validUntil,
-      invalidationPrice: parseFloat(invalidationPrice.toFixed(4)),
-      expectancy: {
-         winRate: (empiricalWinProb * 100).toFixed(1) + '%',
-         lossStreak3xChance: lossStreak3xChance.toFixed(1) + '%'
-      }
+      stopLoss: sl,
+      takeProfit: tp,
+      kellyReason: dbKellyResult.reason
     };
   } catch (err) {
     return { ticker, status: 'error', reason: err.message };
@@ -192,14 +191,18 @@ export async function runBulkScanPhase4(tickers = DEFAULT_CRYPTO_WATCHLIST) {
     }
   }
 
-  // Filter and sort by highest score, then highest EV
-  const successfulScans = results.filter(r => r.status === 'success');
-  successfulScans.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
+  // Sort ALL scans (including errors so they still show up in the UI)
+  results.sort((a, b) => {
+    // Put successful scans first
+    if (a.status !== 'success' && b.status === 'success') return 1;
+    if (a.status === 'success' && b.status !== 'success') return -1;
+    
+    // Sort by score then EV
+    if (b.score !== a.score) return (b.score || 0) - (a.score || 0);
     return (b.evNet || 0) - (a.evNet || 0);
   });
 
-  return successfulScans;
+  return results;
 }
 
 /**
@@ -225,19 +228,36 @@ export function startScannerDaemon(intervalMinutes = 15) {
       const bestSetup = topSetups[0]; // Already sorted by EV descending
       
       console.log(`[CORRELATION SHIELD] Detected ${topSetups.length} signals. Executing Option A (Top 1 Only) to prevent over-leverage.`);
-      console.log(`\n=> [EXECUTE] ${bestSetup.ticker} | QuantScore: ${bestSetup.score}/100 | EV: ${bestSetup.evNet}% | Kelly Size: ${bestSetup.recommendedSize.toFixed(1)}%`);
-      console.log(`   - Macro: ${bestSetup.macroRegime} | Micro: ${bestSetup.microRegime} | Flow: ${bestSetup.flowBias}`);
-      console.log(`   - ⏱️  Valid Until: ${bestSetup.validUntil} (DO NOT EXECUTE AFTER)`);
-      console.log(`   - 🛑 Invalidation Price: $${bestSetup.invalidationPrice} (STOP LOSS)`);
-      console.log(`   - 🧠 Expectancy: ${bestSetup.expectancy.winRate} Win Rate | ${bestSetup.expectancy.lossStreak3xChance} Risk of 3x Loss Streak`);
+      console.log(`\n=> [EXECUTE] ${bestSetup.ticker} | QuantScore: ${bestSetup.score}/100 | Setup: ${bestSetup.setup_id} | Kelly Size: ${bestSetup.recommendedSize.toFixed(1)}%`);
+      console.log(`   - Macro: ${bestSetup.macroRegime} | Micro: ${bestSetup.microRegime} | Shield: ${bestSetup.shieldTriggered}`);
+      console.log(`   - Valid Until: ${bestSetup.validUntil} (DO NOT EXECUTE AFTER)`);
+      console.log(`   - Stop Loss: $${bestSetup.stopLoss?.toFixed(2) || 'N/A'} | Take Profit: $${bestSetup.takeProfit?.toFixed(2) || 'N/A'}`);
+      console.log(`   - Kelly Reason: ${bestSetup.kellyReason}`);
       
-      // DISPATCH TO DISCORD (Production Distribution Layer)
-      sendDiscordSignal(bestSetup).catch(err => console.error(`[DAEMON] Discord dispatch failed:`, err));
+      // PORTFOLIO RISK GATE — Enforce daily loss limits, concurrent caps, correlation blocking
+      let riskOk = true;
+      try {
+        const tradeSide = bestSetup.microRegime === 'UP' ? 'LONG' : 'SHORT';
+        const riskCheck = await canOpenNewTrade(bestSetup.ticker, tradeSide);
+        if (!riskCheck.allowed) {
+          riskOk = false;
+          console.warn(`[RISK CONTROL] 🛑 BLOCKED: ${bestSetup.ticker} — Reason: ${riskCheck.reason}${riskCheck.conflicting_asset ? ` (conflicts with ${riskCheck.conflicting_asset})` : ''}`);
+        }
+      } catch (riskErr) {
+        console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
+      }
+
+      // DISPATCH TO DISCORD (Production Distribution Layer) — only if risk allows
+      if (riskOk) {
+        sendDiscordSignal(bestSetup).catch(err => console.error(`[DAEMON] Discord dispatch failed:`, err));
+      } else {
+        console.log(`[DAEMON] Signal suppressed by Risk Control Engine. No dispatch.`);
+      }
 
       if (topSetups.length > 1) {
           console.log(`\n[SUPPRESSED SIGNALS - SAVED FROM CORRELATION RISK]`);
           topSetups.slice(1).forEach(s => {
-              console.log(`   - 🚫 SUPPRESSED: ${s.ticker} (Score: ${s.score}, EV: ${s.evNet}%)`);
+              console.log(`   - SUPPRESSED: ${s.ticker} (Score: ${s.score}, Setup: ${s.setup_id})`);
           });
       }
     } else {

@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Settings, List, LogOut, Activity } from 'lucide-react';
+import { User, Settings, List, LogOut, Activity, BarChart2, Terminal } from 'lucide-react';
 import './TerminalNavbar.css';
 
 export default function TerminalNavbar({ isConnected, onLockTerminal }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isAuditPage = location.pathname === '/audit';
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -22,17 +27,33 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
     <>
       {/* DESKTOP VIEW: Old Bottom Left Dock */}
       <aside className="terminal-bottom-controls desktop-only">
-        <div className="corner-logo">
-          GT
-          <span className="dock-tooltip">GhostTrade</span>
-        </div>
+        {/* 1. Performance Button */}
+        {isAuditPage ? (
+          <button onClick={() => navigate('/terminal')} className="icon-action-btn">
+            <Terminal size={16} />
+            <span className="dock-tooltip">Return to Terminal</span>
+          </button>
+        ) : (
+          <button onClick={() => navigate('/audit')} className="icon-action-btn pulse-glow">
+            <BarChart2 size={16} />
+            <span className="dock-tooltip">Performance Audit</span>
+          </button>
+        )}
 
+        {/* 2. Indicator */}
         <div className={`status-icon-btn ${isConnected ? 'online' : 'offline'}`}>
           <span className={`status-dot ${isConnected ? 'online' : 'offline'}`}></span>
           <span className="dock-tooltip">{isConnected ? 'System Active' : 'Offline'}</span>
         </div>
 
-        <button onClick={onLockTerminal} className="icon-action-btn">
+        {/* 3. Profile Icon */}
+        <div className="corner-logo">
+          <User size={18} color="#fff" />
+          <span className="dock-tooltip">User Profile</span>
+        </div>
+
+        {/* 4. Logout with red color */}
+        <button onClick={onLockTerminal} className="icon-action-btn" style={{ color: '#ef4444' }}>
           <LogOut size={16} />
           <span className="dock-tooltip">Lock Terminal</span>
         </button>
@@ -73,10 +94,17 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                   <Settings size={16} />
                   <span>Account Settings</span>
                 </button>
-                <button className="dropdown-item">
-                  <List size={16} />
-                  <span>Trade Logs</span>
-                </button>
+                {isAuditPage ? (
+                  <button className="dropdown-item" onClick={() => navigate('/terminal')}>
+                    <Terminal size={16} />
+                    <span>Chat Terminal</span>
+                  </button>
+                ) : (
+                  <button className="dropdown-item" onClick={() => navigate('/audit')}>
+                    <BarChart2 size={16} />
+                    <span>Audit & Performance</span>
+                  </button>
+                )}
                 <button className="dropdown-item">
                   <Activity size={16} />
                   <span>System Health</span>

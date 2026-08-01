@@ -233,7 +233,7 @@ export function calculateHurst(logReturns) {
     interpretation = `H=${mean_h.toFixed(3)} — Market exhibits mean-reversion. Counter-trend strategies have a statistical edge.`;
   } else {
     regime = 'RANDOM_WALK';
-    interpretation = `H=${mean_h.toFixed(3)} — Market is near-random. No statistical edge detected. SHIELD MODE recommended.`;
+    interpretation = `H=${mean_h.toFixed(3)} — Market is near-random. No statistical edge detected. DO NOT TRADE recommended.`;
   }
 
   const result = {

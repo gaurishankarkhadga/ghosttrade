@@ -21,7 +21,7 @@ export async function sendDiscordSignal(setup, retries = 0) {
     // Color Coding: Green for UP/BULLISH, Red for DOWN/BEARISH
     let embedColor = 16777215; // White default
     if (setup.microRegime === 'UP' || setup.macroRegime === 'TRENDING') embedColor = 5763719; // Green
-    if (setup.microRegime === 'DOWN' || setup.flowBias === 'STRONG_SELL') embedColor = 15548997; // Red
+    if (setup.microRegime === 'DOWN') embedColor = 15548997; // Red
 
     // Construct the Institutional Rich Embed
     const payload = {
@@ -34,18 +34,18 @@ export async function sendDiscordSignal(setup, retries = 0) {
                 color: embedColor,
                 fields: [
                     {
-                        name: "📊 Quant Score & Edge",
-                        value: `**Score:** ${setup.score}/100\n**Net EV:** ${setup.evNet}%\n**Kelly Sizing:** ${setup.recommendedSize.toFixed(1)}% of Capital`,
+                        name: "📊 Quant Score & Sizing",
+                        value: `**Score:** ${setup.score}/100\n**Setup:** ${setup.setup_id || 'N/A'}\n**Kelly Sizing:** ${setup.recommendedSize?.toFixed(1) || '0.0'}% of Capital`,
                         inline: false
                     },
                     {
-                        name: "🔬 Regime & Order Flow",
-                        value: `**Macro:** ${setup.macroRegime}\n**Micro:** ${setup.microRegime}\n**Live Flow:** ${setup.flowBias}`,
+                        name: "🔬 Regime Classification",
+                        value: `**Macro:** ${setup.macroRegime}\n**Micro:** ${setup.microRegime}\n**Shield:** ${setup.shieldTriggered ? 'ACTIVE' : 'OFF'}`,
                         inline: true
                     },
                     {
-                        name: "🛡️ Institutional Risk Armor",
-                        value: `**Win Rate:** ${setup.expectancy.winRate}\n**3x Loss Risk:** ${setup.expectancy.lossStreak3xChance}\n**Invalidation (Stop):** $${setup.invalidationPrice}`,
+                        name: "🛡️ Risk Management",
+                        value: `**Stop Loss:** $${setup.stopLoss?.toFixed(2) || 'N/A'}\n**Take Profit:** $${setup.takeProfit?.toFixed(2) || 'N/A'}\n**Kelly Reason:** ${setup.kellyReason || 'N/A'}`,
                         inline: true
                     },
                     {

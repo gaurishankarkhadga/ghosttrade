@@ -4,8 +4,8 @@
 // No API key required — uses yahoo-finance2 npm package.
 // =====================================================
 
-import yf from 'yahoo-finance2';
-const yahooFinance = new yf();
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance();
 
 // How many bars to fetch by default (must be > 200 for Hurst)
 const DEFAULT_BAR_COUNT = 300;
@@ -164,11 +164,13 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
     // Dates for 1h (needs ~1.4x bars in hours -> / 24 days)
     // Add extra buffer for weekends (crypto trades 24/7, stocks don't)
     const startDate1h = new Date();
-    startDate1h.setDate(endDate.getDate() - Math.ceil((bars * 1.4) / 24) - 2); 
+    const days1h = Math.min(720, Math.ceil((bars * 1.4) / 24) + 2);
+    startDate1h.setDate(endDate.getDate() - days1h); 
     
     // Dates for 15m (needs ~1.4x bars in 15m chunks -> / 96 days)
     const startDate15m = new Date();
-    startDate15m.setDate(endDate.getDate() - Math.ceil((bars * 1.4) / 96) - 2);
+    const days15m = Math.min(58, Math.ceil((bars * 1.4) / 96) + 2);
+    startDate15m.setDate(endDate.getDate() - days15m);
 
     const [res15m, res1h, res1d] = await Promise.all([
       yahooFinance.chart(symbol, { period1: startDate15m.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '15m' }).catch(() => null),
@@ -239,3 +241,19 @@ export function getLogReturns(ohlcv) {
   }
   return returns;
 }
+
+/**
+ * Fetches the current live price using Yahoo Finance.
+ */
+export async function fetchLivePrice(ticker) {
+  try {
+    const symbol = resolveYahooSymbol(ticker);
+    if (!symbol) return null;
+    const quote = await yahooFinance.quote(symbol);
+    return quote?.regularMarketPrice || null;
+  } catch (error) {
+    console.error(`[DATA] Live price fetch failed for ${ticker}:`, error.message);
+    return null;
+  }
+}
+
