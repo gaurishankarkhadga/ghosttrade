@@ -1,6 +1,7 @@
 // =====================================================
 // RISK CONTROL ENGINE — Portfolio Level Risk Guardrails
-// Implements Daily Loss Limits, Concurrent Trade Caps, and Correlation Blocking.
+// Implements Daily Loss Limits, Concurrent Trade Caps, Correlation Blocking,
+// and Black Swan Spread & Liquidity Circuit-Breakers.
 // =====================================================
 
 import { getDb } from './mongoConfig.js';
@@ -11,6 +12,8 @@ const RISK_CONFIG = {
   max_concurrent_trades: 3,     // hard ceiling regardless of correlation result
   correlation_threshold: 0.75,  // KEEP existing Phase 1 logic
   correlation_lookback_bars: 200, 
+  max_allowed_spread_pct: 0.35, // Black swan spread expansion threshold (%)
+  max_depth_depletion_pct: 50.0 // Order book depth depletion threshold (%)
 };
 
 /**
@@ -36,6 +39,33 @@ function calculatePearson(x, y) {
 
   if (denX === 0 || denY === 0) return 0;
   return num / Math.sqrt(denX * denY);
+}
+
+/**
+ * Checks for Black Swan Liquidity Collapse or Sudden Spread Spikes.
+ * 
+ * @param {number} spreadPct - Current bid-ask spread percentage
+ * @param {number} depthDepletionPct - Order book liquidity depth depletion (%)
+ * @returns { object } - { triggered: boolean, reason?: string }
+ */
+export function checkBlackSwanLiquidityCircuitBreaker(spreadPct = 0.05, depthDepletionPct = 0) {
+  if (spreadPct > RISK_CONFIG.max_allowed_spread_pct) {
+    return {
+      triggered: true,
+      reason: 'BLACK_SWAN_SPREAD_EXPANSION',
+      detail: `Bid-Ask spread (${spreadPct.toFixed(2)}%) exceeds safety threshold (${RISK_CONFIG.max_allowed_spread_pct}%). Shield Mode active.`
+    };
+  }
+
+  if (depthDepletionPct > RISK_CONFIG.max_depth_depletion_pct) {
+    return {
+      triggered: true,
+      reason: 'BLACK_SWAN_LIQUIDITY_COLLAPSE',
+      detail: `Order book depth collapsed by ${depthDepletionPct.toFixed(1)}%. Execution frozen.`
+    };
+  }
+
+  return { triggered: false };
 }
 
 /**

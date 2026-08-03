@@ -30,7 +30,7 @@
   display: flex;
   overflow-x: auto;
   gap: 0.5rem;
-  padding: 0.75rem 0.5rem 0.25rem 0.75rem;
+  padding: 0.1rem 0.5rem 0.5rem 0.5rem; /* Shifted up by reducing top padding */
   -ms-overflow-style: none;
   scrollbar-width: none;
 }

@@ -18,15 +18,17 @@ export function computeStopLossTakeProfit(candles, side, atrMultiplier = 1.5, rr
 
   const slDistance = currentAtr * atrMultiplier;
 
+  const normalizedSide = (side || '').toUpperCase() === 'BUY' ? 'LONG' : (side || '').toUpperCase() === 'SELL' ? 'SHORT' : (side || '').toUpperCase();
+
   // Anchor LONG stops below the structural low, SHORT stops above the structural high
-  const stopLoss = side === 'LONG' ? localLow - slDistance
-                 : side === 'SHORT' ? localHigh + slDistance
+  const stopLoss = normalizedSide === 'LONG' ? localLow - slDistance
+                 : normalizedSide === 'SHORT' ? localHigh + slDistance
                  : currentPrice;
 
   // Take Profit is anchored to Entry Price (Close) with actual risk distance to enforce RRR
   const actualRisk = Math.abs(currentPrice - stopLoss);
-  const takeProfit = side === 'LONG' ? currentPrice + (actualRisk * rrr)
-                   : side === 'SHORT' ? currentPrice - (actualRisk * rrr)
+  const takeProfit = normalizedSide === 'LONG' ? currentPrice + (actualRisk * rrr)
+                   : normalizedSide === 'SHORT' ? currentPrice - (actualRisk * rrr)
                    : currentPrice;
 
   return {

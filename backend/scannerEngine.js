@@ -107,7 +107,7 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
         dbKellyResult = computeKelly({ 
            mean_return: stats.mean_return, 
            variance: stats.variance,
-           regime: regime
+           regime: regime15m.regime
         });
         if (dbKellyResult.action !== 'SHIELD_MODE') {
              finalSize = dbKellyResult.halfKelly;

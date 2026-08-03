@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test:compliance": "node test_compliance.js",
-    "test:all": "node test_compliance.js"
+    "test:pipeline": "node test_pipeline.js",
+    "test:all": "node test_pipeline.js && node test_phase1.js && node test_phase3.js && node test_phase4.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

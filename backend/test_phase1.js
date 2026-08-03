@@ -12,9 +12,9 @@ async function runPhase1Tests() {
   // 1. MAX CONCURRENT TRADES TEST
   console.log(`\n--- TEST 1: MAX CONCURRENT TRADES ---`);
   await db.collection('paper_trades').insertMany([
-    { asset: 'BTC-USD', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() },
-    { asset: 'AAPL', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() },
-    { asset: 'GOLD', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() }
+    { id: 'mock-1', asset: 'BTC-USD', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() },
+    { id: 'mock-2', asset: 'AAPL', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() },
+    { id: 'mock-3', asset: 'GOLD', status: 'OPEN', side: 'LONG', openedAt: new Date().toISOString() }
   ]);
   const resMax = await canOpenNewTrade('ETH-USD', 'LONG');
   console.log(`Expected blocked by MAX_CONCURRENT_TRADES. Result: ${resMax.allowed ? 'FAILED' : 'PASSED'} (${resMax.reason})`);
@@ -25,6 +25,7 @@ async function runPhase1Tests() {
   console.log(`\n--- TEST 2: DAILY LOSS LIMIT ---`);
   // Simulate 6% loss
   await db.collection('paper_trades').insertOne({
+    id: 'mock-loss-1',
     asset: 'TSLA',
     status: 'LOSS',
     side: 'LONG',
@@ -41,6 +42,7 @@ async function runPhase1Tests() {
   // 3. CORRELATION TEST
   console.log(`\n--- TEST 3: CORRELATION COVARIANCE ---`);
   await db.collection('paper_trades').insertOne({
+    id: 'mock-corr-1',
     asset: 'BTC-USD',
     status: 'OPEN',
     side: 'LONG',

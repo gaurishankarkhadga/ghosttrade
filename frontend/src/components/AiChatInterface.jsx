@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import PromptInputBar from './PromptInputBar';
@@ -6,6 +6,58 @@ import AiMessageBubble from './AiMessageBubble';
 import UserMessageBubble from './UserMessageBubble';
 import { CanvasRevealEffect } from './ui/SignInFlow';
 import './AiChatInterface.css';
+
+const thinkingMessages = [
+  "Analyzing Order Flow...",
+  "Validating Hurst Matrix...",
+  "Running Kelly Risk Models...",
+  "Extracting Institutional Sentiment...",
+  "Synthesizing Neural Data..."
+];
+
+function DynamicThinkingIndicator() {
+  const [msgIdx, setMsgIdx] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentMsg = thinkingMessages[msgIdx];
+    let timeout;
+    
+    if (isDeleting) {
+      if (displayedText.length > 0) {
+        timeout = setTimeout(() => {
+          setDisplayedText(currentMsg.substring(0, displayedText.length - 1));
+        }, 20); // Fast delete speed
+      } else {
+        setIsDeleting(false);
+        setMsgIdx((prev) => (prev + 1) % thinkingMessages.length);
+      }
+    } else {
+      if (displayedText.length < currentMsg.length) {
+        timeout = setTimeout(() => {
+          setDisplayedText(currentMsg.substring(0, displayedText.length + 1));
+        }, 40); // Smooth typing speed
+      } else {
+        // Pause before deleting
+        timeout = setTimeout(() => {
+          setIsDeleting(true);
+        }, 1500); 
+      }
+    }
+
+    return () => clearTimeout(timeout);
+  }, [displayedText, isDeleting, msgIdx]);
+
+  return (
+    <div className="thinking-indicator single-line-think">
+      <div className="thinking-gt-icon">GT</div>
+      <span className="thinking-text font-mono" style={{ fontSize: '0.85rem' }}>
+        {displayedText}<span className="typing-cursor" style={{ marginLeft: '2px', height: '12px' }}></span>
+      </span>
+    </div>
+  );
+}
 
 export default function AiChatInterface() {
   const { chatHistory, isThinking, sendPrompt, assets, clearChat } = useGhostStore();
@@ -65,21 +117,14 @@ export default function AiChatInterface() {
               if (msg.role === 'user') {
                 return <UserMessageBubble key={`msg-${index}`} content={msg.content} imageBase64={msg.imageBase64} />;
               }
+              // Hide the empty AI bubble that gets pushed before the stream starts to prevent the "empty circle" layout shift
+              if (msg.role === 'ai' && !msg.content && isThinking && index === chatHistory.length - 1) {
+                return null;
+              }
               return <AiMessageBubble key={`msg-${index}`} message={msg} />;
             })}
 
-            {isThinking && (
-              <div className="thinking-indicator">
-                <div className="thinking-dots">
-                  <span className="thinking-dot" style={{ animationDelay: '0ms' }}></span>
-                  <span className="thinking-dot" style={{ animationDelay: '150ms' }}></span>
-                  <span className="thinking-dot" style={{ animationDelay: '300ms' }}></span>
-                </div>
-                <span className="thinking-text">
-                  Synthesizing Math Matrix...
-                </span>
-              </div>
-            )}
+            {isThinking && <DynamicThinkingIndicator />}
 
             <div ref={chatEndRef} style={{ height: '1rem' }} />
           </div>
