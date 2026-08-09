@@ -15,6 +15,10 @@ export const liveMemoryState = {
     status: 'DISCONNECTED'
 };
 
+// Register on globalThis so orderFlowEngine.js can access it synchronously
+// without a circular ESM import (orderFlowEngine → websocketEngine would be circular)
+globalThis.__ghostLiveMemory = liveMemoryState;
+
 let ws = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;

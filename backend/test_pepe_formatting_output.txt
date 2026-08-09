@@ -1,0 +1,35 @@
+==================================================
+🐸 TESTING PEPE MICRO-CAP PRICE FORMATTING (MOCK)
+==================================================
+
+Generating 30 bars of mock PEPE data ($0.00000812)...
+✅ Successfully generated 35 mock candles for PEPE.
+
+Running Technical Engine...
+
+=== TECHNICAL ENGINE OUTPUT ===
+
+=== PHASE 4 TECHNICAL INDICATORS (COMPUTED FROM LIVE DATA) ===
+Current Price: $0.0000082
+
+MOVING AVERAGES:
+  SMA(20): $0.00000809 | Price ABOVE
+  EMA(20): $0.0000081 | EMA(50): N/A
+
+SUPPORT & RESISTANCE (PIVOT POINTS):
+  R3: $0.00000938
+  R2: $0.00000898
+  R1: $0.00000857
+  PIVOT: $0.00000816
+  S1: $0.00000775
+  S2: $0.00000734
+  S3: $0.00000694
+
+RSI(14): 65.69 | Bullish momentum — trend continuation likely
+MACD: Line=0.00000001 Signal=-0.00000001 Histogram=0.00000002 | Bullish — MACD above zero with rising histogram
+BOLLINGER BANDS(20,2): Upper=$0.00000817 Mid=$0.00000809 Lower=$0.00000801 | BW=1.98% | %B=1.198 | Bollinger Squeeze detected — low volatility compression, breakout imminent
+ATR(14): $0.00000081 (9.88% of price) | Regime=EXTREME_VOLATILITY | ATR=9.9% of price — extreme volatility. Widen stops or reduce position size.
+VOLUME: Relative=0.01x avg | Trend=STABLE | Divergence=NONE | Volume 0.0x below average — thin liquidity, moves may be unreliable.
+
+Use these computed values in your analysis. DO NOT guess indicator values — use the numbers above.
+

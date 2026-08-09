@@ -1,6 +1,7 @@
 import { getDb, closeDb } from './mongoConfig.js';
 import { fetchLivePrice } from './dataFetcher.js';
 import { ObjectId } from 'mongodb';
+import { executionManager } from './executionEngine.js';
 
 // Check interval: every 10 seconds
 const POLL_INTERVAL_MS = 10000;
@@ -46,6 +47,9 @@ async function checkOpenTrades() {
         console.log(`[MONITOR] 🚨 TRADE CLOSED: ${trade.asset} [${trade.side}] - Hit ${reason}`);
         console.log(`          Entry: $${trade.entryPrice} | Exit: $${currentPrice}`);
         console.log(`          Result: ${finalStatus} | PnL: ${pnlPct.toFixed(2)}%`);
+
+        // Note: Live broker exit routing has been removed for the Global Intelligence Terminal architecture.
+        // The ledger is now the primary source of truth for all trades.
 
         await db.collection('paper_trades').findOneAndUpdate(
           { _id: trade._id, status: 'OPEN' },

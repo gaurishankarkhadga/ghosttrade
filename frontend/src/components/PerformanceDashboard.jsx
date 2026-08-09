@@ -6,12 +6,13 @@ import './PerformanceDashboard.css';
 
 export default function PerformanceDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('active'); // 'pending' | 'active' | 'closed' | 'prompts'
+  const [activeTab, setActiveTab] = useState('signals'); // 'signals' | 'pending' | 'active' | 'closed' | 'prompts'
   const allPaperTrades = useGhostStore((state) => state.activePaperTrades) || [];
   const activePaperTrades = allPaperTrades.filter(t => t.status === 'OPEN');
   const pendingPaperTrades = allPaperTrades.filter(t => t.status === 'PENDING_CONFIRMATION');
   const closedPaperTrades = useGhostStore((state) => state.closedPaperTrades) || [];
   const promptLogs = useGhostStore((state) => state.promptLogs) || [];
+  const aiSignals = useGhostStore((state) => state.aiSignals) || [];
   const cancelTrade = useGhostStore((state) => state.cancelTrade);
   const approveTrade = useGhostStore((state) => state.approveTrade);
   const initAuditData = useGhostStore((state) => state.initAuditData);
@@ -45,6 +46,11 @@ export default function PerformanceDashboard() {
       [...promptLogs].reverse().forEach(log => {
         textToCopy += `${formatDate(log.timestamp)}\t${(log.prompt || '').replace(/\n/g, ' ')}\t${log.resultType}\t${(log.aiOutput || 'No response recorded').replace(/\n/g, ' ')}\n`;
       });
+    } else if (activeTab === 'signals') {
+      textToCopy = 'Timestamp\tAsset\tDirection\tConfidence\tTarget\tStop Loss\tOutcome\tResolution Time\n';
+      aiSignals.forEach(sig => {
+        textToCopy += `${formatDate(sig.timestamp)}\t${sig.ticker}\t${sig.direction}\t${sig.calibratedConfidence || sig.rawConfidence}%\t$${formatPrice(sig.primaryTarget)}\t$${formatPrice(sig.invalidationLevel)}\t${sig.resolvedOutcome || 'PENDING'}\t${sig.resolvedAt ? formatDate(sig.resolvedAt) : 'N/A'}\n`;
+      });
     }
 
     if (textToCopy) {
@@ -62,13 +68,14 @@ export default function PerformanceDashboard() {
     }
   }, [activePaperTrades.length]);
 
-  // Calculate Metrics
-  const totalClosed = closedPaperTrades.length;
-  const wins = closedPaperTrades.filter(t => t.status === 'WIN').length;
-  const losses = closedPaperTrades.filter(t => t.status === 'LOSS').length;
-  const winRate = (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 100) : 0;
-  
-  const totalPnL = closedPaperTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
+  // Calculate Metrics based on AI Signals Verification (as per user request: software does not execute trades)
+  const resolvedSignals = aiSignals.filter(sig => sig.resolvedOutcome === 'CORRECT' || sig.resolvedOutcome === 'INCORRECT');
+  const totalPredictions = resolvedSignals.length;
+  const wins = aiSignals.filter(sig => sig.resolvedOutcome === 'CORRECT').length;
+  const losses = aiSignals.filter(sig => sig.resolvedOutcome === 'INCORRECT').length;
+  const winRate = totalPredictions > 0 ? Math.round((wins / totalPredictions) * 100) : 0;
+  const pendingCount = aiSignals.filter(sig => !sig.resolvedOutcome).length;
+  const blockedCount = aiSignals.filter(sig => sig.signalBlocked).length;
 
   const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
   const formatDate = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -95,37 +102,71 @@ export default function PerformanceDashboard() {
 
       <div className="metrics-grid">
         <div className="metric-box">
-          <span className="metric-box-label">Total Executions</span>
-          <span className="metric-box-value">{totalClosed + activePaperTrades.length}</span>
+          <span className="metric-box-label">Verified Predictions</span>
+          <span className="metric-box-value">{totalPredictions}</span>
         </div>
         <div className="metric-box">
-          <span className="metric-box-label">Win Rate</span>
+          <span className="metric-box-label">AI Win Rate</span>
           <span className="metric-box-value">
             {winRate}%
           </span>
         </div>
         <div className="metric-box">
-          <span className="metric-box-label">Wins</span>
+          <span className="metric-box-label">Wins (Correct)</span>
           <span className="metric-box-value" style={{ color: '#34d399' }}>
             {wins}
           </span>
         </div>
         <div className="metric-box">
-          <span className="metric-box-label">Losses</span>
+          <span className="metric-box-label">Losses (Incorrect)</span>
           <span className="metric-box-value" style={{ color: '#f87171' }}>
             {losses}
           </span>
         </div>
         <div className="metric-box">
-          <span className="metric-box-label">Realized PnL</span>
-          <span className={`metric-box-value ${totalPnL > 0 ? 'positive' : totalPnL < 0 ? 'negative' : ''}`}>
-            {totalPnL > 0 ? '+' : ''}{formatPrice(totalPnL)}%
+          <span className="metric-box-label">Pending Verification</span>
+          <span className="metric-box-value" style={{ color: '#60A5FA' }}>
+            {pendingCount}
           </span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">Edge Expectancy</span>
+          <span className="metric-box-value" style={{ color: (() => {
+            if (totalPredictions < 5) return '#94A3B8';
+            const winPct = wins / totalPredictions;
+            const lossPct = losses / totalPredictions;
+            const avgWin = 2.0;
+            const avgLoss = 1.0;
+            const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
+            return expectancy > 0 ? '#34d399' : expectancy < 0 ? '#f87171' : '#94A3B8';
+          })() }}>
+            {totalPredictions < 5 ? 'N/A' : (() => {
+              const winPct = wins / totalPredictions;
+              const lossPct = losses / totalPredictions;
+              const avgWin = 2.0;
+              const avgLoss = 1.0;
+              const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
+              return `${expectancy >= 0 ? '+' : ''}${expectancy.toFixed(2)}R`;
+            })()}
+          </span>
+          <span style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>(Win%×2R - Loss%×1R)</span>
         </div>
       </div>
 
       <div className="audit-tabs">
         <div className="audit-tabs-group">
+          <button 
+            className={`audit-tab-btn ${activeTab === 'signals' ? 'active' : ''}`}
+            onClick={() => setActiveTab('signals')}
+          >
+            AI Verification Ledger ({aiSignals.length})
+          </button>
+          <button 
+            className={`audit-tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('prompts')}
+          >
+            Prompt Audit ({promptLogs.length})
+          </button>
           <button 
             className={`audit-tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
             onClick={() => setActiveTab('pending')}
@@ -144,12 +185,6 @@ export default function PerformanceDashboard() {
             onClick={() => setActiveTab('closed')}
           >
             Trade Audit Ledger ({closedPaperTrades.length})
-          </button>
-          <button 
-            className={`audit-tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('prompts')}
-          >
-            Prompt Audit ({promptLogs.length})
           </button>
         </div>
         <button className="audit-copy-btn" onClick={handleCopyData}>
@@ -295,29 +330,188 @@ export default function PerformanceDashboard() {
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th>Raw User Prompt</th>
-                <th>AI Processing Result</th>
-                <th>AI Response / Rationale</th>
+                <th>Interaction Type</th>
+                <th>User Prompt</th>
+                <th>AI Reasoning</th>
+                <th>Market Verification</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {promptLogs.length === 0 && (
-                <tr><td colSpan="4"><div className="empty-audit-state">No prompts logged in current session.</div></td></tr>
+                <tr><td colSpan="6"><div className="empty-audit-state">No chat prompts logged in this session.</div></td></tr>
               )}
-              {[...promptLogs].reverse().map(log => (
-                <tr key={log.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(log.timestamp)}</td>
-                  <td style={{ width: '25%' }}><span className="prompt-text">{log.prompt}</span></td>
-                  <td style={{ width: '20%' }}>
-                    {log.resultType === 'TRADE_CARD' && <span className="status-badge card">Trade Generated</span>}
-                    {log.resultType === 'FALLBACK' && <span className="status-badge fallback">Capital Preservation</span>}
-                    {log.resultType === 'ERROR' && <span className="status-badge error">Unparseable Error</span>}
-                  </td>
-                  <td style={{ width: '45%', color: '#94A3B8', fontSize: '11px', lineHeight: '1.4' }}>
-                    {log.aiOutput ? log.aiOutput : <span style={{ fontStyle: 'italic', opacity: 0.5 }}>No response recorded</span>}
-                  </td>
-                </tr>
-              ))}
+              {[...promptLogs].reverse().map((log, i) => {
+                let statusText = log.resultType === 'TRADE_CARD' ? 'Trade Verification' : 'Conversational AI';
+                let statusClass = log.resultType === 'TRADE_CARD' ? 'open' : 'win';
+                let icon = log.resultType === 'TRADE_CARD' ? <Activity size={12} /> : <Check size={12} />;
+
+                const userPromptText = log.prompt || 'Image Analysis / General Chat';
+                const aiResponseText = log.aiOutput || 'No response recorded.';
+                const resolvedGrade = log.resolvedOutcome;
+                const resolvedReason = log.resolvedReason;
+
+                return (
+                  <tr key={log._id || log.id || i}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(log.timestamp)}</td>
+                    <td><span className={`status-badge ${statusClass}`}>{icon} {statusText}</span></td>
+                    <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94A3B8' }} title={userPromptText}>
+                      "{userPromptText}"
+                    </td>
+                    <td style={{ maxWidth: '250px', fontSize: '11px', color: '#CBD5E1', lineHeight: '1.4' }}>
+                      {aiResponseText}
+                    </td>
+                    <td style={{ maxWidth: '200px', fontSize: '11px' }}>
+                      {resolvedGrade ? (
+                        <div style={{ color: resolvedGrade === 'CORRECT' ? '#34D399' : resolvedGrade === 'INCORRECT' ? '#F87171' : '#FBBF24' }}>
+                          <strong>{resolvedGrade === 'CORRECT' ? 'Accurate' : resolvedGrade === 'INCORRECT' ? 'Failed' : 'Neutral'}</strong>
+                          <div style={{ marginTop: '2px', color: '#94a3b8' }}>{resolvedReason}</div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#64748B' }}>Pending Verification</span>
+                      )}
+                    </td>
+                    <td style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      {resolvedGrade 
+                        ? <span style={{ color: '#34d399' }}>VERIFIED</span>
+                        : (log.auditDue ? <span style={{ color: '#f59e0b' }}>DUE: {formatDate(log.auditDue)}</span> : 'PENDING')
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {activeTab === 'signals' && (
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Status</th>
+                <th>AI Strategy</th>
+                <th style={{ textAlign: 'center' }}>Confidence</th>
+                <th style={{ textAlign: 'center' }}>Targets</th>
+                <th style={{ textAlign: 'center' }}>AI Correct?</th>
+                <th>Verification Outcome</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aiSignals.length === 0 && (
+                <tr><td colSpan="8"><div className="empty-audit-state">No AI predictions recorded. Ask the AI to analyze a chart to generate a signal.</div></td></tr>
+              )}
+              {aiSignals.map(sig => {
+                const isWin = sig.resolvedOutcome === 'CORRECT';
+                const isLoss = sig.resolvedOutcome === 'INCORRECT';
+                const isBlocked = sig.signalBlocked;
+                const isPending = !sig.resolvedOutcome;
+
+                let statusText = 'Tracking Live';
+                let statusClass = 'open';
+                let icon = <Activity size={12} />;
+
+                if (isBlocked) {
+                  icon = <div style={{width: 10, height: 10, borderRadius: '50%', border: '2px solid currentColor', display: 'inline-block'}} />;
+                  if (isPending) {
+                    statusText = 'Safety Block (Tracking)';
+                    statusClass = 'cancelled';
+                  } else if (isWin) {
+                    statusText = 'Block Verified (Correct)';
+                    statusClass = 'win';
+                    icon = <Check size={12} />;
+                  } else if (isLoss) {
+                    statusText = 'Missed Move (Incorrect)';
+                    statusClass = 'loss';
+                    icon = <ArrowLeft size={12} style={{ transform: 'rotate(-45deg)' }} />;
+                  } else {
+                    statusText = 'Safety Blocked';
+                    statusClass = 'error';
+                  }
+                } else {
+                  if (isWin) {
+                    statusText = 'Target Hit (Win)';
+                    statusClass = 'win';
+                    icon = <Check size={12} />;
+                  } else if (isLoss) {
+                    statusText = 'Stop Hit (Loss)';
+                    statusClass = 'loss';
+                    icon = <ArrowLeft size={12} style={{ transform: 'rotate(-45deg)' }} />;
+                  }
+                }
+
+                // Humanize Regime
+                let humanReason = sig.regime || 'Technical Pattern';
+                if (humanReason === 'RANDOM_WALK') humanReason = 'Choppy Market';
+                if (humanReason === 'MEAN_REVERTING') humanReason = 'Reversal';
+                if (humanReason === 'TRENDING') humanReason = 'Trend Following';
+
+                return (
+                  <React.Fragment key={sig._id}>
+                    <tr>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#f8fafc' }}>{sig.ticker || 'UNKNOWN'}</span>
+                        <span className={`status-badge ${sig.direction === 'BULLISH' ? 'open' : sig.direction === 'BEARISH' ? 'loss' : 'cancelled'}`} style={{ marginLeft: 8 }}>
+                          {sig.direction}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${statusClass}`}>{icon} {statusText}</span>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '11px', color: '#E2E8F0' }}>{humanReason}</div>
+                        <div style={{ fontSize: '10px', color: '#94A3B8' }}>({sig.tradeTimeframe})</div>
+                      </td>
+                      <td style={{ fontWeight: 600, textAlign: 'center' }}>{sig.calibratedConfidence || sig.rawConfidence}%</td>
+                      <td style={{ fontSize: '11px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {(!isBlocked && sig.primaryTarget > 0) ? (
+                          <>
+                            <div style={{ color: '#34D399' }}>TP: ${formatPrice(sig.primaryTarget)}</div>
+                            <div style={{ color: '#F87171' }}>SL: ${formatPrice(sig.invalidationLevel)}</div>
+                          </>
+                        ) : (
+                          <span style={{ color: '#64748B' }}>N/A</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                        {isWin ? (
+                          <span style={{ color: '#34D399' }}>TRUE</span>
+                        ) : isLoss ? (
+                          <span style={{ color: '#F87171' }}>FALSE</span>
+                        ) : (
+                          <span style={{ color: '#60A5FA' }}>PENDING</span>
+                        )}
+                      </td>
+                      <td style={{ maxWidth: '250px', fontSize: '11px', lineHeight: '1.4' }}>
+                        {isPending ? (
+                          <span style={{ color: '#64748B' }}>
+                            {isBlocked ? sig.blockedReason + ' (Awaiting verification...)' : 'Awaiting resolution...'}
+                          </span>
+                        ) : (
+                          <span style={{ color: isWin ? '#34D399' : isLoss ? '#F87171' : '#CBD5E1' }}>
+                            {sig.resolvedReason || 'Verified'}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '10px', color: '#CBD5E1', whiteSpace: 'nowrap' }}>
+                        <div>Gen: {formatDate(sig.timestamp)}</div>
+                        {!isPending && sig.resolvedAt && <div>Ver: {formatDate(sig.resolvedAt)}</div>}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan="8" style={{ padding: '8px 16px', background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>
+                          <strong>Prompt:</strong> "{sig.userPrompt || 'Chart Analysis'}"
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#CBD5E1', maxHeight: '45px', overflowY: 'auto', paddingRight: '8px', lineHeight: '1.4' }}>
+                          <strong>AI Proof:</strong> {sig.predictionSummary || 'No textual proof recorded for this signal.'}
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

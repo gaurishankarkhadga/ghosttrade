@@ -112,9 +112,9 @@ export function macd(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9)
   else interpretation = 'Neutral — MACD near zero line';
 
   return {
-    macd: parseFloat(macdVal.toFixed(4)),
-    signal: parseFloat(signalVal.toFixed(4)),
-    histogram: parseFloat(histogram.toFixed(4)),
+    macd: macdVal,
+    signal: signalVal,
+    histogram: histogram,
     interpretation,
   };
 }
@@ -153,9 +153,9 @@ export function bollingerBands(closes, period = 20, multiplier = 2) {
   else interpretation = `Price below lower band (%B=${percentB.toFixed(2)}) — extended, potential reversal`;
 
   return {
-    upper: parseFloat(upper.toFixed(2)),
-    middle: parseFloat(middle.toFixed(2)),
-    lower: parseFloat(lower.toFixed(2)),
+    upper: upper,
+    middle: middle,
+    lower: lower,
     bandwidth: parseFloat(bandwidth.toFixed(2)),
     percentB: parseFloat(percentB.toFixed(3)),
     squeeze,
@@ -209,7 +209,7 @@ export function atr(bars, period = 14) {
   }
 
   return {
-    value: parseFloat(atrVal.toFixed(4)),
+    value: atrVal,
     percentOfPrice: parseFloat(percentOfPrice.toFixed(2)),
     regime,
     interpretation,
@@ -290,13 +290,13 @@ export function calculatePivotPoints(bars) {
   const s3 = low - 2 * (high - pivot);
 
   return {
-    pivot: parseFloat(pivot.toFixed(2)),
-    r1: parseFloat(r1.toFixed(2)),
-    r2: parseFloat(r2.toFixed(2)),
-    r3: parseFloat(r3.toFixed(2)),
-    s1: parseFloat(s1.toFixed(2)),
-    s2: parseFloat(s2.toFixed(2)),
-    s3: parseFloat(s3.toFixed(2)),
+    pivot: pivot,
+    r1: r1,
+    r2: r2,
+    r3: r3,
+    s1: s1,
+    s2: s2,
+    s3: s3,
   };
 }
 
@@ -328,15 +328,22 @@ export function calculateAllIndicators(bars) {
   const ema20 = ema(closes, 20);
   const ema50 = ema(closes, 50);
 
+  const fmt = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0.00';
+    if (Math.abs(val) < 0.01) return val.toFixed(8).replace(/0+$/, '').replace(/\.$/, '.00'); // Remove trailing zeros
+    if (Math.abs(val) < 1) return val.toFixed(4);
+    return val.toFixed(2);
+  };
+
   let block = `\n=== PHASE 4 TECHNICAL INDICATORS (COMPUTED FROM LIVE DATA) ===\n`;
-  block += `Current Price: $${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`;
+  block += `Current Price: $${fmt(currentPrice)}\n`;
 
   // Moving Averages
   block += `\nMOVING AVERAGES:\n`;
-  if (sma20) block += `  SMA(20): $${sma20.toFixed(2)} | Price ${currentPrice > sma20 ? 'ABOVE' : 'BELOW'}\n`;
-  if (sma50) block += `  SMA(50): $${sma50.toFixed(2)} | Price ${currentPrice > sma50 ? 'ABOVE' : 'BELOW'}\n`;
-  if (sma200) block += `  SMA(200): $${sma200.toFixed(2)} | Price ${currentPrice > sma200 ? 'ABOVE' : 'BELOW'}\n`;
-  if (ema20) block += `  EMA(20): $${ema20.toFixed(2)} | EMA(50): ${ema50 ? '$' + ema50.toFixed(2) : 'N/A'}\n`;
+  if (sma20) block += `  SMA(20): $${fmt(sma20)} | Price ${currentPrice > sma20 ? 'ABOVE' : 'BELOW'}\n`;
+  if (sma50) block += `  SMA(50): $${fmt(sma50)} | Price ${currentPrice > sma50 ? 'ABOVE' : 'BELOW'}\n`;
+  if (sma200) block += `  SMA(200): $${fmt(sma200)} | Price ${currentPrice > sma200 ? 'ABOVE' : 'BELOW'}\n`;
+  if (ema20) block += `  EMA(20): $${fmt(ema20)} | EMA(50): ${ema50 ? '$' + fmt(ema50) : 'N/A'}\n`;
   if (sma20 && sma50) {
     block += `  MA Cross: ${sma20 > sma50 ? 'GOLDEN (bullish — SMA20 > SMA50)' : 'DEATH (bearish — SMA20 < SMA50)'}\n`;
   }
@@ -344,13 +351,13 @@ export function calculateAllIndicators(bars) {
   // Pivot Points (Support/Resistance)
   if (pivotResult) {
     block += `\nSUPPORT & RESISTANCE (PIVOT POINTS):\n`;
-    block += `  R3: $${pivotResult.r3}\n`;
-    block += `  R2: $${pivotResult.r2}\n`;
-    block += `  R1: $${pivotResult.r1}\n`;
-    block += `  PIVOT: $${pivotResult.pivot}\n`;
-    block += `  S1: $${pivotResult.s1}\n`;
-    block += `  S2: $${pivotResult.s2}\n`;
-    block += `  S3: $${pivotResult.s3}\n`;
+    block += `  R3: $${fmt(pivotResult.r3)}\n`;
+    block += `  R2: $${fmt(pivotResult.r2)}\n`;
+    block += `  R1: $${fmt(pivotResult.r1)}\n`;
+    block += `  PIVOT: $${fmt(pivotResult.pivot)}\n`;
+    block += `  S1: $${fmt(pivotResult.s1)}\n`;
+    block += `  S2: $${fmt(pivotResult.s2)}\n`;
+    block += `  S3: $${fmt(pivotResult.s3)}\n`;
   }
 
   // RSI
@@ -360,17 +367,17 @@ export function calculateAllIndicators(bars) {
 
   // MACD
   if (macdResult) {
-    block += `MACD: Line=${macdResult.macd} Signal=${macdResult.signal} Histogram=${macdResult.histogram} | ${macdResult.interpretation}\n`;
+    block += `MACD: Line=${fmt(macdResult.macd)} Signal=${fmt(macdResult.signal)} Histogram=${fmt(macdResult.histogram)} | ${macdResult.interpretation}\n`;
   }
 
   // Bollinger Bands
   if (bbResult) {
-    block += `BOLLINGER BANDS(20,2): Upper=$${bbResult.upper} Mid=$${bbResult.middle} Lower=$${bbResult.lower} | BW=${bbResult.bandwidth}% | %B=${bbResult.percentB} | ${bbResult.interpretation}\n`;
+    block += `BOLLINGER BANDS(20,2): Upper=$${fmt(bbResult.upper)} Mid=$${fmt(bbResult.middle)} Lower=$${fmt(bbResult.lower)} | BW=${bbResult.bandwidth}% | %B=${bbResult.percentB} | ${bbResult.interpretation}\n`;
   }
 
   // ATR
   if (atrResult) {
-    block += `ATR(14): $${atrResult.value} (${atrResult.percentOfPrice}% of price) | Regime=${atrResult.regime} | ${atrResult.interpretation}\n`;
+    block += `ATR(14): $${fmt(atrResult.value)} (${atrResult.percentOfPrice}% of price) | Regime=${atrResult.regime} | ${atrResult.interpretation}\n`;
   }
 
   // Volume

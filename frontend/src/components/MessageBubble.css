@@ -917,3 +917,116 @@
     max-width: calc(90% + 1.5rem);
   }
 }
+
+/* =========================================
+   SIGNAL SCORE CARD — 5-Factor Breakdown
+   ========================================= */
+.score-card {
+  background: rgba(7, 15, 30, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+  animation: slideDownFade 0.3s ease-out forwards;
+}
+
+.score-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.score-card-title {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+}
+
+.score-card-total {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.score-grade {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 900;
+  opacity: 0.9;
+}
+
+.score-factors {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.score-factor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.score-factor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-factor-icon {
+  font-size: 0.85rem;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.score-factor-name {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.score-factor-pts {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.score-bar-bg {
+  height: 5px;
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: barFillIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes barFillIn {
+  from { width: 0 !important; }
+}
+
+.score-card-note {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+}
+

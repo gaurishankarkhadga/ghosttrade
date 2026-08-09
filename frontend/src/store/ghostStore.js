@@ -6,16 +6,47 @@ const useGhostStore = create(
     (set, get) => ({
       isAuthenticated: false,
       token: null,
+      email: null,
+      role: 'trader',
+      promptsUsed: 0,
+      isSimpleMode: false,
       wsStatus: 'DISCONNECTED',
+      
+      syncSubscription: async (planId) => {
+        const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        try {
+          const res = await fetch(`${baseUrl}/api/auth/paddle-sync`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${get().token}` 
+            },
+            body: JSON.stringify({ role: planId })
+          });
+          const data = await res.json();
+          if (data.token && data.role) {
+            set({ role: data.role, token: data.token });
+          }
+        } catch (e) {
+          console.error('[SYNC] Failed to sync subscription', e);
+        }
+      },
       assets: {}, // { 'BTC-USD': { score: 50, flowBias: 'NEUTRAL', kellySize: 10, ... } }
       
+      // --- Execution State ---
+      executionMode: 'PAPER',
+
+      toggleSimpleMode: () => set((state) => ({ isSimpleMode: !state.isSimpleMode })),
+
       // --- Paper Trading State ---
       activePaperTrades: [],
       closedPaperTrades: [],
       
       // --- Audit State ---
       promptLogs: [],
-      
+      aiSignals: [],
+
+
       initAuditData: async () => {
         try {
           const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -25,7 +56,8 @@ const useGhostStore = create(
             set({
               activePaperTrades: data.activePaperTrades || [],
               closedPaperTrades: data.closedPaperTrades || [],
-              promptLogs: data.promptLogs || []
+              promptLogs: data.promptLogs || [],
+              aiSignals: data.aiSignals || []
             });
           }
         } catch (e) {
@@ -34,28 +66,41 @@ const useGhostStore = create(
       },
 
       executeTrade: async (tradeData) => {
-        const newTrade = {
-          ...tradeData,
-          id: `trade_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          status: 'OPEN',
-          executedAt: new Date().toISOString()
-        };
-        
-        // Optimistic update
-        set((state) => ({
-          activePaperTrades: [...state.activePaperTrades, newTrade]
-        }));
-        
-        // Sync to backend
+        const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         try {
-          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-          await fetch(`${baseUrl}/api/audit/trade`, {
+          const res = await fetch(`${baseUrl}/api/execution/trade`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newTrade)
+            body: JSON.stringify({
+              asset: tradeData.asset,
+              side: tradeData.side || 'BUY',
+              entryPrice: tradeData.entryPrice,
+              stopLoss: tradeData.stopLoss,
+              takeProfit: tradeData.takeProfit,
+              accountBalance: 100000,
+              regime: tradeData.regime || 'TRENDING'
+            })
           });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            const newTrade = {
+              ...tradeData,
+              id: data.tradeId || `trade_${Date.now()}`,
+              status: 'OPEN',
+              mode: data.mode,
+              quantity: data.quantity,
+              executedAt: new Date().toISOString()
+            };
+            set((state) => ({
+              activePaperTrades: [...state.activePaperTrades, newTrade]
+            }));
+            return { success: true, data };
+          }
+          return { success: false, reason: data.reason || data.error };
         } catch (e) {
-          console.error("Failed to sync trade to DB:", e);
+          console.error("Failed to execute trade via engine:", e);
+          return { success: false, reason: e.message };
         }
       },
 
@@ -129,7 +174,7 @@ const useGhostStore = create(
           const data = await res.json();
           
           if (res.ok && data.token) {
-            set({ isAuthenticated: true, token: data.token });
+            set({ isAuthenticated: true, token: data.token, email: data.email, role: data.role || 'trader', promptsUsed: data.promptsUsed || 0 });
             get().connectWebSocket(data.token);
             get().initAuditData(); // Fetch global DB on login
             return { success: true, message: 'Authentication successful.' };
@@ -142,7 +187,7 @@ const useGhostStore = create(
         }
       },
 
-      connectWebSocket: (tokenArg) => {
+      connectWebSocket: (tokenArg, retryCount = 0) => {
         const token = tokenArg || get().token;
         if (!token) {
           console.warn('[WS] No token available for WebSocket connection');
@@ -159,10 +204,12 @@ const useGhostStore = create(
         ws.onopen = () => set({ wsStatus: 'CONNECTED' });
         ws.onclose = () => {
           set({ wsStatus: 'DISCONNECTED' });
-          // Reconnect logic
+          // Exponential backoff reconnect logic (max 30 seconds)
+          const backoff = Math.min(1000 * Math.pow(2, retryCount), 30000);
+          console.log(`[WS] Disconnected. Reconnecting in ${backoff/1000}s...`);
           setTimeout(() => {
-            if (get().isAuthenticated) get().connectWebSocket(get().token);
-          }, 2000);
+            if (get().isAuthenticated) get().connectWebSocket(get().token, retryCount + 1);
+          }, backoff);
         };
         
         ws.onmessage = (event) => {
@@ -208,27 +255,40 @@ const useGhostStore = create(
 
         const aiMessageId = Date.now();
         set((state) => ({
-          chatHistory: [...state.chatHistory, { id: aiMessageId, role: 'ai', content: '' }]
+          chatHistory: [...state.chatHistory, { id: aiMessageId, role: 'ai', content: '', isGenerating: true }]
         }));
 
         const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/chat/stream';
+        const token = get().token;
+        const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/chat/stream${token ? `?token=${token}` : ''}`;
         
         const chatWs = new WebSocket(wsUrl);
         let accumulatedContent = '';
+        let streamBuffer = ''; // Buffer for broken JSON chunks
 
         chatWs.onopen = () => {
           chatWs.send(JSON.stringify({ 
              type: 'START_ANALYSIS', 
              prompt: text, 
              image: imageBase64,
-             language: 'English' 
+             language: 'English',
+             isSimpleMode: get().isSimpleMode
           }));
         };
 
         chatWs.onmessage = (event) => {
+          streamBuffer += event.data;
+          let data;
+          
           try {
-            const data = JSON.parse(event.data);
+            data = JSON.parse(streamBuffer);
+            streamBuffer = ''; // Clear buffer on successful parse
+          } catch (e) {
+            // Incomplete JSON chunk, wait for the next message to complete it
+            return;
+          }
+          
+          try {
             if (data.status === 'update') {
                accumulatedContent += data.text;
                set((state) => ({
@@ -245,6 +305,12 @@ const useGhostStore = create(
                }));
             } else if (data.status === 'complete') {
                chatWs.close();
+               set(state => ({ 
+                 promptsUsed: state.promptsUsed + 1,
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, isGenerating: false } : msg
+                 )
+               }));
                
                const finalMessage = get().chatHistory.find(m => m.id === aiMessageId);
                const newPromptLog = {
@@ -252,7 +318,8 @@ const useGhostStore = create(
                  timestamp: new Date().toISOString(),
                  prompt: text,
                  resultType: finalMessage.uiComponent === 'TRADE_CARD' ? 'TRADE_CARD' : 'TEXT',
-                 aiOutput: finalMessage.content
+                 aiOutput: finalMessage.content,
+                 priceAtTime: data.priceAtTime || null
                };
                set(state => ({ promptLogs: [...state.promptLogs, newPromptLog] }));
                
@@ -262,10 +329,21 @@ const useGhostStore = create(
                  body: JSON.stringify(newPromptLog)
                }).catch(e => console.error("Failed to sync prompt to DB:", e));
             } else if (data.status === 'error') {
+               if (data.message === 'FREE_TRIAL_EXCEEDED') {
+                 set(state => ({ 
+                   promptsUsed: 3, 
+                   isThinking: false,
+                   chatHistory: state.chatHistory.map(msg => 
+                      msg.id === aiMessageId ? { ...msg, isGenerating: false } : msg
+                   )
+                 }));
+                 chatWs.close();
+                 return;
+               }
                accumulatedContent += `\n\n[SYSTEM ERROR] ${data.message}`;
                set((state) => ({
                  chatHistory: state.chatHistory.map(msg => 
-                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent } : msg
+                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent, isGenerating: false } : msg
                  ),
                  isThinking: false
                }));
@@ -279,7 +357,7 @@ const useGhostStore = create(
         chatWs.onerror = () => {
            set((state) => ({
                  chatHistory: state.chatHistory.map(msg => 
-                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent + "\n\n[SYSTEM ERROR] Failed to connect to analysis engine." } : msg
+                    msg.id === aiMessageId ? { ...msg, content: accumulatedContent + "\n\n[SYSTEM ERROR] Failed to connect to analysis engine.", isGenerating: false } : msg
                  ),
                  isThinking: false
            }));
@@ -287,7 +365,7 @@ const useGhostStore = create(
       },
       
       logout: () => {
-        set({ isAuthenticated: false, token: null, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [], activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
+        set({ isAuthenticated: false, token: null, email: null, role: 'trader', promptsUsed: 0, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [], activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
       }
     }),
     {
@@ -296,6 +374,10 @@ const useGhostStore = create(
         // Only persist auth credentials — all other state is fetched fresh from DB
         isAuthenticated: state.isAuthenticated,
         token: state.token,
+        email: state.email,
+        role: state.role,
+        promptsUsed: state.promptsUsed,
+        isSimpleMode: state.isSimpleMode
       }),
     }
   )

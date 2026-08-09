@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe } from 'lucide-react';
+import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe, BookOpen } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
@@ -25,7 +25,7 @@ export default function PromptInputBar({ onSend, disabled }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   
-  const { assets } = useGhostStore();
+  const { assets, isSimpleMode, toggleSimpleMode } = useGhostStore();
   
   // Filter activeTickers based on selected market
   let activeTickers = Object.keys(assets);
@@ -150,6 +150,9 @@ export default function PromptInputBar({ onSend, disabled }) {
           <div className="bolt-left-actions">
             <button type="button" onClick={handleAttachClick} className="bolt-icon-btn round-bg" title="Attach file" disabled={disabled}>
               <Plus size={16} strokeWidth={2.5} />
+            </button>
+            <button type="button" onClick={toggleSimpleMode} className="bolt-icon-btn round-bg" title={isSimpleMode ? "Switch to Pro Mode" : "Switch to Learning Mode"} disabled={disabled} style={{ color: isSimpleMode ? '#facc15' : '#38bdf8' }}>
+              {isSimpleMode ? <BookOpen size={16} strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} />}
             </button>
             <div className="market-dropdown-container" ref={dropdownRef}>
               <div className="bolt-model-selector" onClick={() => setIsMarketDropdownOpen(!isMarketDropdownOpen)}>

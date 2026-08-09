@@ -31,17 +31,17 @@ const CRYPTO_ALIAS_MAP = {
   'ADA':    'ADA-USD',
   'AVAX':   'AVAX-USD',
   'LINK':   'LINK-USD',
-  'MATIC':  'MATIC-USD',
+  'MATIC':  'POL-USD',
   'LTC':    'LTC-USD',
   'DOT':    'DOT-USD',
-  'UNI':    'UNI-USD',
+  'UNI':    'UNI7083-USD',
   'ATOM':   'ATOM-USD',
   'NEAR':   'NEAR-USD',
-  'APT':    'APT-USD',
+  'APT':    'APT21794-USD',
   'ARB':    'ARB-USD',
   'OP':     'OP-USD',
   'SUI':    'SUI-USD',
-  'PEPE':   'PEPE-USD',
+  'PEPE':   'PEPE24478-USD',
 };
 
 /**

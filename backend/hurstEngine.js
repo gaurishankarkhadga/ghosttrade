@@ -182,8 +182,8 @@ function olsRegression(x, y) {
 
 function computeHurstCI(h, n) {
   // Asymptotic standard error approximation for Hurst from regression
-  // SE ≈ 0.5 / sqrt(log(n))  (conservative estimate)
-  const se = 0.5 / Math.sqrt(Math.log(n));
+  // SE ≈ 1 / sqrt(N)
+  const se = 1 / Math.sqrt(n);
   const z95 = 1.96;
   return {
     lower: Math.max(0, h - z95 * se),

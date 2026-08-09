@@ -15,7 +15,7 @@ import { fetchAssetSentiment } from './sentimentEngine.js';
 import { calculateRotationImpacts, SECTOR_MAP } from './correlationEngine.js';
 import { sendDiscordSignal } from './discordEngine.js';
 import { detectPatterns } from './patternEngine.js';
-import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_NSE_WATCHLIST } from './sharedConfig.js';
+import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST } from './sharedConfig.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
 import { getDb } from './mongoConfig.js';
 import { canOpenNewTrade } from './riskControlEngine.js';

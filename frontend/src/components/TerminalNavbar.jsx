@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Settings, List, LogOut, Activity, BarChart2, Terminal } from 'lucide-react';
+import { User, Settings, List, LogOut, Activity, BarChart2, Terminal, Zap, ShieldCheck } from 'lucide-react';
+import useGhostStore from '../store/ghostStore';
+import { PricingModal } from './PricingModal';
 import './TerminalNavbar.css';
 
 export default function TerminalNavbar({ isConnected, onLockTerminal }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const { email, role, syncSubscription } = useGhostStore();
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,8 +29,15 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
 
   return (
     <>
-      {/* DESKTOP VIEW: Old Bottom Left Dock */}
+      <PricingModal isOpen={isPricingModalOpen} onClose={() => setIsPricingModalOpen(false)} userEmail={email} onSuccess={(planId) => syncSubscription(planId)} />
+
+      {/* DESKTOP VIEW: Bottom Left Dock */}
       <aside className="terminal-bottom-controls desktop-only">
+        <button onClick={() => setIsPricingModalOpen(true)} className="icon-action-btn" style={{ color: '#00e699' }}>
+          <ShieldCheck size={16} />
+          <span className="dock-tooltip">Pro Membership / Plans</span>
+        </button>
+
         {/* 1. Performance Button */}
         {isAuditPage ? (
           <button onClick={() => navigate('/terminal')} className="icon-action-btn">
@@ -34,7 +45,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
             <span className="dock-tooltip">Return to Terminal</span>
           </button>
         ) : (
-          <button onClick={() => navigate('/audit')} className="icon-action-btn pulse-glow">
+          <button onClick={() => navigate('/audit')} className="icon-action-btn">
             <BarChart2 size={16} />
             <span className="dock-tooltip">Performance Audit</span>
           </button>
@@ -90,6 +101,10 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
+                <button className="dropdown-item" onClick={() => { setIsPricingModalOpen(true); setIsDropdownOpen(false); }}>
+                  <ShieldCheck size={16} color="#00e699" />
+                  <span style={{ color: '#00e699', fontWeight: 600 }}>Pro Membership / Plans</span>
+                </button>
                 <button className="dropdown-item">
                   <Settings size={16} />
                   <span>Account Settings</span>

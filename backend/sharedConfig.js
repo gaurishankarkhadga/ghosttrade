@@ -12,9 +12,9 @@ export const DEFAULT_CRYPTO_WATCHLIST = [
   'APT-USD', 'ARB-USD', 'OP-USD', 'SUI-USD', 'PEPE-USD'
 ];
 
-// Indian Market NSE Watchlist
-export const DEFAULT_NSE_WATCHLIST = [
-  'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'TATAMOTORS.NS', '^NSEI'
+// Global Tech Stocks Watchlist (Replaces NSE for Global SaaS)
+export const DEFAULT_GLOBAL_STOCKS_WATCHLIST = [
+  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META'
 ];
 
 export function constructSetupId(pattern, regime, closes) {

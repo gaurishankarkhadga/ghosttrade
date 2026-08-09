@@ -21,20 +21,39 @@ export function computeStopLossTakeProfit(candles, side, atrMultiplier = 1.5, rr
   const normalizedSide = (side || '').toUpperCase() === 'BUY' ? 'LONG' : (side || '').toUpperCase() === 'SELL' ? 'SHORT' : (side || '').toUpperCase();
 
   // Anchor LONG stops below the structural low, SHORT stops above the structural high
-  const stopLoss = normalizedSide === 'LONG' ? localLow - slDistance
+  let stopLoss = normalizedSide === 'LONG' ? localLow - slDistance
                  : normalizedSide === 'SHORT' ? localHigh + slDistance
                  : currentPrice;
 
+  // Enforce zero bound
+  if (stopLoss <= 0) stopLoss = 0.0001;
+
   // Take Profit is anchored to Entry Price (Close) with actual risk distance to enforce RRR
   const actualRisk = Math.abs(currentPrice - stopLoss);
-  const takeProfit = normalizedSide === 'LONG' ? currentPrice + (actualRisk * rrr)
+  
+  // TP1: Highly probable first target (1:1 RRR)
+  let takeProfit1 = normalizedSide === 'LONG' ? currentPrice + (actualRisk * 1.0)
+                   : normalizedSide === 'SHORT' ? currentPrice - (actualRisk * 1.0)
+                   : currentPrice;
+                   
+  // TP2: Max trend target (e.g. 1:2 RRR)
+  let takeProfit2 = normalizedSide === 'LONG' ? currentPrice + (actualRisk * rrr)
                    : normalizedSide === 'SHORT' ? currentPrice - (actualRisk * rrr)
                    : currentPrice;
 
+  // Enforce zero bound
+  if (takeProfit1 <= 0) takeProfit1 = 0.0001;
+  if (takeProfit2 <= 0) takeProfit2 = 0.0001;
+
+  // Preserve 'takeProfit' field mapped to TP2 for legacy compatibility, but expose tp1 and tp2.
   return {
     stopLoss,
-    takeProfit,
+    takeProfit: takeProfit2, // default fallback
+    takeProfit1,
+    takeProfit2,
     slDistance: actualRisk,
+    tp1Distance: actualRisk * 1.0,
+    tp2Distance: actualRisk * rrr,
     tpDistance: actualRisk * rrr,
     atr: currentAtr
   };

@@ -6,6 +6,8 @@
 
 import { getDb } from './mongoConfig.js';
 import { fetchOHLCV, getLogReturns } from './dataFetcher.js';
+import { toYahooSymbol } from './marketRouter.js';
+import { getLiveDepthFromMemory } from './websocketEngine.js';
 
 const RISK_CONFIG = {
   daily_max_loss_pct: 5,        // block ALL new trades once today's realized+unrealized PnL <= -5%
@@ -69,6 +71,47 @@ export function checkBlackSwanLiquidityCircuitBreaker(spreadPct = 0.05, depthDep
 }
 
 /**
+ * Derives real-time Black Swan metrics from the Binance WebSocket memory cache.
+ * Computes bid-ask spread % and top-5 depth depletion % from live order book data.
+ *
+ * @param {string} ticker - Asset ticker (e.g. 'BTC-USD')
+ * @returns {{ spreadPct: number, depthDepletionPct: number, hasLiveData: boolean }}
+ */
+function computeBlackSwanMetrics(ticker) {
+  try {
+    const depth = getLiveDepthFromMemory(ticker);
+    if (depth.error || !depth.bids || !depth.asks || depth.bids.length === 0 || depth.asks.length === 0) {
+      return { spreadPct: 0, depthDepletionPct: 0, hasLiveData: false };
+    }
+
+    // Best bid = highest bid, best ask = lowest ask
+    // Binance sends bids sorted descending, asks sorted ascending
+    const bestBid = parseFloat(depth.bids[0][0]);
+    const bestAsk = parseFloat(depth.asks[0][0]);
+    const midPrice = (bestBid + bestAsk) / 2;
+
+    if (midPrice === 0) return { spreadPct: 0, depthDepletionPct: 0, hasLiveData: false };
+
+    // Spread as % of mid price
+    const spreadPct = ((bestAsk - bestBid) / midPrice) * 100;
+
+    // Depth depletion: compare top-5 bid liquidity vs top-5 ask liquidity
+    // High imbalance (>50% ask depletion relative to bids) = sell-side collapse
+    const topBidQty = depth.bids.slice(0, 5).reduce((s, b) => s + parseFloat(b[1]), 0);
+    const topAskQty = depth.asks.slice(0, 5).reduce((s, a) => s + parseFloat(a[1]), 0);
+    const totalQty = topBidQty + topAskQty;
+    const depthDepletionPct = totalQty > 0
+      ? (Math.abs(topBidQty - topAskQty) / totalQty) * 100
+      : 0;
+
+    return { spreadPct, depthDepletionPct, hasLiveData: true };
+  } catch (err) {
+    // WebSocket not connected (e.g. stocks, or cloud IP block) — safe fallback
+    return { spreadPct: 0, depthDepletionPct: 0, hasLiveData: false };
+  }
+}
+
+/**
  * Checks portfolio-level risk constraints before allowing a new trade.
  * @returns { allowed: boolean, reason?: string, ... }
  */
@@ -76,6 +119,24 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide) {
   try {
     const db = await getDb();
     const tradesColl = db.collection('paper_trades');
+
+    // CHECK 0 — Black Swan Liquidity Circuit Breaker (live Binance depth)
+    // Only meaningful for crypto assets with live WebSocket data
+    const blackSwanMetrics = computeBlackSwanMetrics(newTradeAsset);
+    if (blackSwanMetrics.hasLiveData) {
+      const blackSwanCheck = checkBlackSwanLiquidityCircuitBreaker(
+        blackSwanMetrics.spreadPct,
+        blackSwanMetrics.depthDepletionPct
+      );
+      if (blackSwanCheck.triggered) {
+        console.warn(`[RISK CONTROL] 🚨 BLACK SWAN TRIGGERED for ${newTradeAsset}: ${blackSwanCheck.detail}`);
+        return {
+          allowed: false,
+          reason: blackSwanCheck.reason,
+          detail: blackSwanCheck.detail
+        };
+      }
+    }
 
     // CHECK 1 — Max Concurrent Trades Limit
     const openTrades = await tradesColl.find({ status: 'OPEN' }).toArray();
@@ -119,12 +180,12 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide) {
 
     // CHECK 3 — Dynamic Covariance Matrix (Correlation Blocking)
     if (openTrades.length > 0) {
-      const newAssetData = await fetchOHLCV(newTradeAsset, RISK_CONFIG.correlation_lookback_bars);
+      const newAssetData = await fetchOHLCV(toYahooSymbol(newTradeAsset), RISK_CONFIG.correlation_lookback_bars);
       if (!newAssetData.error && newAssetData.bars) {
          const newReturns = getLogReturns(newAssetData.bars);
          
          for (const openTrade of openTrades) {
-            const openAssetData = await fetchOHLCV(openTrade.asset, RISK_CONFIG.correlation_lookback_bars);
+            const openAssetData = await fetchOHLCV(toYahooSymbol(openTrade.asset), RISK_CONFIG.correlation_lookback_bars);
             if (!openAssetData.error && openAssetData.bars) {
                const openReturns = getLogReturns(openAssetData.bars);
                

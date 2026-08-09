@@ -4,6 +4,8 @@
 // and Institutional Liquidity Walls (Buy/Sell depth clusters).
 // =====================================================
 
+import { fetchOHLCV } from './dataFetcher.js';
+
 /**
  * Checks if a ticker symbol is a supported Binance crypto asset.
  * @param {string} ticker
@@ -127,31 +129,149 @@ export function getOrderFlowMetrics(candles) {
 }
 
 // =====================================================
-// BACKWARD COMPATIBILITY WRAPPERS
+// LIVE DATA WRAPPERS — Prioritises Binance AggTrade OFI
+// Tier 1: Binance WebSocket trade-level OFI (crypto, live)
+// Tier 2: Candle-based OFI approximation (fallback / stocks)
 // =====================================================
 
+/**
+ * Computes true trade-level Order Flow Imbalance from Binance AggTrade data.
+ * Each trade is marked as buyer-initiated (taker buy) or seller-initiated (taker sell).
+ * This is the highest-quality OFI source — identical to what institutional HFT desks use.
+ *
+ * @param {string} ticker - Asset ticker matching liveMemoryState.aggTrades keys (e.g. 'BTC-USD')
+ * @param {number} windowMs - Lookback window in milliseconds (default: 5 minutes)
+ * @returns {{ ofi, netDelta, flowBias, cumulativeDelta, source, tradeCount } | null}
+ */
+export function calculateLiveOFIFromAggTrades(ticker, windowMs = 5 * 60 * 1000) {
+  try {
+    // Lazy import to avoid circular dependency — websocketEngine imports sharedConfig only
+    // Using dynamic in-module access instead
+    const { liveMemoryState } = await_workaround_getLiveState();
+    if (!liveMemoryState) return null;
+
+    const trades = liveMemoryState.aggTrades?.[ticker];
+    if (!trades || trades.length === 0) return null;
+
+    const now = Date.now();
+    const cutoff = now - windowMs;
+
+    // Filter to the lookback window
+    const recentTrades = trades.filter(t => t.time >= cutoff);
+    if (recentTrades.length < 10) return null; // Need minimum sample
+
+    let buyVolume = 0;
+    let sellVolume = 0;
+    let totalVolume = 0;
+
+    for (const trade of recentTrades) {
+      const qty = trade.qty || 0;
+      totalVolume += qty;
+      // In Binance AggTrade: m=true means the buyer is the market maker → SELL aggression
+      // m=false means buyer is the taker → BUY aggression
+      if (trade.maker === false) {
+        buyVolume += qty;
+      } else {
+        sellVolume += qty;
+      }
+    }
+
+    if (totalVolume === 0) return null;
+
+    const netDelta = buyVolume - sellVolume;
+    // OFI normalised to [-1, +1]
+    const ofi = Math.max(-1.0, Math.min(1.0, netDelta / totalVolume));
+
+    let flowBias = 'NEUTRAL';
+    if (ofi > 0.35)       flowBias = 'HEAVY_BUY_AGGRESSION';
+    else if (ofi > 0.15)  flowBias = 'MODERATE_BUY_AGGRESSION';
+    else if (ofi < -0.35) flowBias = 'HEAVY_SELL_AGGRESSION';
+    else if (ofi < -0.15) flowBias = 'MODERATE_SELL_AGGRESSION';
+
+    return {
+      ofi:             parseFloat(ofi.toFixed(4)),
+      netDelta:        Math.round(netDelta),
+      flowBias,
+      cumulativeDelta: Math.round(netDelta),
+      buyVolumeRatio:  parseFloat((buyVolume / totalVolume).toFixed(4)),
+      deltaPercent:    parseFloat((ofi * 100).toFixed(1)),
+      source:          'BINANCE_AGGTRADE',
+      tradeCount:      recentTrades.length,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+// Synchronous accessor to avoid circular ESM import of websocketEngine
+// websocketEngine exports liveMemoryState as a plain object reference — safe to read here.
+function await_workaround_getLiveState() {
+  try {
+    // Dynamic require-style import is not possible in pure ESM for synchronous use.
+    // Instead we access the global that websocketEngine attaches to globalThis.
+    return { liveMemoryState: globalThis.__ghostLiveMemory || null };
+  } catch (_) {
+    return { liveMemoryState: null };
+  }
+}
+
+/**
+ * Fetches the best available OFI for a ticker.
+ * Priority: Binance AggTrade (trade-level) → Candle-based approximation
+ */
 export async function fetchOrderFlow(ticker, delayMs = 0) {
-  return {
-    available: true,
-    deltaPercent: 12.5,
-    buyVolumeRatio: 0.58,
-    flowBias: 'MODERATE_BUY_AGGRESSION'
-  };
+  try {
+    // Tier 1: Try live Binance trade-level OFI first (crypto only, WebSocket must be running)
+    const liveOFI = calculateLiveOFIFromAggTrades(ticker);
+    if (liveOFI) {
+      console.log(`[OFI] Using Binance AggTrade OFI for ${ticker} (${liveOFI.tradeCount} trades, source: TIER_1)`);
+      return { available: true, ...liveOFI };
+    }
+
+    // Tier 2: Fall back to candle-based OFI approximation (stocks + when WS offline)
+    const data = await fetchOHLCV(ticker, 50);
+    if (data.error || !data.bars || data.bars.length < 5) {
+      return { available: false, ofi: 0, netDelta: 0, flowBias: 'NEUTRAL', cumulativeDelta: 0, source: 'UNAVAILABLE' };
+    }
+    const result = calculateOrderFlowImbalance(data.bars, 14);
+    console.log(`[OFI] Using candle-based OFI for ${ticker} (source: TIER_2_CANDLE)`);
+    return {
+      available: true,
+      ...result,
+      buyVolumeRatio: (result.ofi + 1) / 2,
+      deltaPercent:   parseFloat((result.ofi * 100).toFixed(1)),
+      source:         'CANDLE_APPROXIMATION',
+    };
+  } catch (err) {
+    console.warn(`[OFI] Live order flow fetch failed for ${ticker}:`, err.message);
+    return { available: false, ofi: 0, netDelta: 0, flowBias: 'NEUTRAL', cumulativeDelta: 0, source: 'ERROR' };
+  }
 }
 
 export async function fetchOrderBookDepth(ticker, delayMs = 0) {
-  return {
-    available: true,
-    buyWalls: [],
-    sellWalls: [],
-    wallStrength: 'MODERATE'
-  };
+  try {
+    const data = await fetchOHLCV(ticker, 50);
+    if (data.error || !data.bars || data.bars.length < 20) {
+      return { available: false, buyWall: null, sellWall: null, wallStrength: 'INSUFFICIENT_DATA' };
+    }
+    const walls = detectLiquidityWalls(data.bars);
+    return { available: true, ...walls, buyWalls: walls.buyWall ? [walls.buyWall] : [], sellWalls: walls.sellWall ? [walls.sellWall] : [] };
+  } catch (err) {
+    console.warn(`[OFI] Live order book depth failed for ${ticker}:`, err.message);
+    return { available: false, buyWalls: [], sellWalls: [], wallStrength: 'UNKNOWN' };
+  }
 }
 
 export function formatOrderFlowContext(flowData, depthData) {
   if (!flowData && !depthData) return 'Order flow telemetry unavailable.';
-  let ctx = `• Flow Bias: ${flowData?.flowBias || 'NEUTRAL'}\n`;
+  const sourceLabel = flowData?.source === 'BINANCE_AGGTRADE' ? ' [LIVE TRADE DATA]' : ' [CANDLE ESTIMATE]';
+  let ctx = `• Flow Bias: ${flowData?.flowBias || 'NEUTRAL'}${sourceLabel}`;
+  if (flowData?.ofi !== undefined) ctx += ` (OFI: ${flowData.ofi.toFixed ? flowData.ofi.toFixed(3) : flowData.ofi})`;
+  ctx += '\n';
+  if (flowData?.tradeCount) ctx += `• Trade Sample: ${flowData.tradeCount} recent trades\n`;
+  if (flowData?.netDelta) ctx += `• Net Delta Volume: ${flowData.netDelta}\n`;
   if (depthData?.buyWalls?.length) ctx += `• Institutional BUY Walls: ${depthData.buyWalls.join(', ')}\n`;
   if (depthData?.sellWalls?.length) ctx += `• Institutional SELL Walls: ${depthData.sellWalls.join(', ')}\n`;
   return ctx;
 }
+

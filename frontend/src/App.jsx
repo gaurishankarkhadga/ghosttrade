@@ -8,9 +8,11 @@ import TerminalNavbar from './components/TerminalNavbar';
 import AiChatInterface from './components/AiChatInterface';
 import PerformanceDashboard from './components/PerformanceDashboard';
 
+import { PricingModal } from './components/PricingModal';
+
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
-  const { isAuthenticated, wsStatus, logout } = useGhostStore();
+  const { isAuthenticated, wsStatus, logout, role, promptsUsed, email, syncSubscription } = useGhostStore();
   const isConnected = wsStatus === 'CONNECTED';
   const location = useLocation();
 
@@ -18,13 +20,25 @@ const ProtectedLayout = ({ children }) => {
     return <Navigate to="/connect" state={{ from: location }} replace />;
   }
 
+  const isTrialExpired = role === 'trader' && promptsUsed >= 3;
+
   return (
     <div className="app-container">
       <TerminalNavbar
         isConnected={isConnected}
         onLockTerminal={() => logout()}
       />
-      <main className="main-workspace">
+      
+      {/* Forced Paywall for Trial Expiry */}
+      <PricingModal 
+        isOpen={isTrialExpired} 
+        onClose={() => {}} // Cannot close until upgraded
+        onSuccess={(planId) => syncSubscription(planId)}
+        userEmail={email}
+        forceLock={isTrialExpired}
+      />
+
+      <main className="main-workspace" style={{ filter: isTrialExpired ? 'blur(5px)' : 'none', pointerEvents: isTrialExpired ? 'none' : 'auto' }}>
         {children}
       </main>
     </div>

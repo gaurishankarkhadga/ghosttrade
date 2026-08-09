@@ -1,0 +1,103 @@
+🚀 STARTING 5-ASSET PAPER TRADE END-TO-END VALIDATION
+
+[MONGO] Connected to ghosttrade cluster
+✅ Database Connected
+
+[EXECUTION MANAGER] Spawning new Execution Engine for user: ai-tester@ghosttrade.com
+========================================
+🔍 Analyzing BTC for Paper Trade...
+[DATA] Fetched 300 bars for BTC-USD
+[HURST] TRENDING | R/S=0.581 DFA=0.531 Mean=0.556 Stable=true
+[REGIME] TRENDING | Heuristic Score=5.8% | Actionable=false
+🛡️ SHIELD MODE: Composite score 43/100 below minimum threshold (45)
+   (Signal Engine blocked live trade. Formulating FORCED trade for pipeline validation...)
+   Executing Paper Trade internally via Execution Engine...
+
+⚡ [EXECUTION] Processing BUY setup on BTC @ ₹64781.98828125 [Mode: PAPER]
+📊 [KELLY SIZING] Allocation: ₹15000.00 (15% of balance) ➔ Qty: 1 shares
+📝 [PAPER TRADING] Simulating execution of 1 shares of BTC @ ₹64781.98828125
+✅ Paper Trade Executed Successfully!
+   Trade ID: GT_1786256515977
+   Mode: PAPER
+   Side: BUY
+   Quantity Allocated: 1.0000
+✅ Verified in MongoDB: Trade GT_1786256515977 is securely stored in 'paper_trades' collection with status OPEN.
+========================================
+
+========================================
+🔍 Analyzing ETH for Paper Trade...
+[DATA] Fetched 300 bars for ETH-USD
+[HURST] RANDOM_WALK | R/S=0.569 DFA=0.508 Mean=0.539 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+🛡️ SHIELD MODE: Market is in Random Walk — no systematic edge exists
+   (Signal Engine blocked live trade. Formulating FORCED trade for pipeline validation...)
+   Executing Paper Trade internally via Execution Engine...
+
+⚡ [EXECUTION] Processing BUY setup on ETH @ ₹1915.4200439453125 [Mode: PAPER]
+[DATA] Fetched 200 bars for ETH-USD
+[DATA] Fetched 200 bars for BTC-USD
+✅ Paper Trade Executed Successfully!
+   Trade ID: undefined
+   Mode: undefined
+   Side: BUY
+❌ Execution Error: Cannot read properties of undefined (reading 'toFixed')
+========================================
+
+========================================
+🔍 Analyzing SOL for Paper Trade...
+[DATA] Fetched 300 bars for SOL-USD
+[HURST] TRENDING | R/S=0.611 DFA=0.607 Mean=0.609 Stable=true
+[REGIME] TRENDING | Heuristic Score=58.7% | Actionable=false
+📈 Signal ACTIVE: BULLISH. Formulating Trade...
+   Executing Paper Trade internally via Execution Engine...
+
+⚡ [EXECUTION] Processing BUY setup on SOL @ ₹76.08000183105469 [Mode: PAPER]
+[DATA] Fetched 200 bars for SOL-USD
+[DATA] Cache hit for BTC-USD
+✅ Paper Trade Executed Successfully!
+   Trade ID: undefined
+   Mode: undefined
+   Side: BUY
+❌ Execution Error: Cannot read properties of undefined (reading 'toFixed')
+========================================
+
+========================================
+🔍 Analyzing XRP for Paper Trade...
+[DATA] Fetched 300 bars for XRP-USD
+[HURST] RANDOM_WALK | R/S=0.550 DFA=0.463 Mean=0.506 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+🛡️ SHIELD MODE: Hurst 95% CI [0.393, 0.620] spans all 3 regimes — no statistical edge detectable
+   (Signal Engine blocked live trade. Formulating FORCED trade for pipeline validation...)
+   Executing Paper Trade internally via Execution Engine...
+
+⚡ [EXECUTION] Processing BUY setup on XRP @ ₹1.038100004196167 [Mode: PAPER]
+[DATA] Fetched 200 bars for XRP-USD
+[DATA] Cache hit for BTC-USD
+✅ Paper Trade Executed Successfully!
+   Trade ID: undefined
+   Mode: undefined
+   Side: BUY
+❌ Execution Error: Cannot read properties of undefined (reading 'toFixed')
+========================================
+
+========================================
+🔍 Analyzing DOGE for Paper Trade...
+[DATA] Fetched 300 bars for DOGE-USD
+[HURST] MEAN_REVERTING | R/S=0.478 DFA=0.398 Mean=0.438 Stable=true
+[REGIME] MEAN_REVERTING | Heuristic Score=12.1% | Actionable=false
+🛡️ SHIELD MODE: Composite score 36/100 below minimum threshold (45)
+   (Signal Engine blocked live trade. Formulating FORCED trade for pipeline validation...)
+   Executing Paper Trade internally via Execution Engine...
+
+⚡ [EXECUTION] Processing BUY setup on DOGE @ ₹0.07000000029802322 [Mode: PAPER]
+[DATA] Fetched 200 bars for DOGE-USD
+[DATA] Cache hit for BTC-USD
+✅ Paper Trade Executed Successfully!
+   Trade ID: undefined
+   Mode: undefined
+   Side: BUY
+❌ Execution Error: Cannot read properties of undefined (reading 'toFixed')
+========================================
+
+[MONGO] Connection closed
+🏁 VALIDATION COMPLETE.

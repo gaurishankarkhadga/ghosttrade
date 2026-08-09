@@ -1,0 +1,16 @@
+==================================================
+🔬 HONEST QUANTITATIVE BACKTEST (BASELINE VS PROPOSED)
+==================================================
+
+
+--------------------------------------------------
+Fetching 500 days of historical data for BTC-USD...
+❌ Not enough data for BTC-USD.
+
+--------------------------------------------------
+Fetching 500 days of historical data for ETH-USD...
+❌ Not enough data for ETH-USD.
+
+--------------------------------------------------
+Fetching 500 days of historical data for SOL-USD...
+❌ Not enough data for SOL-USD.

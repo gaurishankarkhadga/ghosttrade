@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import WebSocket from 'ws';
 
 // Phase 3 Imports
-import { fetchOHLCV, fetchMultiTimeframeOHLCV, getLogReturns, getClosePrices } from './dataFetcher.js';
+import { fetchOHLCV, fetchMultiTimeframeOHLCV, getLogReturns, getClosePrices, fetchLivePrice } from './dataFetcher.js';
 import { calculateHurst } from './hurstEngine.js';
 import { classifyRegime } from './regimeClassifier.js';
 import { getCalibratedConfidence } from './calibrationEngine.js';
@@ -28,6 +28,14 @@ import { fetchFuturesData, formatFuturesContext } from './openInterestEngine.js'
 import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from './macroEngine.js';
 import { predict5to10mHorizon } from './predictiveEngine.js';
 import { generateTradeLesson } from './educationalMentorEngine.js';
+import { generateSignal } from './signalGenerator.js';
+
+// =====================================================
+// SIGNAL COOLDOWN — Prevents duplicate signal spam
+// Same ticker can only generate a new signal every 15 min
+// =====================================================
+const SIGNAL_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+const lastSignalTime = new Map();
 
 const MODELS = [
   'models/gemini-2.5-pro',
@@ -66,7 +74,32 @@ CRITICAL MACRO RULE: You will be fed the current Macro Environment (RISK_ON / RI
 
 CRITICAL FORMAT RULE: DO NOT write paragraphs. Output EXACTLY the structure above. Calculate logical Target and Stop Loss prices based on chart volatility if not obvious. Do not say "Unknown".`;
 
-const USER_PROMPT = `Analyze this chart and output the strict institutional summary format exactly as requested. Keep it extremely sharp.`;
+const SIMPLE_SYSTEM_PROMPT = `You are a friendly, easy-to-understand AI trading assistant. 
+Explain the trade setup in simple English. Avoid overly complex technical jargon like MACD, RSI, or Hurst Exponent unless you explain what it means simply.
+
+If the image is NOT a trading chart, respond ONLY with: "INVALID INPUT — This is not a trading chart."
+
+If it IS a trading chart, output exactly this structure:
+
+PREDICTION VERDICT:
+BASE CASE: [BULLISH/BEARISH/NEUTRAL] [XX]%
+Timeframe: [Intraday / Swing]
+Current Price: [price]
+matched_setup_id: [hammer_trend_bull, doji_indecision, bullish_engulfing, bearish_engulfing, NONE]
+
+TRADE LEVELS:
+• Primary Target: [price]
+• Stop Loss: [price]
+• Invalidation Condition: [1 short sentence]
+
+SIMPLE REASONING:
+• [1 bullet point explaining the trend simply]
+• [1 bullet point explaining why buyers or sellers are in control]
+• [1 bullet point on risk]
+
+CRITICAL FORMAT RULE: Keep it friendly and simple. Output EXACTLY the structure above.`;
+
+const USER_PROMPT = `Analyze this chart and output the strict summary format exactly as requested.`;
 
 /**
  * Fast Phase 3 pass to extract ticker from image before main stream.
@@ -130,7 +163,7 @@ function extractTickerFromText(promptText) {
  * Text mode: User types a ticker/question, system fetches all data via API.
  */
 export async function handleGeminiConnection(clientWs, options = {}) {
-  const { prompt = '', language = 'English' } = options;
+  const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0 } = options;
   // Strip data URL prefix if present (frontend sends 'data:image/jpeg;base64,...')
   let imageBase64 = options.imageBase64 || null;
   if (imageBase64 && imageBase64.includes(',')) {
@@ -158,6 +191,9 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   let regimeData = null;
   let flowDataRef = null;
   let tf15mRef = null;
+  let tf1hRef = null;
+  let tf1dRef = null;
+  let currentPriceRef = null;
 
   if (ticker !== 'UNKNOWN') {
     // Phase 2-4: Fetch all required market data in parallel
@@ -178,7 +214,10 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       const tf15m = dataResult.timeframes['15m'];
       tf15mRef = tf15m;
       const tf1h = dataResult.timeframes['1h'];
+      tf1hRef = tf1h;
       const tf1d = dataResult.timeframes['1d'];
+      tf1dRef = tf1d;
+      currentPriceRef = tf1d && tf1d.length > 0 ? tf1d[tf1d.length - 1].close : null;
 
       const returns15m = getLogReturns(tf15m);
       const returns1h = getLogReturns(tf1h);
@@ -302,12 +341,13 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // Build final system prompt — adapt IMAGE GATE for text-only mode
+  const basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
   let finalSystemPrompt;
   if (isImageMode) {
-    finalSystemPrompt = SYSTEM_PROMPT + phase3Context + memoryBlock + translationRule;
+    finalSystemPrompt = basePromptTemplate + phase3Context + memoryBlock + translationRule;
   } else {
     // Text-only: replace IMAGE GATE with data analysis instructions
-    const textAdapted = SYSTEM_PROMPT.replace(
+    const textAdapted = basePromptTemplate.replace(
       /=== IMAGE GATE ===[\s\S]*?→ STOP\. Do not continue\./,
       `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full institutional rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
     );
@@ -323,7 +363,12 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     imageBase64, 
     userPrompt: prompt,
     flowData: flowDataRef,
-    tf15m: tf15mRef
+    tf15m: tf15mRef,
+    tf1h: tf1hRef,
+    candles1d: tf1dRef,
+    currentPrice: currentPriceRef,
+    promptsUsed: promptsUsed,
+    isSimpleMode: isSimpleMode
   });
 }
 
@@ -334,150 +379,125 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
 async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs) {
   try {
-    // If the AI flagged this as a non-chart, abort the pipeline immediately.
-    // There are no price levels or confidence metrics to analyze.
     if (fullText.includes('INVALID INPUT')) {
       console.log('[PHASE 3] Invalid input detected (not a chart). Aborting intercept.');
       return;
     }
 
-    const { ticker, hurstData, regimeData, flowData, tf15m } = p3Context;
+    const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt } = p3Context;
 
-    // === FIXED: Robust confidence extraction ===
-    // Priority: BASE CASE format > Probability: format > confidence fallback
-    const baseCaseMatch = fullText.match(/BASE\s*CASE[:\s]*(?:BULLISH|BEARISH)\s*(\d{1,3})%/i);
-    const probMatch = fullText.match(/Probability[:\s]*(\d{1,3})%/i);
-    const confMatch = fullText.match(/(?:confidence|conf\.?)\s*(?:of|at|:)?\s*(\d{1,3})%/i);
-    const rawConfidence = baseCaseMatch ? parseInt(baseCaseMatch[1])
-      : probMatch ? parseInt(probMatch[1])
-      : confMatch ? parseInt(confMatch[1])
-      : 50;
-
-    // === FIXED: Direction extraction scoped to Module 1 only ===
-    // Only scan the first ~2000 chars (Module 1 verdict area) to avoid
-    // counter-thesis (Module 11) contaminating direction classification
-    let direction = 'NEUTRAL';
-    const module1Text = fullText.substring(0, Math.min(fullText.length, 2000)).toLowerCase();
-    const baseCaseDirMatch = fullText.match(/BASE\s*CASE[:\s]*(BULLISH|BEARISH)/i);
-    if (baseCaseDirMatch) {
-      direction = baseCaseDirMatch[1].toUpperCase();
-    } else if (module1Text.includes('bullish') && !module1Text.includes('bearish')) {
-      direction = 'BULLISH';
-    } else if (module1Text.includes('bearish') && !module1Text.includes('bullish')) {
-      direction = 'BEARISH';
-    } else {
-      // Both mentioned in Module 1 — use probability comparison
-      const bullProbMatch = module1Text.match(/bullish\s*(\d{1,3})%/i);
-      const bearProbMatch = module1Text.match(/bearish\s*(\d{1,3})%/i);
-      const bp = bullProbMatch ? parseInt(bullProbMatch[1]) : 0;
-      const brp = bearProbMatch ? parseInt(bearProbMatch[1]) : 0;
-      direction = bp >= brp ? 'BULLISH' : 'BEARISH';
+    // ═══════════════════════════════════════════════════════
+    // DETERMINISTIC SIGNAL GENERATOR — Engine decides, not AI
+    // ═══════════════════════════════════════════════════════
+    let signal = null;
+    if (ticker && ticker !== 'UNKNOWN' && p3Context.candles1d && p3Context.candles1d.length >= 50) {
+      console.log(`[SIGNAL GEN] Running deterministic engine for ${ticker}...`);
+      const ofiSource = flowData?.source || 'CANDLE_APPROXIMATION';
+      signal = await generateSignal(ticker, p3Context.candles1d, { candles15m: tf15m, candles1h: tf1h, ofiSource });
+      console.log(`[SIGNAL GEN] ${ticker}: action=${signal.action} direction=${signal.direction} score=${signal.score}`);
     }
 
-    // === FIXED: Extract matched_setup_id and reject hallucinations ===
-    const setupMatch = fullText.match(/matched_setup_id[:\s]*([a-z_]+)/i);
-    const matched_setup_id = setupMatch ? setupMatch[1] : null;
+    // Use engine output if available, otherwise fall back to basic text parsing
+    const direction = signal?.direction || 'NEUTRAL';
+    const rawConfidence = signal?.score || 50;
+    const currentPrice = signal?.currentPrice || p3Context.currentPrice || await fetchLivePrice(ticker) || 0;
+    const primaryTarget = signal?.takeProfit || null;
+    const stopLoss = signal?.stopLoss || null;
+    const kellyResult = signal?.kelly || { action: 'TRADE', reason: 'Baseline heuristic', kellyF: 0.25, halfKelly: 0.125 };
+    const setupId = signal?.setupId || null;
+    const signalBlocked = signal ? signal.action === 'SHIELD_MODE' : true;
+    const blockedReason = signalBlocked ? (signal?.reason || 'Insufficient market data to generate a deterministic signal') : null;
 
-    let kellyResult = { action: 'SHIELD_MODE', reason: 'No setup ID found. Blocking trade.', kellyF: 0, halfKelly: 0 };
-    let primaryTarget = null, currentPrice = p3Context.currentPrice || null, stopLoss = null;
-
-    // Extract prices
-    const targetMatch = fullText.match(/Primary Target:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
-    if (targetMatch) {
-      primaryTarget = parseFloat(targetMatch[0].replace(/[^0-9.]/g, ''));
-    }
-    const stopMatch = fullText.match(/Stop Loss:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
-    if (stopMatch) {
-      stopLoss = parseFloat(stopMatch[0].replace(/[^0-9.]/g, ''));
-    }
-    const priceMatch = fullText.match(/Current Price:\s*\$?(?:[0-9,]*\.?[0-9]+)/i);
-    if (priceMatch) {
-      currentPrice = parseFloat(priceMatch[0].replace(/[^0-9.]/g, ''));
-    }
-
-    if (matched_setup_id && matched_setup_id !== 'NONE') {
-      const db = await getDb();
-      const stats = await db.collection('setup_stats').findOne({ 
-        setup_id: matched_setup_id, 
-        logic_version: CURRENT_LOGIC_VERSION 
-      });
-
-      if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA') {
-        kellyResult = computeKelly({
-          mean_return: stats.mean_return || 0.02,
-          variance: stats.variance || 0.005,
-          regime: regimeData?.regime
-        });
-        kellyResult.reason = `Setup ${matched_setup_id} found. Statistical Kelly sizing applied.`;
-      } else if (stats && stats.confidence_flag === 'INSUFFICIENT_DATA') {
-        kellyResult.reason = `Setup ${matched_setup_id} has insufficient data (sample size < 30). Shield Mode.`;
-      } else {
-        kellyResult = computeKelly({
-          mean_return: 0.02, // 2% heuristic edge
-          variance: 0.005,
-          regime: regimeData?.regime
-        });
-        kellyResult.reason = `Setup ${matched_setup_id} found. Heuristic sizing applied.`;
-      }
-    }
-
-    const tradeTimeframe = '1h'; // Default
-
-    // === Wire up the calibration engine to adjust raw AI confidence ===
+    const tradeTimeframe = '1h';
     const calibResult = await getCalibratedConfidence(rawConfidence);
 
-    let verdictText = `\n\nMODULE 14 — PHASE 3 SYSTEM VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    verdictText += `• Raw Model Confidence: ${rawConfidence}%\n`;
-    verdictText += `• Calibrated Confidence: ${calibResult.calibratedConfidence}%${calibResult.isCalibrated ? ' (adjusted from historical accuracy)' : ' (using raw — insufficient calibration data)'}\n`;
-    verdictText += `• Matched Setup: ${matched_setup_id || 'NONE'}\n`;
-    
-    if (kellyResult.action === 'SHIELD_MODE') {
-      verdictText += `• Phase 3 Override: SHIELD MODE ACTIVATED. ${kellyResult.reason}\n`;
+    let verdictText = "";
+    // Render engine verdict differently for Simple Mode
+    if (p3Context.isSimpleMode) {
+      let simpleVerdict = `\n\nMODULE 14 — AI VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      simpleVerdict += `• Signal Confidence: ${rawConfidence}/100\n`;
+      simpleVerdict += `• Overall Trend: ${regimeData?.regime === 'TRENDING' ? 'Strong' : 'Chop/Sideways'}\n`;
+      if (signalBlocked) {
+         simpleVerdict += `• AI Status: PAUSED (${blockedReason})\n`;
+      } else {
+         simpleVerdict += `• AI Status: ACTIVE\n`;
+      }
+      
+      const parts = sanitizeChunk(simpleVerdict).split(/(MODULE \d+ — [^\n]+)/);
+      for (const p of parts) {
+        if (!p) continue;
+        clientWs.send(JSON.stringify({ text: p }));
+        await new Promise(r => setTimeout(r, 40));
+      }
+      verdictText = simpleVerdict;
     } else {
-      verdictText += `• Honest Kelly Sizing: ${kellyResult.halfKelly}% of account\n`;
+      verdictText = `\n\nMODULE 14 — ENGINE VERDICT (Deterministic)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      verdictText += `• Engine Signal Score: ${rawConfidence}/100\n`;
+      if (signal?.scoreBreakdown) {
+        verdictText += `• Regime Alignment: ${signal.scoreBreakdown.regimeAlignment}/100\n`;
+        verdictText += `• Technical Confluence: ${signal.scoreBreakdown.technicalConfluence}/100\n`;
+        const ofiSrcLabel = signal.scoreBreakdown.ofiSource === 'BINANCE_AGGTRADE' ? 'LIVE TRADE DATA' : 'CANDLE ESTIMATE (0.6x penalty)';
+        verdictText += `• Order Flow: ${signal.scoreBreakdown.orderFlow}/100 [${ofiSrcLabel}]\n`;
+        verdictText += `• Volume Confirmation: ${signal.scoreBreakdown.volumeConfirmation}/100\n`;
+        verdictText += `• Historical Win Rate: ${signal.scoreBreakdown.historicalWinRate}/100\n`;
+      }
+      // Hurst CI regime-span check
+      if (hurstData?.ci95) {
+        const ciLower = hurstData.ci95.lower;
+        const ciUpper = hurstData.ci95.upper;
+        const spansAll = ciLower < 0.40 && ciUpper > 0.60;
+        verdictText += `• Hurst CI: [${ciLower?.toFixed(3)}, ${ciUpper?.toFixed(3)}] ${spansAll ? '— AMBIGUOUS (spans all regimes)' : '— Clean regime read'}\n`;
+      }
+  
+      if (signalBlocked) {
+        verdictText += `\n🚨 SHIELD MODE ACTIVATED: ${blockedReason}\n   (Signal rejected to protect capital)\n`;
+      } else if (kellyResult?.action === 'TRADE') {
+        verdictText += `\n✅ QUANTITATIVE EDGE CONFIRMED\n   Kelly Criterion: ${(kellyResult.kellyF * 100).toFixed(1)}% | Half-Kelly: ${(kellyResult.halfKelly * 100).toFixed(1)}%\n`;
+      }
+  
+      const parts = sanitizeChunk(verdictText).split(/(MODULE \d+ — [^\n]+)/);
+      for (const p of parts) {
+        if (!p) continue;
+        clientWs.send(JSON.stringify({ text: p }));
+        await new Promise(r => setTimeout(r, 40));
+      }
     }
 
     const sanitizedVerdict = sanitizeChunk(verdictText);
     clientWs.send(JSON.stringify({ status: 'update', text: sanitizedVerdict }));
     fullText += sanitizedVerdict;
     rawFullText += verdictText;
-    
-    // Compute 5-10m Predictive Horizon & Educational Masterclass Lessons
+
+    // Compute 5-10m Predictive Horizon & Educational Lessons
     const predictiveHorizon = predict5to10mHorizon(tf15m, flowData);
     const educationalLesson = generateTradeLesson(
       { ticker: ticker || 'UNKNOWN', side: direction, rrr: 2.0 },
-      regimeData,
-      flowData
+      regimeData, flowData, p3Context.promptsUsed || 0
     );
 
-    const dynamicBuyerPercent = flowData && flowData.buyVolumeRatio 
-      ? Math.round(flowData.buyVolumeRatio * 100) 
-      : (direction === 'BULLISH' ? 68 : 32);
+    // Use REAL order flow from signal generator (not fake hardcoded data)
+    const dynamicBuyerPercent = signal?.buyerPercent ?? (direction === 'BULLISH' ? 68 : 32);
+    const dynamicHurstScore = hurstData?.meanH ? Number(hurstData.meanH.toFixed(2)) : 0.50;
 
-    const dynamicHurstScore = hurstData?.meanH ? Number(hurstData.meanH.toFixed(2)) : (regimeData?.regime === 'MEAN_REVERTING' ? 0.42 : 0.64);
-
-    // SEND TRADE CARD IF VALID — with Portfolio Risk Gate
-    if (kellyResult.action !== 'SHIELD_MODE' && ticker && ticker !== 'UNKNOWN') {
+    // SEND TRADE CARD IF VALID
+    if (!signalBlocked && ticker && ticker !== 'UNKNOWN') {
       const tradeSide = direction === 'BULLISH' ? 'LONG' : direction === 'BEARISH' ? 'SHORT' : 'BUY';
-      
-      // Portfolio-level risk check (daily loss limit, concurrent cap, correlation blocking)
+
       let riskAllowed = true;
       let riskBlockReason = null;
       try {
         const riskCheck = await canOpenNewTrade(ticker, tradeSide);
         if (!riskCheck.allowed) {
           riskAllowed = false;
-          riskBlockReason = riskCheck.reason;
-          if (riskCheck.reason === 'MAX_CONCURRENT_TRADES') {
-            riskBlockReason = `MAX CONCURRENT TRADES (${riskCheck.count}/${3}) — Close existing positions first.`;
-          } else if (riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT') {
-            riskBlockReason = `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%) — Trading suspended for today.`;
-          } else if (riskCheck.reason === 'CORRELATION_LIMIT') {
-            riskBlockReason = `CORRELATION BLOCK — Too correlated with open position ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)}).`;
-          }
+          riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
+            ? `MAX CONCURRENT TRADES (${riskCheck.count}/3)`
+            : riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT'
+            ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
+            : riskCheck.reason === 'CORRELATION_LIMIT'
+            ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
+            : riskCheck.reason;
         }
       } catch (riskErr) {
-        // Fail OPEN for risk check errors (DB down = don't block trading entirely)
         console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
       }
 
@@ -485,71 +505,106 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
         clientWs.send(JSON.stringify({
           status: 'trade_card',
           tradeData: {
-            asset: ticker,
-            side: tradeSide,
-            entryPrice: currentPrice || 0,
-            stopLoss: stopLoss,
-            takeProfit: primaryTarget,
-            riskPercentage: 2,
-            kellySize: kellyResult.halfKelly,
-            pattern: matched_setup_id || 'N/A',
-            regime: regimeData ? regimeData.regime : 'N/A',
-            source: 'AI_AGENT',
-            predictiveHorizon,
-            educationalLesson,
+            asset: ticker, side: tradeSide,
+            entryPrice: currentPrice,
+            stopLoss, takeProfit: primaryTarget,
+            riskPercentage: 2, kellySize: kellyResult.halfKelly,
+            pattern: setupId || signal?.pattern || 'ENGINE_DETECTED',
+            regime: regimeData?.regime || 'N/A',
+            source: 'QUANT_ENGINE',
+            predictiveHorizon, educationalLesson,
             buyerPercent: dynamicBuyerPercent,
             hurstScore: dynamicHurstScore
           }
         }));
       } else {
-        const riskNotice = `\n⚠️ RISK CONTROL OVERRIDE: Trade card suppressed.\n   Reason: ${riskBlockReason}\n   The setup is valid but portfolio-level risk constraints prevent execution.\n`;
-        clientWs.send(JSON.stringify({ status: 'update', text: riskNotice }));
-        fullText += riskNotice;
+        const notice = `\n⚠️ RISK CONTROL: ${riskBlockReason}\n`;
+        clientWs.send(JSON.stringify({ status: 'update', text: notice }));
+        fullText += notice;
       }
     }
 
-    const auditWindowMs = tradeTimeframe === 'SWING' ? 48 * 60 * 60 * 1000 : tradeTimeframe === 'POSITION' ? 7 * 24 * 60 * 60 * 1000 : 4 * 60 * 60 * 1000;
+    const auditWindowMs = tradeTimeframe === 'SWING' ? 48*3600000 : tradeTimeframe === 'POSITION' ? 7*24*3600000 : 4*3600000;
     const auditDue = new Date(Date.now() + auditWindowMs);
 
-    // === Populate ALL signal fields for proper audit resolution ===
     const signalData = {
-      ticker: ticker || 'UNKNOWN',
-      direction,
-      rawConfidence,
-      calibratedConfidence: calibResult.calibratedConfidence,
+      ticker: ticker || 'UNKNOWN', direction,
+      rawConfidence, calibratedConfidence: calibResult.calibratedConfidence,
       auditDue,
-      hurstMean: hurstData?.meanH ?? null,
-      hurstRS: hurstData?.rsH ?? null,
-      hurstDFA: hurstData?.dfaH ?? null,
-      hurstCI: hurstData?.ci95 ?? null,
+      hurstMean: hurstData?.meanH ?? null, hurstRS: hurstData?.rsH ?? null,
+      hurstDFA: hurstData?.dfaH ?? null, hurstCI: hurstData?.ci95 ?? null,
       hurstStable: hurstData?.isStable ?? null,
       regime: regimeData?.regime ?? null,
       regimeHeuristicScore: regimeData?.heuristicScore ?? null,
       regimeActionable: regimeData?.isActionable ?? null,
-      primaryTarget: null,
-      extendedTarget: null,
-      invalidationLevel: null,
-      currentPrice: null,
-      evGross: null,
-      evNet: null,
-      evPer100: null,
-      kellyF: kellyResult.kellyF,
-      halfKelly: kellyResult.halfKelly,
+      primaryTarget, extendedTarget: null,
+      invalidationLevel: stopLoss, currentPrice,
+      evGross: null, evNet: null, evPer100: null,
+      kellyF: kellyResult.kellyF, halfKelly: kellyResult.halfKelly,
       estimatedFee: null,
-      signalBlocked: kellyResult.action === 'SHIELD_MODE',
-      blockedReason: kellyResult.action === 'SHIELD_MODE' ? kellyResult.reason : null,
-      tradeTimeframe,
-      predictiveHorizon,
-      educationalLesson,
-      predictionSummary: fullText.substring(0, 2000)
+      signalBlocked, blockedReason,
+      tradeTimeframe, predictiveHorizon, educationalLesson,
+      engineScore: signal?.score ?? null,
+      engineScoreBreakdown: signal?.scoreBreakdown ?? null,
+      predictionSummary: fullText.substring(0, 2000),
+      userPrompt: p3Context.userPrompt || "Chart Analysis"
     };
 
-    const signalHash = await logSignal(signalData);
+    // ═══════════════════════════════════════════════════════
+    // SIGNAL LOGGING — Only log REAL predictions, not SHIELD_MODE
+    // SHIELD_MODE = "don't trade" → cannot be judged correct/incorrect
+    // ═══════════════════════════════════════════════════════
+    let signalHash = null;
+    if (!signalBlocked) {
+      // Check cooldown — prevent duplicate signals for the same ticker within 15 min
+      const tickerKey = (ticker || 'UNKNOWN').toUpperCase();
+      const lastTime = lastSignalTime.get(tickerKey);
+      const now = Date.now();
+      if (lastTime && (now - lastTime < SIGNAL_COOLDOWN_MS)) {
+        console.log(`[SIGNAL] ${tickerKey} cooldown active (${Math.round((SIGNAL_COOLDOWN_MS - (now - lastTime)) / 1000)}s remaining) — skipping duplicate signal`);
+      } else {
+        signalHash = await logSignal(signalData);
+        lastSignalTime.set(tickerKey, now);
+      }
+    } else {
+      // Log to separate shield collection for debugging (never audited, never affects win rate)
+      try {
+        const db = await getDb();
+        await db.collection('shield_log').insertOne({
+          ...signalData,
+          timestamp: new Date(),
+          _type: 'SHIELD_MODE'
+        });
+        console.log(`[SHIELD] ${ticker} blocked: ${blockedReason}`);
+      } catch (shieldErr) {
+        console.warn('[SHIELD] Failed to log shield event:', shieldErr.message);
+      }
+    }
+
     await auditCompliance(fullText, signalHash);
-    
-    if (signalHash && ticker && ticker !== 'UNKNOWN' && regimeData?.regime && kellyResult.action !== 'SHIELD_MODE') {
+    if (signalHash && ticker && ticker !== 'UNKNOWN' && regimeData?.regime && !signalBlocked) {
       registerSignal(signalHash, ticker, regimeData.regime);
     }
+    
+    // ═══════════════════════════════════════════════════════
+    // PROMPT AUDIT LOGGING — Track general conversational AI advice
+    // ═══════════════════════════════════════════════════════
+    try {
+      const db = await getDb();
+      await db.collection('prompt_logs').insertOne({
+        prompt: p3Context.userPrompt || "Image Analysis / General Chat",
+        aiOutput: fullText,
+        resultType: 'CONVERSATIONAL',
+        timestamp: new Date().toISOString(),
+        auditDue: new Date(Date.now() + 4 * 3600000), // 4 hours later
+        resolvedOutcome: null,
+        resolvedReason: null
+      });
+      console.log(`[PROMPT AUDIT] Logged conversation to prompt_logs for future grading.`);
+    } catch (err) {
+      console.error('[PROMPT AUDIT] Failed to log prompt:', err.message);
+    }
+
   } catch (err) {
     console.error('[PHASE 3] Post-stream intercept failed:', err.message);
   }
@@ -657,7 +712,7 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
       } catch (p3Err) {
         console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
       }
-      clientWs.send(JSON.stringify({ status: 'complete' }));
+      clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
       break; // Exit loop on success
     }
     
