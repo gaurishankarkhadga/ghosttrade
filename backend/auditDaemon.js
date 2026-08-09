@@ -591,47 +591,69 @@ async function verifyPaperTrades() {
       const side = (trade.side || 'LONG').toUpperCase();
 
       if (side === 'LONG' || side === 'BUY') {
-        // TP1 Logic: Scale out 50% and move stop to break-even
+        // ATR Trailing Stop Logic (Infinite Runner)
+        const trailingDistance = Math.abs(trade.takeProfit1 - trade.entryPrice) * 1.5; // Original 1.5 ATR risk
+
         if (trade.takeProfit1 && trade.entryPrice && !trade.tp1Hit) {
           if (actualPrice >= trade.takeProfit1) {
+            const newStop = Math.max(trade.entryPrice, actualPrice - trailingDistance);
             await db.collection('paper_trades').updateOne(
               { id: trade.id },
-              { $set: { stopLoss: trade.entryPrice, tp1Hit: true } }
+              { $set: { stopLoss: newStop, tp1Hit: true } }
             );
-            trade.stopLoss = trade.entryPrice;
+            trade.stopLoss = newStop;
             trade.tp1Hit = true;
-            console.log(`[AUDIT DAEMON] TP1 Hit for ${trade.asset}! 50% profits secured. Stop loss moved to break-even ($${trade.entryPrice})`);
+            console.log(`[AUDIT DAEMON] TP1 Hit for ${trade.asset}! 50% profits secured. Trailing Stop activated at $${newStop}`);
+          }
+        } else if (trade.tp1Hit) {
+          // Continuously trail the stop loss up
+          const trailingStop = actualPrice - trailingDistance;
+          if (trailingStop > trade.stopLoss) {
+             await db.collection('paper_trades').updateOne(
+               { id: trade.id },
+               { $set: { stopLoss: trailingStop } }
+             );
+             trade.stopLoss = trailingStop;
           }
         }
 
         if (trade.stopLoss && actualPrice <= trade.stopLoss) {
-          newStatus = trade.tp1Hit ? 'PARTIAL_WIN' : 'LOSS';
-          reason = trade.tp1Hit ? `Stop loss hit at ${actualPrice} (Remaining 50% stopped at break-even)` : `Stop loss hit at ${actualPrice}`;
-        } else if (trade.takeProfit && actualPrice >= trade.takeProfit) {
-          newStatus = 'WIN';
-          reason = `TP2 hit at ${actualPrice} (Full Win)`;
+          newStatus = trade.tp1Hit ? 'WIN' : 'LOSS';
+          reason = trade.tp1Hit ? `Trailing Stop hit at ${actualPrice} (Runner exited in profit)` : `Stop loss hit at ${actualPrice}`;
         }
+        // Removed fixed TP2 exit to let the winner run infinitely via Trailing Stop
       } else if (side === 'SHORT' || side === 'SELL') {
-        // TP1 Logic: Scale out 50% and move stop to break-even
+        // ATR Trailing Stop Logic (Infinite Runner)
+        const trailingDistance = Math.abs(trade.entryPrice - trade.takeProfit1) * 1.5;
+
         if (trade.takeProfit1 && trade.entryPrice && !trade.tp1Hit) {
           if (actualPrice <= trade.takeProfit1) {
+            const newStop = Math.min(trade.entryPrice, actualPrice + trailingDistance);
             await db.collection('paper_trades').updateOne(
               { id: trade.id },
-              { $set: { stopLoss: trade.entryPrice, tp1Hit: true } }
+              { $set: { stopLoss: newStop, tp1Hit: true } }
             );
-            trade.stopLoss = trade.entryPrice;
+            trade.stopLoss = newStop;
             trade.tp1Hit = true;
-            console.log(`[AUDIT DAEMON] TP1 Hit for ${trade.asset}! 50% profits secured. Stop loss moved to break-even ($${trade.entryPrice})`);
+            console.log(`[AUDIT DAEMON] TP1 Hit for ${trade.asset}! 50% profits secured. Trailing Stop activated at $${newStop}`);
+          }
+        } else if (trade.tp1Hit) {
+          // Continuously trail the stop loss down
+          const trailingStop = actualPrice + trailingDistance;
+          if (trailingStop < trade.stopLoss) {
+             await db.collection('paper_trades').updateOne(
+               { id: trade.id },
+               { $set: { stopLoss: trailingStop } }
+             );
+             trade.stopLoss = trailingStop;
           }
         }
 
         if (trade.stopLoss && actualPrice >= trade.stopLoss) {
-          newStatus = trade.tp1Hit ? 'PARTIAL_WIN' : 'LOSS';
-          reason = trade.tp1Hit ? `Stop loss hit at ${actualPrice} (Remaining 50% stopped at break-even)` : `Stop loss hit at ${actualPrice}`;
-        } else if (trade.takeProfit && actualPrice <= trade.takeProfit) {
-          newStatus = 'WIN';
-          reason = `TP2 hit at ${actualPrice} (Full Win)`;
+          newStatus = trade.tp1Hit ? 'WIN' : 'LOSS';
+          reason = trade.tp1Hit ? `Trailing Stop hit at ${actualPrice} (Runner exited in profit)` : `Stop loss hit at ${actualPrice}`;
         }
+        // Removed fixed TP2 exit to let the winner run infinitely via Trailing Stop
       }
 
       if (newStatus !== 'OPEN') {

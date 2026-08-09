@@ -1,0 +1,152 @@
+--- TESTING GLOBAL DEEP SCAN ---
+
+
+🔍 **INITIATING GLOBAL DEEP SCAN...**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Scanning the entire Global market for high-probability setups... please wait.
+
+[SCANNER] Initiating Phase 6 Market-Wide Scan for 20 assets...
+[CORRELATION] Analyzing entire market sentiment to map Liquidity Rotation...
+[DATA] Fetched Multi-TF for BTC-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.583 DFA=0.559 Mean=0.571 Stable=true
+[HURST] TRENDING | R/S=0.593 DFA=0.546 Mean=0.569 Stable=true
+[REGIME] TRENDING | Heuristic Score=21.1% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=19.4% | Actionable=false
+[DATA] Fetched Multi-TF for SOL-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] RANDOM_WALK | R/S=0.545 DFA=0.485 Mean=0.515 Stable=true
+[HURST] TRENDING | R/S=0.604 DFA=0.614 Mean=0.609 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=58.8% | Actionable=false
+[DATA] Fetched Multi-TF for XRP-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.635 DFA=0.613 Mean=0.624 Stable=true
+[HURST] RANDOM_WALK | R/S=0.554 DFA=0.477 Mean=0.516 Stable=true
+[REGIME] TRENDING | Heuristic Score=73.7% | Actionable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for ETH-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] RANDOM_WALK | R/S=0.502 DFA=0.511 Mean=0.506 Stable=true
+[HURST] RANDOM_WALK | R/S=0.583 DFA=0.511 Mean=0.547 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[MONGO] Connected to ghosttrade cluster
+[DATA] Fetched Multi-TF for BNB-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.576 DFA=0.619 Mean=0.598 Stable=true
+[HURST] TRENDING | R/S=0.563 DFA=0.539 Mean=0.551 Stable=true
+[REGIME] TRENDING | Heuristic Score=47.6% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=0.9% | Actionable=false
+[DATA] Fetched Multi-TF for DOGE-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] RANDOM_WALK | R/S=0.508 DFA=0.446 Mean=0.477 Stable=true
+[HURST] MEAN_REVERTING | R/S=0.478 DFA=0.405 Mean=0.441 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] MEAN_REVERTING | Heuristic Score=8.8% | Actionable=false
+[DATA] Fetched Multi-TF for AVAX-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.551 DFA=0.553 Mean=0.552 Stable=true
+[HURST] RANDOM_WALK | R/S=0.542 DFA=0.501 Mean=0.522 Stable=true
+[REGIME] TRENDING | Heuristic Score=1.8% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for ADA-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.564 DFA=0.613 Mean=0.589 Stable=true
+[HURST] RANDOM_WALK | R/S=0.546 DFA=0.477 Mean=0.512 Stable=true
+[REGIME] TRENDING | Heuristic Score=38.7% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for LINK-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] RANDOM_WALK | R/S=0.541 DFA=0.527 Mean=0.534 Stable=true
+[HURST] RANDOM_WALK | R/S=0.565 DFA=0.471 Mean=0.518 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for LTC-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.563 DFA=0.553 Mean=0.558 Stable=true
+[HURST] RANDOM_WALK | R/S=0.549 DFA=0.467 Mean=0.508 Stable=true
+[REGIME] TRENDING | Heuristic Score=8% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for DOT-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] RANDOM_WALK | R/S=0.534 DFA=0.470 Mean=0.502 Stable=true
+[HURST] RANDOM_WALK | R/S=0.537 DFA=0.486 Mean=0.511 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for NEAR-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.602 DFA=0.578 Mean=0.590 Stable=true
+[HURST] TRENDING | R/S=0.576 DFA=0.570 Mean=0.573 Stable=true
+[REGIME] TRENDING | Heuristic Score=39.7% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=23% | Actionable=false
+[DATA] Fetched Multi-TF for ATOM-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.629 DFA=0.609 Mean=0.619 Stable=true
+[HURST] TRENDING | R/S=0.598 DFA=0.542 Mean=0.570 Stable=true
+[REGIME] TRENDING | Heuristic Score=69% | Actionable=true
+[REGIME] TRENDING | Heuristic Score=20% | Actionable=false
+[DATA] Fetched Multi-TF for ARB-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] TRENDING | R/S=0.517 DFA=0.853 Mean=0.685 Stable=false
+[REGIME] TRENDING | Heuristic Score=80% | Actionable=true
+[DATA] Fetched Multi-TF for OP-USD (15m: 300, 1h: 300, 1d: 300)
+[HURST] MEAN_REVERTING | R/S=0.386 DFA=0.324 Mean=0.355 Stable=true
+[HURST] RANDOM_WALK | R/S=0.533 DFA=0.488 Mean=0.510 Stable=true
+[REGIME] MEAN_REVERTING | Heuristic Score=95.1% | Actionable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+✅ **SCAN COMPLETE: TOP 2 TRADES FOUND**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**#1. BTC-USD** (Score: 50/100)
+• **Setup:** doji_indecision
+• **Regime:** TRENDING (Macro) | TRENDING (Micro)
+• **Entry:** $64908.7188
+• **Take Profit 1:** $64781.2753
+• **Stop Loss:** $64972.4405
+
+**#2. OP-USD** (Score: 50/100)
+• **Setup:** bearish_engulfing_mean_rev
+• **Regime:** RANDOM_WALK (Macro) | MEAN_REVERTING (Micro)
+• **Entry:** $0.0880
+• **Take Profit 1:** $0.0848
+• **Stop Loss:** $0.0896
+
+
+
+[WS CLOSED]
+
+--- TESTING INDIA DEEP SCAN ---
+
+
+🔍 **INITIATING GLOBAL DEEP SCAN...**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Scanning the entire India market for high-probability setups... please wait.
+
+[SCANNER] Initiating Phase 6 Market-Wide Scan for 7 assets...
+[CORRELATION] Analyzing entire market sentiment to map Liquidity Rotation...
+[DATA] Fetched Multi-TF for AAPL (15m: 300, 1h: 256, 1d: 288)
+[HURST] RANDOM_WALK | R/S=0.549 DFA=0.508 Mean=0.528 Stable=true
+[HURST] TRENDING | R/S=0.648 DFA=0.540 Mean=0.594 Stable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=33% | Actionable=false
+[DATA] Fetched Multi-TF for TSLA (15m: 300, 1h: 256, 1d: 288)
+[HURST] RANDOM_WALK | R/S=0.553 DFA=0.459 Mean=0.506 Stable=true
+[HURST] RANDOM_WALK | R/S=0.539 DFA=0.489 Mean=0.514 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for NVDA (15m: 300, 1h: 256, 1d: 288)
+[HURST] TRENDING | R/S=0.605 DFA=0.538 Mean=0.571 Stable=true
+[HURST] RANDOM_WALK | R/S=0.547 DFA=0.407 Mean=0.477 Stable=false
+[REGIME] TRENDING | Heuristic Score=21.3% | Actionable=false
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[DATA] Fetched Multi-TF for MSFT (15m: 300, 1h: 256, 1d: 288)
+[HURST] TRENDING | R/S=0.638 DFA=0.714 Mean=0.676 Stable=true
+[HURST] TRENDING | R/S=0.672 DFA=0.506 Mean=0.589 Stable=false
+[REGIME] TRENDING | Heuristic Score=100% | Actionable=true
+[REGIME] TRENDING | Heuristic Score=22.7% | Actionable=false
+[DATA] Fetched Multi-TF for AMZN (15m: 300, 1h: 256, 1d: 288)
+[HURST] RANDOM_WALK | R/S=0.545 DFA=0.536 Mean=0.541 Stable=true
+[HURST] TRENDING | R/S=0.605 DFA=0.534 Mean=0.570 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=19.9% | Actionable=false
+[DATA] Fetched Multi-TF for GOOGL (15m: 300, 1h: 256, 1d: 288)
+[HURST] TRENDING | R/S=0.531 DFA=0.607 Mean=0.569 Stable=true
+[HURST] TRENDING | R/S=0.670 DFA=0.547 Mean=0.609 Stable=false
+[REGIME] TRENDING | Heuristic Score=19.4% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=46.5% | Actionable=false
+[DATA] Fetched Multi-TF for META (15m: 300, 1h: 256, 1d: 288)
+[HURST] RANDOM_WALK | R/S=0.584 DFA=0.501 Mean=0.543 Stable=true
+[HURST] TRENDING | R/S=0.611 DFA=0.631 Mean=0.621 Stable=true
+[REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[REGIME] TRENDING | Heuristic Score=71% | Actionable=true
+❌ **NO TRADES FOUND**
+The scanner checked the India market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.
+
+[WS CLOSED]

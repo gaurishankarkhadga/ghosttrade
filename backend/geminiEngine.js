@@ -29,6 +29,7 @@ import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from '.
 import { predict5to10mHorizon } from './predictiveEngine.js';
 import { generateTradeLesson } from './educationalMentorEngine.js';
 import { generateSignal } from './signalGenerator.js';
+import { runBulkScanPhase4 } from './scannerEngine.js';
 
 // =====================================================
 // SIGNAL COOLDOWN — Prevents duplicate signal spam
@@ -164,6 +165,45 @@ function extractTickerFromText(promptText) {
  */
 export async function handleGeminiConnection(clientWs, options = {}) {
   const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0 } = options;
+
+  // === PHASE 4: DEEP SCAN INTERCEPTOR ===
+  if (prompt.startsWith('Execute Deep Scan')) {
+     const marketMatch = prompt.match(/\[Market:\s*([^\]]+)\]/);
+     const market = marketMatch ? marketMatch[1] : 'Global';
+     
+     clientWs.send(JSON.stringify({ status: 'update', text: `\n\n🔍 **INITIATING GLOBAL DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nScanning the entire ${market} market for high-probability setups... please wait.\n\n` }));
+
+     try {
+       const results = await runBulkScanPhase4(market);
+       const topSetups = results.filter(r => r.status === 'success' && r.score >= 50).slice(0, 3);
+       
+       if (topSetups.length === 0) {
+          clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
+       } else {
+          let report = `✅ **SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+          topSetups.forEach((s, idx) => {
+             report += `**#${idx + 1}. ${s.ticker}** (Score: ${s.score}/100)\n`;
+             report += `• **Setup:** ${s.setup_id}\n`;
+             report += `• **Regime:** ${s.macroRegime} (Macro) | ${s.microRegime} (Micro)\n`;
+             report += `• **Entry:** $${s.currentPrice.toFixed(4)}\n`;
+             if (s.takeProfit) report += `• **Take Profit 1:** $${s.takeProfit.toFixed(4)}\n`;
+             if (s.stopLoss) report += `• **Stop Loss:** $${s.stopLoss.toFixed(4)}\n\n`;
+          });
+          
+          const parts = report.split('\n');
+          for (const p of parts) {
+            clientWs.send(JSON.stringify({ status: 'update', text: p + '\n' }));
+            await new Promise(r => setTimeout(r, 40));
+          }
+       }
+     } catch (e) {
+        clientWs.send(JSON.stringify({ status: 'update', text: `❌ Scanner Failed: ${e.message}\n` }));
+     }
+     
+     clientWs.send(JSON.stringify({ status: 'complete' }));
+     return;
+  }
+
   // Strip data URL prefix if present (frontend sends 'data:image/jpeg;base64,...')
   let imageBase64 = options.imageBase64 || null;
   if (imageBase64 && imageBase64.includes(',')) {

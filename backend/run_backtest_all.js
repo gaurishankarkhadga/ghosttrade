@@ -25,13 +25,15 @@ async function main() {
             console.log(`   Wins:     ${result.baseline.wins}`);
             console.log(`   Losses:   ${result.baseline.losses}`);
             console.log(`   Win Rate: ${result.baseline.winRate}%`);
+            console.log(`   Net Profit: ${result.baseline.totalProfitRR}R`);
             
-            console.log(`\n📈 PROPOSED IMPROVED SYSTEM (Dynamic Profit Scaling TP1/TP2):`);
-            console.log(`   Full Wins (TP2):  ${result.improved.fullWins}`);
-            console.log(`   Partial Wins:     ${result.improved.partialWins} (50% profit taken at TP1, rest stopped at Break-Even)`);
-            console.log(`   Losses:           ${result.improved.losses}`);
-            console.log(`   True Win Rate:    ${result.improved.winRate}%`);
-            console.log(`   Total Losses Saved: ${result.improved.lossesPrevented} trades`);
+            console.log(`\n📈 PROPOSED IMPROVED SYSTEM (ATR Trailing Stop + Infinite Runner):`);
+            console.log(`   Full Wins (Runners):  ${result.improved.fullWins}`);
+            console.log(`   Partial Wins:         ${result.improved.partialWins} (Scale-out at TP1, runner stopped)`);
+            console.log(`   Losses:               ${result.improved.losses}`);
+            console.log(`   True Win Rate:        ${result.improved.winRate}%`);
+            console.log(`   Total Losses Saved:   ${result.improved.lossesPrevented} trades`);
+            console.log(`   Net Profit:           ${result.improved.totalProfitRR}R`);
             console.log(`\n--------------------------------------------------`);
         } catch (err) {
             console.error(`Failed to process ${asset}:`, err.message);

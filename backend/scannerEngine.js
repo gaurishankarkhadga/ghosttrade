@@ -147,7 +147,18 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
   }
 }
 
-export async function runBulkScanPhase4(tickers = DEFAULT_CRYPTO_WATCHLIST) {
+export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
+  let tickers = [];
+  if (Array.isArray(marketOrWatchlist)) {
+      tickers = marketOrWatchlist;
+  } else if (marketOrWatchlist === 'Global' || marketOrWatchlist === 'Robinhood') {
+      tickers = DEFAULT_CRYPTO_WATCHLIST;
+  } else if (marketOrWatchlist === 'India' || marketOrWatchlist === 'AngelOne' || marketOrWatchlist === 'Groww' || marketOrWatchlist === 'Zerodha') {
+      tickers = DEFAULT_GLOBAL_STOCKS_WATCHLIST;
+  } else {
+      tickers = DEFAULT_CRYPTO_WATCHLIST;
+  }
+
   const results = [];
   const BATCH_SIZE = 4; // Lower batch size for massive Phase 1+2 requests
   const DELAY_MS = 2000; // 2 seconds to respect Binance Limits

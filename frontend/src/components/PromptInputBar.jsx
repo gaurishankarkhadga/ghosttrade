@@ -67,7 +67,7 @@ export default function PromptInputBar({ onSend, disabled }) {
 
   const handleDeepScan = () => {
     if (!disabled) {
-      onSend({ text: 'Execute Deep Scan across all quantitative regimes', imageBase64: null });
+      onSend({ text: `Execute Deep Scan across all quantitative regimes [Market: ${market}]`, imageBase64: null });
     }
   };
 

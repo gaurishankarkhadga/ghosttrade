@@ -55,7 +55,8 @@ export function computeStopLossTakeProfit(candles, side, atrMultiplier = 1.5, rr
     tp1Distance: actualRisk * 1.0,
     tp2Distance: actualRisk * rrr,
     tpDistance: actualRisk * rrr,
-    atr: currentAtr
+    atr: currentAtr,
+    atrTrailingOffset: currentAtr * atrMultiplier
   };
 }
 
