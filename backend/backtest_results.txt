@@ -33,7 +33,6 @@ Running simulation for BTC-USD (730 days)...
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
 [HURST] RANDOM_WALK | R/S=0.546 DFA=0.444 Mean=0.495 Stable=false
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
-[MONGO] Connected to ghosttrade cluster
 [HURST] RANDOM_WALK | R/S=0.546 DFA=0.444 Mean=0.495 Stable=false
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
 [HURST] RANDOM_WALK | R/S=0.546 DFA=0.444 Mean=0.495 Stable=false
@@ -452,6 +451,7 @@ Running simulation for BTC-USD (730 days)...
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
 [HURST] RANDOM_WALK | R/S=0.552 DFA=0.515 Mean=0.534 Stable=true
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
+[MONGO] Connected to ghosttrade cluster
 [HURST] RANDOM_WALK | R/S=0.552 DFA=0.515 Mean=0.534 Stable=true
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
 [HURST] RANDOM_WALK | R/S=0.553 DFA=0.510 Mean=0.531 Stable=true
@@ -1057,22 +1057,22 @@ Running simulation for BTC-USD (730 days)...
 [HURST] TRENDING | R/S=0.577 DFA=0.534 Mean=0.556 Stable=true
 [REGIME] TRENDING | Heuristic Score=5.8% | Actionable=false
 
-📊 RESULTS FOR BTC-USD (Total Signals Taken: 54)
+📊 RESULTS FOR BTC-USD (Total Signals Taken: 24)
    Simulated Days: 530
 
 📉 CURRENT BASELINE SYSTEM (Static Risk):
-   Wins:     1
-   Losses:   41
-   Win Rate: 2.38%
-   Net Profit: -38.38R
+   Wins:     2
+   Losses:   16
+   Win Rate: 11.11%
+   Net Profit: -11.22R
 
 📈 PROPOSED IMPROVED SYSTEM (ATR Trailing Stop + Infinite Runner):
    Full Wins (Runners):  0
-   Partial Wins:         33 (Scale-out at TP1, runner stopped)
-   Losses:               9
-   True Win Rate:        78.57%
-   Total Losses Saved:   32 trades
-   Net Profit:           8.64R
+   Partial Wins:         16 (Scale-out at TP1, runner stopped)
+   Losses:               2
+   True Win Rate:        88.89%
+   Total Losses Saved:   14 trades
+   Net Profit:           7.26R
 
 --------------------------------------------------
 Running simulation for ETH-USD (730 days)...
@@ -3201,21 +3201,21 @@ Running simulation for SOL-USD (730 days)...
 [HURST] RANDOM_WALK | R/S=0.554 DFA=0.501 Mean=0.528 Stable=true
 [REGIME] RANDOM_WALK | Heuristic Score=0% | Actionable=false
 
-📊 RESULTS FOR SOL-USD (Total Signals Taken: 14)
+📊 RESULTS FOR SOL-USD (Total Signals Taken: 2)
    Simulated Days: 530
 
 📉 CURRENT BASELINE SYSTEM (Static Risk):
    Wins:     0
-   Losses:   14
+   Losses:   2
    Win Rate: 0%
-   Net Profit: -14R
+   Net Profit: -2R
 
 📈 PROPOSED IMPROVED SYSTEM (ATR Trailing Stop + Infinite Runner):
    Full Wins (Runners):  0
-   Partial Wins:         8 (Scale-out at TP1, runner stopped)
-   Losses:               6
-   True Win Rate:        57.14%
-   Total Losses Saved:   8 trades
-   Net Profit:           -2R
+   Partial Wins:         2 (Scale-out at TP1, runner stopped)
+   Losses:               0
+   True Win Rate:        100%
+   Total Losses Saved:   2 trades
+   Net Profit:           1R
 
 --------------------------------------------------

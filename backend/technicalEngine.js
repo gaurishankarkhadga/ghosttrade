@@ -391,13 +391,13 @@ export function calculateAllIndicators(bars) {
 }
 
 export function vwap(candles) {
-  if (!candles || candles.length === 0) return 0;
+  if (!candles || candles.length === 0) return null;
   let cumVol = 0;
   let cumVolPrice = 0;
   
   // Anchor VWAP to the current trading session (Day)
   const lastCandle = candles[candles.length - 1];
-  if (!lastCandle.date) return 0; // Failsafe if date is missing
+  if (!lastCandle.date) return null; // Failsafe if date is missing
   
   const sessionStartStr = new Date(lastCandle.date).toISOString().split('T')[0];
   
@@ -410,11 +410,33 @@ export function vwap(candles) {
     }
   }
 
+  // Calculate VWAP
   for (let i = startIndex; i < candles.length; i++) {
     const c = candles[i];
     const typical = (c.high + c.low + c.close) / 3;
     cumVolPrice += typical * c.volume;
     cumVol += c.volume;
   }
-  return cumVol > 0 ? cumVolPrice / cumVol : 0;
+  
+  const vwapValue = cumVol > 0 ? cumVolPrice / cumVol : 0;
+  if (vwapValue === 0) return null;
+
+  // Calculate VWAP Standard Deviation
+  let cumVariance = 0;
+  for (let i = startIndex; i < candles.length; i++) {
+    const c = candles[i];
+    const typical = (c.high + c.low + c.close) / 3;
+    cumVariance += c.volume * Math.pow(typical - vwapValue, 2);
+  }
+  
+  const variance = cumVol > 0 ? cumVariance / cumVol : 0;
+  const stdDev = Math.sqrt(variance);
+
+  // Return VWAP + 2 Standard Deviation bands
+  return {
+    vwap: parseFloat(vwapValue.toFixed(4)),
+    upperBand: parseFloat((vwapValue + (2 * stdDev)).toFixed(4)),
+    lowerBand: parseFloat((vwapValue - (2 * stdDev)).toFixed(4)),
+    stdDev: parseFloat(stdDev.toFixed(4))
+  };
 }

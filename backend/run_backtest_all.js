@@ -1,7 +1,7 @@
 import { runBacktest } from './backtestEngine.js';
 
 async function main() {
-    const assets = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
+    const assets = ['BNB-USD', 'DOGE-USD', 'ADA-USD', 'LTC-USD', 'DOT-USD'];
     const days = 730; // 2 years
     
     console.log("==================================================");

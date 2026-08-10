@@ -13,7 +13,7 @@ import { calculateHurst } from './hurstEngine.js';
 import { classifyRegime } from './regimeClassifier.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
 import { calculateOrderFlowImbalance } from './orderFlowEngine.js';
-import { rsi, macd, bollingerBands, atr, sma, volumeAnalysis } from './technicalEngine.js';
+import { rsi, macd, bollingerBands, atr, sma, volumeAnalysis, vwap } from './technicalEngine.js';
 import { getClosePrices, getLogReturns } from './dataFetcher.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION } from './sharedConfig.js';
 import { computeKelly } from './kellyEngine.js';
@@ -107,6 +107,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   const sma20 = sma(votingCloses, 20);
   const sma50 = sma(votingCloses, 50);
   const sma200 = sma(closes, 200); // SMA200 stays on daily — structural level
+  const vwapResult = vwap(votingCandles);
 
   // ─────────────────────────────────────────────────────
   // LAYER 4: ORDER FLOW IMBALANCE (on voting-timeframe candles)
@@ -128,6 +129,22 @@ export async function generateSignal(ticker, candles, options = {}) {
       if (mPrice > mSma50 && mSma20 > mSma50) macroTrend = 'BULLISH';
       else if (mPrice < mSma50 && mSma20 < mSma50) macroTrend = 'BEARISH';
       else macroTrend = 'NEUTRAL';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // LAYER 5b: MESO TREND ALIGNMENT (4H)
+  // ─────────────────────────────────────────────────────
+  let mesoTrend = 'UNKNOWN';
+  if (options.candles4h && options.candles4h.length >= 50) {
+    const mesoCloses = getClosePrices(options.candles4h);
+    const mePrice = mesoCloses[mesoCloses.length - 1];
+    const meSma20 = sma(mesoCloses, 20);
+    const meSma50 = sma(mesoCloses, 50);
+    if (meSma20 && meSma50) {
+      if (mePrice > meSma50 && meSma20 > meSma50) mesoTrend = 'BULLISH';
+      else if (mePrice < meSma50 && meSma20 < meSma50) mesoTrend = 'BEARISH';
+      else mesoTrend = 'NEUTRAL';
     }
   }
 
@@ -359,14 +376,41 @@ export async function generateSignal(ticker, candles, options = {}) {
     reasons.push(macroReason);
   }
 
-  if (direction === 'NEUTRAL' || compositeScore < MIN_SIGNAL_SCORE || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject) {
+  let mesoReject = false;
+  if (mesoTrend === 'BULLISH' && direction === 'BEARISH') {
+    mesoReject = true;
+    macroReason = 'Counter-Trend Block: Micro signal is BEARISH but Meso 4H trend is BULLISH.';
+    reasons.push(macroReason);
+  } else if (mesoTrend === 'BEARISH' && direction === 'BULLISH') {
+    mesoReject = true;
+    macroReason = 'Counter-Trend Block: Micro signal is BULLISH but Meso 4H trend is BEARISH.';
+    reasons.push(macroReason);
+  }
+
+  let vwapReject = false;
+  let vwapReason = null;
+  if (vwapResult) {
+      if (direction === 'BULLISH' && currentPrice > vwapResult.upperBand) {
+          vwapReject = true;
+          vwapReason = `VWAP Overextension Block: Price ($${currentPrice}) is > 2 StdDev above VWAP ($${vwapResult.vwap}). High risk of immediate pullback.`;
+          reasons.push(vwapReason);
+      } else if (direction === 'BEARISH' && currentPrice < vwapResult.lowerBand) {
+          vwapReject = true;
+          vwapReason = `VWAP Overextension Block: Price ($${currentPrice}) is > 2 StdDev below VWAP ($${vwapResult.vwap}). High risk of immediate bounce.`;
+          reasons.push(vwapReason);
+      }
+  }
+
+  if (direction === 'NEUTRAL' || compositeScore < MIN_SIGNAL_SCORE || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject) {
     return {
       action: 'SHIELD_MODE',
       reason: direction === 'NEUTRAL'
         ? 'No clear directional consensus from technical analysis'
+        : vwapReject
+        ? vwapReason
         : hurstCIReject
         ? hurstCIReason
-        : macroReject
+        : (macroReject || mesoReject)
         ? macroReason
         : regimeResult.regime === 'RANDOM_WALK'
         ? 'Market is in Random Walk — no systematic edge exists'
