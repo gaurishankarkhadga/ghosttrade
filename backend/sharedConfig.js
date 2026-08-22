@@ -17,6 +17,11 @@ export const DEFAULT_GLOBAL_STOCKS_WATCHLIST = [
   'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META'
 ];
 
+// Indian Stocks Watchlist
+export const DEFAULT_INDIAN_STOCKS_WATCHLIST = [
+  'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS', 'SBIN.NS'
+];
+
 export function constructSetupId(pattern, regime, closes) {
   if (!pattern) return null;
   

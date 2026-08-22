@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Terminal, BrainCircuit, Activity, LogIn, UserPlus } from 'lucide-react';
+import AnimatedProLogo from '../AnimatedProLogo';
 import './SignInFlow.css';
 
 // 3D Canvas Background (Preserved from 21st.dev)
@@ -116,8 +117,8 @@ function MiniNavbar({ onModeSwitch }) {
   return (
     <header className={`mini-navbar ${headerShapeClass}`}>
       <div className="navbar-inner">
-        <div className="logo-container">
-          <span className="logo-dot"></span><span className="logo-dot"></span><span className="logo-dot"></span><span className="logo-dot"></span>
+        <div className="logo-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <AnimatedProLogo size={48} color="#ffffff" isAnimating={true} />
         </div>
         <nav className="desktop-nav">
           <AnimatedNavLink href="#">Terminal</AnimatedNavLink>
@@ -246,8 +247,11 @@ export const SignInPage = ({ onLoginSuccess }) => {
         <MiniNavbar onModeSwitch={(mode) => { setStep(mode); setErrorMsg(''); }} />
 
         <div className="main-area">
-          <div className="form-container">
-            <div className="form-inner">
+          <div className="form-container" style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
+              <AnimatedProLogo size={800} color="#ffffff" isAnimating={true} />
+            </div>
+            <div className="form-inner" style={{ position: 'relative', zIndex: 1, transform: 'translateY(-40px)' }}>
               <AnimatePresence mode="wait">
                 {step === "login" ? (
                   <motion.div key="login" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper">
@@ -259,7 +263,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
 
                     <form onSubmit={handleLoginSubmit} className="auth-form-modern">
                       <div className="input-group">
-                        <input type="text" placeholder="trader@ghosttrade.io" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="email-input text-left" />
+                        <input type="text" placeholder="Enter your email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="email-input text-left" />
                       </div>
                       <div className="input-group">
                         <input type={showLoginPassword ? 'text' : 'password'} placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="email-input text-left" />
@@ -280,22 +284,11 @@ export const SignInPage = ({ onLoginSuccess }) => {
                         {isLoading ? 'Authenticating...' : 'Sign In to Terminal'}
                       </button>
                     </form>
-
-                    <div className="divider">
-                      <div className="divider-line" />
-                      <span className="divider-text">OR QUICK ACCESS</span>
-                      <div className="divider-line" />
-                    </div>
-
-                    <button onClick={handleInstantDemo} disabled={isLoading} className="google-btn justify-center outline-btn">
-                      Explore Demo Terminal (1-Click Entry)
-                    </button>
                   </motion.div>
                 ) : step === "signup" ? (
                   <motion.div key="signup" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper">
                     <div>
                       <h1 className="hero-title">Create Account</h1>
-                      <p className="hero-subtitle">Join the Institutional Tier</p>
                     </div>
 
                     {errorMsg && <div className="auth-alert error">{errorMsg}</div>}

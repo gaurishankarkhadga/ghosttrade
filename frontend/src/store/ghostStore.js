@@ -35,6 +35,85 @@ const useGhostStore = create(
       
       // --- Execution State ---
       executionMode: 'PAPER',
+      connectedBrokers: [],
+      globalMarkets: null,
+
+      // --- Broker Management ---
+      fetchBrokerStatus: async () => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const res = await fetch(`${baseUrl}/api/broker/status`, {
+            headers: { 'Authorization': `Bearer ${get().token}` }
+          });
+          const data = await res.json();
+          set({ connectedBrokers: data.brokers || [] });
+          return data;
+        } catch (e) {
+          console.error('[BROKER] Failed to fetch broker status:', e);
+          return { brokers: [] };
+        }
+      },
+
+      connectBroker: async ({ broker, apiKey, apiSecret, accountId, isPaper }) => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const res = await fetch(`${baseUrl}/api/broker/keys`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
+            body: JSON.stringify({ broker, apiKey, apiSecret, accountId, isPaper })
+          });
+          const data = await res.json();
+          if (data.success) {
+            await get().fetchBrokerStatus();
+          }
+          return data;
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      },
+
+      disconnectBroker: async (broker) => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          await fetch(`${baseUrl}/api/broker/keys/${broker}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${get().token}` }
+          });
+          set({ executionMode: 'PAPER' });
+          await get().fetchBrokerStatus();
+        } catch (e) {
+          console.error('[BROKER] Disconnect failed:', e);
+        }
+      },
+
+      setExecutionMode: async (mode) => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const res = await fetch(`${baseUrl}/api/execution/mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
+            body: JSON.stringify({ mode })
+          });
+          const data = await res.json();
+          set({ executionMode: data.mode || 'PAPER' });
+          return data;
+        } catch (e) {
+          set({ executionMode: 'PAPER' });
+          return { mode: 'PAPER' };
+        }
+      },
+
+      fetchMarketStatus: async () => {
+        try {
+          const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const res = await fetch(`${baseUrl}/api/markets`);
+          const data = await res.json();
+          set({ globalMarkets: data });
+          return data;
+        } catch (e) {
+          return null;
+        }
+      },
 
       toggleSimpleMode: () => set((state) => ({ isSimpleMode: !state.isSimpleMode })),
 
@@ -70,7 +149,7 @@ const useGhostStore = create(
         try {
           const res = await fetch(`${baseUrl}/api/execution/trade`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
             body: JSON.stringify({
               asset: tradeData.asset,
               side: tradeData.side || 'BUY',
@@ -78,7 +157,8 @@ const useGhostStore = create(
               stopLoss: tradeData.stopLoss,
               takeProfit: tradeData.takeProfit,
               accountBalance: 100000,
-              regime: tradeData.regime || 'TRENDING'
+              regime: tradeData.regime || 'TRENDING',
+              mode: get().executionMode || 'PAPER'
             })
           });
 
@@ -177,6 +257,8 @@ const useGhostStore = create(
             set({ isAuthenticated: true, token: data.token, email: data.email, role: data.role || 'trader', promptsUsed: data.promptsUsed || 0 });
             get().connectWebSocket(data.token);
             get().initAuditData(); // Fetch global DB on login
+            get().fetchBrokerStatus(); // Fetch connected brokers
+            get().fetchMarketStatus(); // Fetch global market status
             return { success: true, message: 'Authentication successful.' };
           }
           
@@ -239,7 +321,9 @@ const useGhostStore = create(
       clearChat: () => set({ chatHistory: [], isThinking: false }),
 
       sendPrompt: async (promptData) => {
-        const { text, imageBase64 } = typeof promptData === 'string' ? { text: promptData, imageBase64: null } : promptData;
+        const { text, imageBase64, market, language } = typeof promptData === 'string' 
+          ? { text: promptData, imageBase64: null, market: 'Global', language: 'English' } 
+          : promptData;
 
         // 1. Check for command overrides
         if (text.toLowerCase().includes('clear') || text.toLowerCase().includes('reset')) {
@@ -269,9 +353,9 @@ const useGhostStore = create(
         chatWs.onopen = () => {
           chatWs.send(JSON.stringify({ 
              type: 'START_ANALYSIS', 
-             prompt: text, 
+             prompt: `[Context: Market Region = ${market || 'Global'}]\n${text}`, 
              image: imageBase64,
-             language: 'English',
+             language: language || 'English',
              isSimpleMode: get().isSimpleMode
           }));
         };

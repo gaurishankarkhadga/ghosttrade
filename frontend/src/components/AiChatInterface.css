@@ -46,9 +46,9 @@
   top: 48%;
   left: 50%;
   transform: translateX(-50%);
-  width: 130vw;
-  height: 1000px;
-  border-radius: 100% 100% 0 0;
+  width: 150cqw;
+  height: 100vh;
+  border-radius: 50% 50% 0 0 / 25cqw 25cqw 0 0;
   border: none;
   border-top: 20px solid #fff;
   background: var(--color-ghost-obsidian);

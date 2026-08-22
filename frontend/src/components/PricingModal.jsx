@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { initializePaddle } from '@paddle/paddle-js';
 import useGhostStore from '../store/ghostStore';
 import './PricingModal.css';
@@ -72,17 +73,19 @@ const PLANS = [
   }
 ];
 
-export function PricingModal({ isOpen, onClose, onSuccess, userEmail, forceLock = false }) {
+export function PricingModal() {
   const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' | 'yearly'
   const [paddle, setPaddle] = useState(null);
   const [loadingPriceId, setLoadingPriceId] = useState(null);
   const [initError, setInitError] = useState(null);
-  const role = useGhostStore((state) => state.role);
+
+  const { role, email: userEmail, promptsUsed, syncSubscription } = useGhostStore();
+  const forceLock = role === 'trader' && promptsUsed >= 3;
+
   const selectedPlanRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isOpen) return;
-
     let isMounted = true;
     if (PADDLE_CLIENT_TOKEN) {
       initializePaddle({
@@ -91,8 +94,8 @@ export function PricingModal({ isOpen, onClose, onSuccess, userEmail, forceLock 
         eventCallback: (event) => {
           console.log('[PADDLE EVENT]', event.name, event.data);
           if (event.name === 'checkout.completed') {
-            if (onSuccess) onSuccess(selectedPlanRef.current);
-            onClose();
+            syncSubscription(selectedPlanRef.current);
+            navigate('/terminal');
           }
         }
       })
@@ -108,9 +111,7 @@ export function PricingModal({ isOpen, onClose, onSuccess, userEmail, forceLock 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  }, [navigate, syncSubscription]);
 
   const handleSubscribe = (plan) => {
     selectedPlanRef.current = plan.id;
@@ -141,9 +142,9 @@ export function PricingModal({ isOpen, onClose, onSuccess, userEmail, forceLock 
   };
 
   return (
-    <div className="pricing-modal-overlay" onClick={!forceLock ? onClose : undefined}>
-      <div className="pricing-modal-container" onClick={(e) => e.stopPropagation()}>
-        {!forceLock && <button className="pricing-modal-close" onClick={onClose}>&times;</button>}
+    <div className="pricing-modal-overlay">
+      <div className="pricing-modal-container">
+        {!forceLock && <button className="pricing-modal-close" onClick={() => navigate('/terminal')}>&times;</button>}
 
         <div className="pricing-header">
           <div className="pricing-title-badge">⚡ GHOSTTRADE INTELLIGENCE SUITE</div>
@@ -171,7 +172,7 @@ export function PricingModal({ isOpen, onClose, onSuccess, userEmail, forceLock 
             const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
             const priceId = billingCycle === 'monthly' ? plan.monthlyPriceId : plan.yearlyPriceId;
             const isSelectedLoading = loadingPriceId === priceId;
-            
+
             const userTierLevel = TIER_ORDER[role] || 0;
             const planTierLevel = TIER_ORDER[plan.id] || 0;
             const isCurrentPlan = role === plan.id;

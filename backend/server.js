@@ -10,12 +10,20 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 dotenv.config();
 
 // === Engine Imports ===
+import { getDynamicCryptoWatchlist } from './discoveryEngine.js';
 import { runBulkScanPhase4 } from './scannerEngine.js';
-import { DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST, constructSetupId } from './sharedConfig.js';
+import { 
+  DEFAULT_CRYPTO_WATCHLIST, 
+  DEFAULT_GLOBAL_STOCKS_WATCHLIST, 
+  DEFAULT_INDIAN_STOCKS_WATCHLIST, 
+  constructSetupId 
+} from './sharedConfig.js';
+
 import { startWebSocketPipeline, liveMemoryState } from './websocketEngine.js';
 import { handleGeminiConnection } from './geminiEngine.js';
 import { startAuditDaemon } from './auditDaemon.js';
@@ -23,6 +31,10 @@ import { startRegimeMonitor, registerClient } from './regimeMonitor.js';
 import { getDb } from './mongoConfig.js';
 import { runBacktest } from './backtestEngine.js';
 import { executionManager } from './executionEngine.js';
+// === Global System Imports ===
+import { storeBrokerKeys, deleteBrokerKeys, listConnectedBrokers, SUPPORTED_BROKERS } from './brokerKeyManager.js';
+import { MARKET_REGIONS, listAvailableRegions, getTotalAssetCount, getWatchlistForRegions } from './globalWatchlists.js';
+import { isMarketOpen, getOpenMarkets } from './marketHoursEngine.js';
 
 
 // === Security ===
@@ -63,7 +75,7 @@ fastify.addHook('onRequest', async (request, reply) => {
   const url = request.raw.url;
   
   // Protect specific REST routes
-  if (url.startsWith('/api/execution/') || url.startsWith('/api/audit/')) {
+  if (url.startsWith('/api/execution/') || url.startsWith('/api/audit/') || url.startsWith('/api/broker/')) {
     try {
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -289,18 +301,26 @@ fastify.get('/api/audit/prompts', async (request, reply) => {
 // =====================================================
 
 fastify.get('/api/execution/status', async (request, reply) => {
-  return reply.send({
-    mode: 'PAPER',
-    isBrokerAuthenticated: false
-  });
+  try {
+    const engine = executionManager.getEngine(request.user.email);
+    return reply.send({
+      mode: engine.mode || 'PAPER',
+      isBrokerAuthenticated: engine.isBrokerAuthenticated || false
+    });
+  } catch {
+    return reply.send({ mode: 'PAPER', isBrokerAuthenticated: false });
+  }
 });
 
 fastify.post('/api/execution/mode', async (request, reply) => {
   const { mode } = request.body || {};
-  if (mode !== 'PAPER') {
-    return reply.code(400).send({ error: 'Global Intelligence Terminal is strictly locked to PAPER mode.' });
+  try {
+    const engine = executionManager.getEngine(request.user.email);
+    const result = await engine.setExecutionMode(mode, request.user.email);
+    return reply.send(result);
+  } catch (err) {
+    return reply.send({ mode: 'PAPER', isBrokerAuthenticated: false, message: err.message });
   }
-  return reply.send({ mode: 'PAPER', isBrokerAuthenticated: false });
 });
 
 fastify.post('/api/execution/trade', async (request, reply) => {
@@ -340,6 +360,214 @@ fastify.post('/api/execution/reset', async (request, reply) => {
   } catch (err) {
     return reply.code(500).send({ error: err.message });
   }
+});
+
+// =====================================================
+// BROKER KEY MANAGEMENT API (Global Execution System)
+// =====================================================
+
+fastify.post('/api/broker/keys', async (request, reply) => {
+  const { broker, apiKey, apiSecret, accountId, isPaper } = request.body || {};
+  if (!broker || !apiKey) {
+    return reply.code(400).send({ error: 'broker and apiKey are required.' });
+  }
+  if (!SUPPORTED_BROKERS.includes(broker)) {
+    return reply.code(400).send({ error: `Unsupported broker. Supported: ${SUPPORTED_BROKERS.join(', ')}` });
+  }
+  try {
+    await storeBrokerKeys(request.user.email, broker, { apiKey, apiSecret, accountId, isPaper: String(isPaper !== false) });
+    return reply.send({ success: true, broker, message: `${broker} credentials stored securely (AES-256 encrypted).` });
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.get('/api/broker/status', async (request, reply) => {
+  try {
+    const connected = await listConnectedBrokers(request.user.email);
+    return reply.send({ brokers: connected, supportedBrokers: SUPPORTED_BROKERS });
+  } catch (err) {
+    return reply.send({ brokers: [], supportedBrokers: SUPPORTED_BROKERS });
+  }
+});
+
+fastify.delete('/api/broker/keys/:broker', async (request, reply) => {
+  const { broker } = request.params;
+  try {
+    await deleteBrokerKeys(request.user.email, broker);
+    // Reset execution mode to PAPER after removing keys
+    const engine = executionManager.getEngine(request.user.email);
+    await engine.setExecutionMode('PAPER');
+    return reply.send({ success: true, message: `${broker} credentials removed.` });
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+// =====================================================
+// OAUTH FLOW API (Redirect Implementation)
+// =====================================================
+
+fastify.get('/api/broker/oauth/authorize', async (request, reply) => {
+  const { broker } = request.query;
+  if (!broker || !SUPPORTED_BROKERS.includes(broker)) {
+    return reply.code(400).send({ error: 'Invalid broker for OAuth' });
+  }
+  
+  const stateToken = crypto.randomBytes(16).toString('hex');
+  const redirectUri = encodeURIComponent(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth/callback`);
+  
+  let authUrl = '';
+
+  switch (broker) {
+    case 'BINANCE':
+      const binanceClientId = process.env.BINANCE_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      authUrl = `https://accounts.binance.com/en/oauth/authorize?response_type=code&client_id=${binanceClientId}&redirect_uri=${redirectUri}&state=${stateToken}`;
+      break;
+    case 'ALPACA':
+      const alpacaClientId = process.env.ALPACA_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      authUrl = `https://app.alpaca.markets/oauth/authorize?response_type=code&client_id=${alpacaClientId}&redirect_uri=${redirectUri}&state=${stateToken}&scope=data,trading,account`;
+      break;
+    case 'IBKR':
+      const ibkrClientId = process.env.IBKR_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      authUrl = `https://ndcdyn.interactivebrokers.com/sso/Login?response_type=code&client_id=${ibkrClientId}&redirect_uri=${redirectUri}&state=${stateToken}`;
+      break;
+    default:
+      return reply.code(400).send({ error: 'Broker not supported for OAuth yet' });
+  }
+  
+  return reply.send({ url: authUrl });
+});
+
+fastify.post('/api/broker/oauth/callback', async (request, reply) => {
+  const { broker, code, state } = request.body || {};
+  if (!broker || !code) {
+    return reply.code(400).send({ error: 'broker and code are required.' });
+  }
+  
+  try {
+    const redirectUri = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/oauth/callback` : 'http://localhost:5173/oauth/callback';
+    let accessToken = '';
+    let refreshToken = '';
+
+    if (broker === 'ALPACA') {
+      const clientId = process.env.ALPACA_CLIENT_ID;
+      const clientSecret = process.env.ALPACA_CLIENT_SECRET;
+      if (!clientId || !clientSecret) throw new Error('Alpaca OAuth credentials not configured in backend.');
+
+      const params = new URLSearchParams();
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('client_id', clientId);
+      params.append('client_secret', clientSecret);
+      params.append('redirect_uri', redirectUri);
+
+      const tokenRes = await fetch('https://api.alpaca.markets/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params
+      });
+      
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) throw new Error(`Alpaca OAuth failed: ${tokenData.message || JSON.stringify(tokenData)}`);
+      
+      accessToken = tokenData.access_token;
+      refreshToken = tokenData.refresh_token;
+
+    } else if (broker === 'BINANCE') {
+      const clientId = process.env.BINANCE_CLIENT_ID;
+      const clientSecret = process.env.BINANCE_CLIENT_SECRET;
+      if (!clientId || !clientSecret) throw new Error('Binance OAuth credentials not configured in backend.');
+
+      const params = new URLSearchParams();
+      params.append('client_id', clientId);
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
+      
+      const tokenRes = await fetch('https://api.binance.com/oauth/token', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+        },
+        body: params
+      });
+      
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) throw new Error(`Binance OAuth failed: ${tokenData.msg || JSON.stringify(tokenData)}`);
+      
+      accessToken = tokenData.access_token;
+      refreshToken = tokenData.refresh_token;
+
+    } else if (broker === 'IBKR') {
+      const clientId = process.env.IBKR_CLIENT_ID;
+      const clientSecret = process.env.IBKR_CLIENT_SECRET;
+      if (!clientId || !clientSecret) throw new Error('IBKR OAuth credentials not configured in backend.');
+
+      const params = new URLSearchParams();
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
+      
+      const tokenRes = await fetch('https://api.interactivebrokers.com/v1/oauth/access_token', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+        },
+        body: params
+      });
+      
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) throw new Error(`IBKR OAuth failed: ${tokenData.error || JSON.stringify(tokenData)}`);
+      
+      accessToken = tokenData.access_token;
+      refreshToken = tokenData.refresh_token;
+
+    } else {
+      throw new Error('Unsupported broker for OAuth.');
+    }
+
+    // Store the real tokens securely
+    await storeBrokerKeys(request.user.email, broker, { 
+      apiKey: accessToken, 
+      apiSecret: refreshToken, 
+      accountId: 'oauth-linked', 
+      isPaper: 'true' 
+    });
+    
+    return reply.send({ success: true, broker, message: `${broker} OAuth connection established.` });
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+// =====================================================
+// GLOBAL MARKET INFO API (Read-Only, No Auth Required)
+// =====================================================
+
+fastify.get('/api/markets', async (request, reply) => {
+  const regions = {};
+  for (const [key, data] of Object.entries(MARKET_REGIONS)) {
+    const status = isMarketOpen(key);
+    regions[key] = {
+      name: data.name,
+      timezone: data.timezone,
+      hours: `${data.open} - ${data.close}`,
+      is24h: data.is24h,
+      broker: data.broker,
+      assetCount: data.watchlist.length,
+      isOpen: status.isOpen,
+      status: status.reason,
+    };
+  }
+  return reply.send({
+    totalRegions: listAvailableRegions().length,
+    totalAssets: getTotalAssetCount(),
+    openNow: getOpenMarkets(),
+    regions,
+  });
 });
 
 // Broker credentials logic has been deprecated.
@@ -527,16 +755,21 @@ async function runGhostBrainLoop() {
 
   console.log('[DAEMON] Starting Ghost Brain Multi-Market Backend Loop (Binance + NSE)...');
 
+  // Initial fetch for dynamic Phase 0 Top 100 Crypto funnel
+  let dynamicCryptoList = await getDynamicCryptoWatchlist();
+
   // Start WebSocket for Crypto level 2 depth
-  await startWebSocketPipeline(DEFAULT_CRYPTO_WATCHLIST);
+  await startWebSocketPipeline(dynamicCryptoList);
 
-  const activeWatchlist = [...DEFAULT_CRYPTO_WATCHLIST, ...DEFAULT_GLOBAL_STOCKS_WATCHLIST];
+  const globalAssets = getWatchlistForRegions(listAvailableRegions());
+  let activeWatchlist = [...new Set([...dynamicCryptoList, ...globalAssets])];
 
-  console.log('[DAEMON] Waiting for initial order flow telemetry buffer to fill...');
+  console.log(`[DAEMON] Waiting for initial order flow telemetry buffer to fill for ${activeWatchlist.length} assets...`);
   for (let i = 0; i < 15; i++) {
-    const btcTrades = liveMemoryState.aggTrades['BTC-USD'];
-    if (btcTrades && btcTrades.length > 0) {
-      console.log(`[DAEMON] Telemetry buffer filled (${btcTrades.length} trades). Proceeding to initial scan.`);
+    const firstCrypto = dynamicCryptoList[0] || 'BTC-USD';
+    const firstTrades = liveMemoryState.aggTrades[firstCrypto];
+    if (firstTrades && firstTrades.length > 0) {
+      console.log(`[DAEMON] Telemetry buffer filled (${firstTrades.length} trades for ${firstCrypto}). Proceeding to initial scan.`);
       break;
     }
     await new Promise(r => setTimeout(r, 1000));
@@ -555,6 +788,15 @@ async function runGhostBrainLoop() {
   while (true) {
     if (connectedClients.size > 0) {
       try {
+        // Refresh the dynamic list every loop (the engine caches for 5 mins automatically)
+        dynamicCryptoList = await getDynamicCryptoWatchlist();
+        
+        // Ensure WebSocket is updated with any new tickers seamlessly
+        await startWebSocketPipeline(dynamicCryptoList);
+
+        const globalAssets = getWatchlistForRegions(listAvailableRegions());
+        activeWatchlist = [...new Set([...dynamicCryptoList, ...globalAssets])];
+
         const results = await runBulkScanPhase4(activeWatchlist);
         broadcast(results);
       } catch (e) {

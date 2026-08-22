@@ -68,7 +68,8 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
 
   const closes = getClosePrices(candles);
-  const currentPrice = closes[closes.length - 1];
+  // Institutional Circuit Breaker: Always anchor the entire engine's logic to the true Live Price if provided, falling back to OHLCV close
+  const currentPrice = options.livePrice || closes[closes.length - 1];
 
   // ─────────────────────────────────────────────────────
   // MULTI-TIMEFRAME STRATEGY:
@@ -434,7 +435,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   // Use voting-timeframe candles for SL/TP (1h ATR matches 4h prediction window)
   // ─────────────────────────────────────────────────────
   const tradeSide = direction === 'BULLISH' ? 'LONG' : 'SHORT';
-  const slTpResult = computeStopLossTakeProfit(votingCandles, tradeSide, 1.5, 2.0);
+  const slTpResult = computeStopLossTakeProfit(votingCandles, tradeSide, currentPrice, 1.5, 2.0);
 
   if (!slTpResult) {
     return {

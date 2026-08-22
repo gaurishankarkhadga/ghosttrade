@@ -338,12 +338,16 @@ const TradeExecutionCard = ({
   const smoothedPro = useControlledTypewriter(proText, step === 8, step > 8, !isNewMessage, onProComplete);
 
   const executeTrade = useGhostStore((state) => state.executeTrade);
+  const currentMode = useGhostStore((state) => state.executionMode) || 'PAPER';
+  const isLiveMode = currentMode !== 'PAPER';
 
-  const handleExecute = () => {
+  const [tradeResult, setTradeResult] = useState(null);
+
+  const handleExecute = async () => {
     if (isShield) return; 
 
     setIsExecuted(true);
-    executeTrade({ 
+    const result = await executeTrade({ 
       asset, 
       side, 
       entryPrice: safeEntryPrice, 
@@ -355,17 +359,53 @@ const TradeExecutionCard = ({
       regime: regime || 'DYNAMIC_REGIME',
       source: source || 'AI_AGENT'
     });
+    setTradeResult(result);
   };
 
   if (isExecuted) {
+    // Still waiting for backend response
+    if (!tradeResult) {
+      return (
+        <div className={`trade-card executed`}>
+          <div className="trade-header">
+            <span className="trade-asset">⏳ {asset} PROCESSING...</span>
+          </div>
+          <p className="trade-success-msg">Routing to execution engine...</p>
+        </div>
+      );
+    }
+
+    // Trade was blocked by risk control
+    if (!tradeResult.success) {
+      return (
+        <div className={`trade-card executed`} style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+          <div className="trade-header">
+            <span className="trade-asset">🛡️ {asset} RISK BLOCKED</span>
+            <span className="trade-status-badge" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}>
+              BLOCKED
+            </span>
+          </div>
+          <p className="trade-success-msg" style={{ color: '#f87171' }}>
+            Risk engine denied execution: {tradeResult.reason || 'Portfolio risk limit exceeded'}. Your capital is protected.
+          </p>
+        </div>
+      );
+    }
+
+    // Trade succeeded
     return (
       <div className={`trade-card executed`}>
         <div className="trade-header">
           <span className="trade-asset">⚡ {asset} ACTIVE</span>
-          <span className="trade-status-badge">LIVE</span>
+          <span className="trade-status-badge" style={{ background: isLiveMode ? 'rgba(239,68,68,0.2)' : 'rgba(148,163,184,0.2)', color: isLiveMode ? '#ef4444' : '#94a3b8' }}>
+            {isLiveMode ? '🔴 LIVE' : '📝 PAPER'}
+          </span>
         </div>
         <p className="trade-success-msg">
-          Signal logged to the Performance Dashboard for real-time tracking and verification.
+          {isLiveMode
+            ? `Order routed to ${currentMode.replace('LIVE_', '')} broker for live execution. Track on Performance Dashboard.`
+            : 'Signal logged to the Performance Dashboard for real-time tracking and verification.'
+          }
         </p>
       </div>
     );
@@ -512,7 +552,12 @@ const TradeExecutionCard = ({
                 disabled={isShield}
                 style={{ opacity: isShield ? 0.4 : 1, cursor: isShield ? 'not-allowed' : 'pointer', flex: 1, margin: 0 }}
                >
-                {isShield ? <><ShieldAlert size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</> : <><CheckCircle size={16} className="btn-icon"/> Log Signal to Audit Dashboard</>}
+                {isShield 
+                  ? <><ShieldAlert size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</>
+                  : isLiveMode
+                    ? <><Zap size={16} className="btn-icon"/> Execute LIVE via {currentMode.replace('LIVE_', '')} Broker</>
+                    : <><CheckCircle size={16} className="btn-icon"/> Log Signal to Audit Dashboard</>
+                }
                </button>
             </div>
           )}

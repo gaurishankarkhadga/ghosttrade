@@ -7,6 +7,8 @@ import { SignInPage } from './components/ui/SignInFlow';
 import TerminalNavbar from './components/TerminalNavbar';
 import AiChatInterface from './components/AiChatInterface';
 import PerformanceDashboard from './components/PerformanceDashboard';
+import BrokerSettingsPage from './components/BrokerSettingsPage';
+import OAuthCallback from './components/OAuthCallback';
 
 import { PricingModal } from './components/PricingModal';
 
@@ -21,6 +23,9 @@ const ProtectedLayout = ({ children }) => {
   }
 
   const isTrialExpired = role === 'trader' && promptsUsed >= 3;
+  if (isTrialExpired) {
+    return <Navigate to="/pricing" replace />;
+  }
 
   return (
     <div className="app-container">
@@ -29,16 +34,7 @@ const ProtectedLayout = ({ children }) => {
         onLockTerminal={() => logout()}
       />
       
-      {/* Forced Paywall for Trial Expiry */}
-      <PricingModal 
-        isOpen={isTrialExpired} 
-        onClose={() => {}} // Cannot close until upgraded
-        onSuccess={(planId) => syncSubscription(planId)}
-        userEmail={email}
-        forceLock={isTrialExpired}
-      />
-
-      <main className="main-workspace" style={{ filter: isTrialExpired ? 'blur(5px)' : 'none', pointerEvents: isTrialExpired ? 'none' : 'auto' }}>
+      <main className="main-workspace">
         {children}
       </main>
     </div>
@@ -46,14 +42,16 @@ const ProtectedLayout = ({ children }) => {
 };
 
 export default function App() {
-  const { isAuthenticated, connectWebSocket, initAuditData, login } = useGhostStore();
+  const { isAuthenticated, connectWebSocket, initAuditData, fetchBrokerStatus, fetchMarketStatus, login } = useGhostStore();
 
   useEffect(() => {
     if (isAuthenticated) {
       connectWebSocket();
       initAuditData();
+      fetchBrokerStatus();
+      fetchMarketStatus();
     }
-  }, [isAuthenticated, connectWebSocket, initAuditData]);
+  }, [isAuthenticated, connectWebSocket, initAuditData, fetchBrokerStatus, fetchMarketStatus]);
 
   return (
     <Routes>
@@ -86,6 +84,30 @@ export default function App() {
           <ProtectedLayout>
              <PerformanceDashboard />
           </ProtectedLayout>
+        } 
+      />
+
+      {/* Protected Broker Settings Route */}
+      <Route 
+        path="/settings" 
+        element={
+          <ProtectedLayout>
+             <BrokerSettingsPage />
+          </ProtectedLayout>
+        } 
+      />
+
+      {/* OAuth Callback Route */}
+      <Route 
+        path="/oauth/callback" 
+        element={<OAuthCallback />} 
+      />
+
+      {/* Protected Pricing Route (No Sidebar) */}
+      <Route 
+        path="/pricing" 
+        element={
+          isAuthenticated ? <PricingModal /> : <Navigate to="/connect" replace />
         } 
       />
 

@@ -41,7 +41,7 @@ export function isDoji(curr) {
   const body = Math.abs(curr.close - curr.open);
   const range = curr.high - curr.low;
   if (range === 0) return { detected: false, reason: 'flat_bar' };
-  // A doji has a body that is less than 10% of the total range
+  
   return { detected: body < range * 0.10 };
 }
 

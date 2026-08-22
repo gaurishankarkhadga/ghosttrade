@@ -77,6 +77,30 @@ export default function PerformanceDashboard() {
   const pendingCount = aiSignals.filter(sig => !sig.resolvedOutcome).length;
   const blockedCount = aiSignals.filter(sig => sig.signalBlocked).length;
 
+  let totalWinR = 0;
+  let validWins = 0;
+
+  resolvedSignals.forEach(sig => {
+    if (sig.resolvedOutcome === 'CORRECT') {
+      if (sig.currentPrice && sig.primaryTarget && sig.invalidationLevel) {
+        const risk = Math.abs(sig.currentPrice - sig.invalidationLevel);
+        const reward = Math.abs(sig.primaryTarget - sig.currentPrice);
+        if (risk > 0) {
+          totalWinR += (reward / risk);
+          validWins++;
+        }
+      } else {
+        totalWinR += 2.0; // Fallback to 2R for missing data
+        validWins++;
+      }
+    }
+  });
+
+  const avgWinR = validWins > 0 ? (totalWinR / validWins) : 2.0;
+  const winPct = totalPredictions > 0 ? (wins / totalPredictions) : 0;
+  const lossPct = totalPredictions > 0 ? (losses / totalPredictions) : 0;
+  const edgeExpectancy = (winPct * avgWinR) - (lossPct * 1.0);
+
   const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
   const formatDate = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -133,23 +157,11 @@ export default function PerformanceDashboard() {
           <span className="metric-box-label">Edge Expectancy</span>
           <span className="metric-box-value" style={{ color: (() => {
             if (totalPredictions < 5) return '#94A3B8';
-            const winPct = wins / totalPredictions;
-            const lossPct = losses / totalPredictions;
-            const avgWin = 2.0;
-            const avgLoss = 1.0;
-            const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
-            return expectancy > 0 ? '#34d399' : expectancy < 0 ? '#f87171' : '#94A3B8';
+            return edgeExpectancy > 0 ? '#34d399' : edgeExpectancy < 0 ? '#f87171' : '#94A3B8';
           })() }}>
-            {totalPredictions < 5 ? 'N/A' : (() => {
-              const winPct = wins / totalPredictions;
-              const lossPct = losses / totalPredictions;
-              const avgWin = 2.0;
-              const avgLoss = 1.0;
-              const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
-              return `${expectancy >= 0 ? '+' : ''}${expectancy.toFixed(2)}R`;
-            })()}
+            {totalPredictions < 5 ? 'N/A' : `${edgeExpectancy >= 0 ? '+' : ''}${edgeExpectancy.toFixed(2)}R`}
           </span>
-          <span style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>(Win%×2R - Loss%×1R)</span>
+          <span style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>(Win%×{avgWinR.toFixed(1)}R - Loss%×1R)</span>
         </div>
       </div>
 
@@ -159,7 +171,13 @@ export default function PerformanceDashboard() {
             className={`audit-tab-btn ${activeTab === 'signals' ? 'active' : ''}`}
             onClick={() => setActiveTab('signals')}
           >
-            AI Verification Ledger ({aiSignals.length})
+            AI Verification Ledger ({resolvedSignals.length})
+          </button>
+          <button 
+            className={`audit-tab-btn ${activeTab === 'unresolved' ? 'active' : ''}`}
+            onClick={() => setActiveTab('unresolved')}
+          >
+            Unresolved Signals ({aiSignals.length - resolvedSignals.length})
           </button>
           <button 
             className={`audit-tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
@@ -399,10 +417,10 @@ export default function PerformanceDashboard() {
               </tr>
             </thead>
             <tbody>
-              {aiSignals.length === 0 && (
-                <tr><td colSpan="8"><div className="empty-audit-state">No AI predictions recorded. Ask the AI to analyze a chart to generate a signal.</div></td></tr>
+              {resolvedSignals.length === 0 && (
+                <tr><td colSpan="8"><div className="empty-audit-state">No verified predictions recorded yet.</div></td></tr>
               )}
-              {aiSignals.map(sig => {
+              {resolvedSignals.map(sig => {
                 const isWin = sig.resolvedOutcome === 'CORRECT';
                 const isLoss = sig.resolvedOutcome === 'INCORRECT';
                 const isBlocked = sig.signalBlocked;
@@ -491,6 +509,122 @@ export default function PerformanceDashboard() {
                         ) : (
                           <span style={{ color: isWin ? '#34D399' : isLoss ? '#F87171' : '#CBD5E1' }}>
                             {sig.resolvedReason || 'Verified'}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '10px', color: '#CBD5E1', whiteSpace: 'nowrap' }}>
+                        <div>Gen: {formatDate(sig.timestamp)}</div>
+                        {!isPending && sig.resolvedAt && <div>Ver: {formatDate(sig.resolvedAt)}</div>}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan="8" style={{ padding: '8px 16px', background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>
+                          <strong>Prompt:</strong> "{sig.userPrompt || 'Chart Analysis'}"
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#CBD5E1', maxHeight: '45px', overflowY: 'auto', paddingRight: '8px', lineHeight: '1.4' }}>
+                          <strong>AI Proof:</strong> {sig.predictionSummary || 'No textual proof recorded for this signal.'}
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {activeTab === 'unresolved' && (
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Status</th>
+                <th>AI Strategy</th>
+                <th style={{ textAlign: 'center' }}>Confidence</th>
+                <th style={{ textAlign: 'center' }}>Targets</th>
+                <th style={{ textAlign: 'center' }}>Current State</th>
+                <th>Verification Outcome</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aiSignals.filter(s => s.resolvedOutcome !== 'CORRECT' && s.resolvedOutcome !== 'INCORRECT').length === 0 && (
+                <tr><td colSpan="8"><div className="empty-audit-state">No unresolved or pending signals.</div></td></tr>
+              )}
+              {aiSignals.filter(s => s.resolvedOutcome !== 'CORRECT' && s.resolvedOutcome !== 'INCORRECT').map(sig => {
+                const isBlocked = sig.signalBlocked;
+                const isPending = !sig.resolvedOutcome;
+                const isInconclusive = sig.resolvedOutcome === 'INCONCLUSIVE';
+
+                let statusText = 'Tracking Live';
+                let statusClass = 'open';
+                let icon = <Activity size={12} />;
+
+                if (isBlocked) {
+                  icon = <div style={{width: 10, height: 10, borderRadius: '50%', border: '2px solid currentColor', display: 'inline-block'}} />;
+                  if (isPending) {
+                    statusText = 'Safety Block (Tracking)';
+                    statusClass = 'cancelled';
+                  } else {
+                    statusText = 'Safety Blocked';
+                    statusClass = 'error';
+                  }
+                } else {
+                   if (isInconclusive) {
+                      statusText = 'Flat / Inconclusive';
+                      statusClass = 'cancelled';
+                   }
+                }
+
+                // Humanize Regime
+                let humanReason = sig.regime || 'Technical Pattern';
+                if (humanReason === 'RANDOM_WALK') humanReason = 'Choppy Market';
+                if (humanReason === 'MEAN_REVERTING') humanReason = 'Reversal';
+                if (humanReason === 'TRENDING') humanReason = 'Trend Following';
+
+                return (
+                  <React.Fragment key={sig._id}>
+                    <tr>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#f8fafc' }}>{sig.ticker || 'UNKNOWN'}</span>
+                        <span className={`status-badge ${sig.direction === 'BULLISH' ? 'open' : sig.direction === 'BEARISH' ? 'loss' : 'cancelled'}`} style={{ marginLeft: 8 }}>
+                          {sig.direction}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${statusClass}`}>{icon} {statusText}</span>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '11px', color: '#E2E8F0' }}>{humanReason}</div>
+                        <div style={{ fontSize: '10px', color: '#94A3B8' }}>({sig.tradeTimeframe})</div>
+                      </td>
+                      <td style={{ fontWeight: 600, textAlign: 'center' }}>{sig.calibratedConfidence || sig.rawConfidence}%</td>
+                      <td style={{ fontSize: '11px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {(!isBlocked && sig.primaryTarget > 0) ? (
+                          <>
+                            <div style={{ color: '#34D399' }}>TP: ${formatPrice(sig.primaryTarget)}</div>
+                            <div style={{ color: '#F87171' }}>SL: ${formatPrice(sig.invalidationLevel)}</div>
+                          </>
+                        ) : (
+                          <span style={{ color: '#64748B' }}>N/A</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                        {isInconclusive ? (
+                           <span style={{ color: '#FBBF24' }}>INCONCLUSIVE</span>
+                        ) : (
+                           <span style={{ color: '#60A5FA' }}>PENDING</span>
+                        )}
+                      </td>
+                      <td style={{ maxWidth: '250px', fontSize: '11px', lineHeight: '1.4' }}>
+                        {isPending ? (
+                          <span style={{ color: '#64748B' }}>
+                            {isBlocked ? sig.blockedReason + ' (Awaiting verification...)' : 'Awaiting resolution...'}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#FBBF24' }}>
+                            {sig.resolvedReason || 'Inconclusive or Flat Market'}
                           </span>
                         )}
                       </td>

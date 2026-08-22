@@ -1,0 +1,692 @@
+/* ==========================================================================
+   BrokerSettingsPage.css
+   Fully scoped under .broker-settings-page — zero global selectors.
+   Tokens declared as custom properties on the root class only.
+   ========================================================================== */
+
+.broker-settings-page {
+  --color-ghost-obsidian: #090b10;
+  --color-ghost-surface: #11141d;
+  --color-ghost-surface-hover: #1e2332;
+
+  --color-ghost-accent: #f8fafc;
+  --color-ghost-accent-hover: #ffffff;
+  --color-ghost-buy: #10b981;
+  --color-ghost-sell: #ef4444;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-dim: #475569;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.14);
+
+  --font-main: 'Inter', sans-serif;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--color-ghost-obsidian);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  padding: 32px 24px 64px;
+}
+
+/* --------------------------------------------------------------------
+   Layout container
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .broker-page-container {
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* --------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .broker-page-header {
+  display: flex;
+  align-items: center;
+}
+
+.broker-settings-page .broker-page-title-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.broker-settings-page .broker-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--color-ghost-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.broker-settings-page .broker-back-btn:hover {
+  background: var(--color-ghost-surface-hover);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+
+.broker-settings-page .broker-page-title-group h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .broker-page-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------
+   Section headings (shared)
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .execution-mode-section h3,
+.broker-settings-page .broker-connections-section h3,
+.broker-settings-page .market-status-section h3 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 14px;
+}
+
+/* --------------------------------------------------------------------
+   Execution Mode grid
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.broker-settings-page .mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--color-ghost-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.broker-settings-page .mode-btn:hover:not(.disabled) {
+  background: var(--color-ghost-surface-hover);
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+}
+
+.broker-settings-page .mode-btn.active {
+  background: var(--color-ghost-surface-hover);
+}
+
+.broker-settings-page .mode-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.broker-settings-page .mode-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.broker-settings-page .mode-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .mode-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------------------------
+   Broker Connections list
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .broker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.broker-settings-page .broker-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--color-ghost-surface);
+  border-radius: 14px;
+  padding: 4px;
+  transition: border-color 0.15s ease;
+}
+
+.broker-settings-page .broker-card.connected {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.broker-settings-page .broker-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.broker-settings-page .broker-card.connected .broker-card-header {
+  cursor: default;
+}
+
+.broker-settings-page .broker-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.broker-settings-page .broker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.broker-settings-page .broker-name {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .broker-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.broker-settings-page .broker-status-area {
+  display: flex;
+  align-items: center;
+}
+
+.broker-settings-page .broker-connected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ghost-buy);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+.broker-settings-page .broker-connect-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+}
+
+.broker-settings-page .broker-card-header:hover .broker-connect-hint {
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.broker-settings-page .broker-connected-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 14px;
+}
+
+.broker-settings-page .broker-connected-time {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.broker-settings-page .broker-disconnect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-ghost-sell);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.broker-settings-page .broker-disconnect-btn:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* --------------------------------------------------------------------
+   Expandable connection form
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .broker-form {
+  overflow: hidden;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.broker-settings-page .broker-guide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.broker-settings-page .broker-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.broker-settings-page .broker-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.broker-settings-page .broker-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.broker-settings-page .broker-input-wrapper input {
+  width: 100%;
+  background: var(--color-ghost-obsidian);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 38px 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.broker-settings-page .broker-input-wrapper input::placeholder {
+  color: var(--text-dim);
+  font-family: var(--font-main);
+}
+
+.broker-settings-page .broker-input-wrapper input:focus {
+  border-color: var(--border-medium);
+}
+
+.broker-settings-page .broker-eye-btn {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.broker-settings-page .broker-eye-btn:hover {
+  color: var(--text-secondary);
+}
+
+.broker-settings-page .broker-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-ghost-sell);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.broker-settings-page .broker-submit-btn {
+  width: 100%;
+  padding: 11px;
+  border-radius: 9px;
+  border: none;
+  background: var(--color-ghost-accent);
+  color: var(--color-ghost-obsidian);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.broker-settings-page .broker-submit-btn:hover:not(:disabled) {
+  background: var(--color-ghost-accent-hover);
+}
+
+.broker-settings-page .broker-submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------
+   Global market status
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .market-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.broker-settings-page .market-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--color-ghost-surface);
+}
+
+.broker-settings-page .market-pill.open {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.broker-settings-page .market-pill.closed {
+  opacity: 0.55;
+}
+
+.broker-settings-page .market-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-dim);
+}
+
+.broker-settings-page .market-dot.on {
+  background: var(--color-ghost-buy);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.broker-settings-page .market-dot.off {
+  background: var(--color-ghost-sell);
+}
+
+.broker-settings-page .market-pill-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.broker-settings-page .market-pill-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------
+   Security notice
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .broker-security-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.broker-settings-page .broker-security-notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------
+   OAuth Modal
+   -------------------------------------------------------------------- */
+
+.broker-settings-page .oauth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.broker-settings-page .oauth-modal-content {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-ghost-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.broker-settings-page .oauth-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.broker-settings-page .oauth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .oauth-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: color 0.15s ease;
+}
+
+.broker-settings-page .oauth-close:hover {
+  color: var(--text-primary);
+}
+
+.broker-settings-page .oauth-body {
+  padding: 32px 24px;
+}
+
+.broker-settings-page .oauth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.broker-settings-page .oauth-intro {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.broker-settings-page .oauth-intro h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .oauth-intro p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.broker-settings-page .oauth-input-group input {
+  width: 100%;
+  background: var(--color-ghost-obsidian);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.broker-settings-page .oauth-input-group input:focus {
+  border-color: var(--border-medium);
+}
+
+.broker-settings-page .oauth-submit-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.broker-settings-page .oauth-submit-btn:hover {
+  opacity: 0.9;
+}
+
+.broker-settings-page .oauth-footer {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.broker-settings-page .oauth-loading,
+.broker-settings-page .oauth-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.broker-settings-page .oauth-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border-top-style: solid;
+  animation: spin 1s linear infinite;
+  margin-bottom: 24px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.broker-settings-page .oauth-loading h4,
+.broker-settings-page .oauth-success h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.broker-settings-page .oauth-loading p,
+.broker-settings-page .oauth-success p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.broker-settings-page .oauth-success svg {
+  margin-bottom: 20px;
+}
+
+.broker-settings-page .oauth-cta-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.broker-settings-page .oauth-cta-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.broker-settings-page .oauth-trigger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+}

@@ -261,6 +261,8 @@
   bottom: calc(100% + 8px); /* Open upwards from the bottom dock */
   left: 0;
   width: 140px;
+  max-height: 250px;
+  overflow-y: auto;
   background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -272,6 +274,15 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+/* Hide scrollbar for the dropdowns for cleaner UI */
+.market-dropdown-menu::-webkit-scrollbar {
+  display: none;
+}
+.market-dropdown-menu {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
 
 .market-dropdown-item {

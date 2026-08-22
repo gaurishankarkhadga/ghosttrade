@@ -9,7 +9,6 @@
   overflow: hidden;
   color: #E2E8F0;
   font-family: 'Inter', -apple-system, sans-serif;
-  padding-left: 72px; /* Fix sidebar overlap */
 }
 
 .audit-header {

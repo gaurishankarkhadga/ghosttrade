@@ -16,46 +16,64 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Map of known crypto ticker aliases to Yahoo Finance symbols
 const CRYPTO_ALIAS_MAP = {
-  'BTC':    'BTC-USD',
+  'BTC': 'BTC-USD',
   'BTCUSD': 'BTC-USD',
-  'BTCUSDT':'BTC-USD',
-  'ETH':    'ETH-USD',
+  'BTCUSDT': 'BTC-USD',
+  'ETH': 'ETH-USD',
   'ETHUSD': 'ETH-USD',
-  'ETHUSDT':'ETH-USD',
-  'SOL':    'SOL-USD',
+  'ETHUSDT': 'ETH-USD',
+  'SOL': 'SOL-USD',
   'SOLUSD': 'SOL-USD',
-  'XRP':    'XRP-USD',
+  'XRP': 'XRP-USD',
   'XRPUSD': 'XRP-USD',
-  'BNB':    'BNB-USD',
-  'DOGE':   'DOGE-USD',
-  'ADA':    'ADA-USD',
-  'AVAX':   'AVAX-USD',
-  'LINK':   'LINK-USD',
-  'MATIC':  'POL-USD',
-  'LTC':    'LTC-USD',
-  'DOT':    'DOT-USD',
-  'UNI':    'UNI7083-USD',
-  'ATOM':   'ATOM-USD',
-  'NEAR':   'NEAR-USD',
-  'APT':    'APT21794-USD',
-  'ARB':    'ARB-USD',
-  'OP':     'OP-USD',
-  'SUI':    'SUI-USD',
-  'PEPE':   'PEPE24478-USD',
+  'BNB': 'BNB-USD',
+  'DOGE': 'DOGE-USD',
+  'ADA': 'ADA-USD',
+  'AVAX': 'AVAX-USD',
+  'LINK': 'LINK-USD',
+  'MATIC': 'POL-USD',
+  'LTC': 'LTC-USD',
+  'DOT': 'DOT-USD',
+  'UNI': 'UNI7083-USD',
+  'ATOM': 'ATOM-USD',
+  'NEAR': 'NEAR-USD',
+  'APT': 'APT21794-USD',
+  'ARB': 'ARB-USD',
+  'OP': 'OP-USD',
+  'SUI': 'SUI-USD',
+  'PEPE': 'PEPE24478-USD',
 };
 
 /**
  * Resolves a ticker from the AI's output to a Yahoo Finance symbol.
- * Handles crypto aliases, Indian stock symbols (.NS), and standard stock symbols.
+ * Handles crypto aliases, Indian stock symbols (.NS), global exchanges,
+ * forex pairs, and standard US stock symbols.
+ *
+ * GLOBAL EXCHANGE SUFFIXES (Yahoo Finance format):
+ * .NS (India NSE), .BO (India BSE), .L (London), .T (Tokyo),
+ * .HK (Hong Kong), .DE (Germany), .AX (Australia), .KS (Korea),
+ * .TO (Toronto), .SA (Brazil), .PA (Paris), .AS (Amsterdam),
+ * .SI (Singapore), .MI (Milan), .SW (Swiss), .ST (Stockholm),
+ * =X (Forex pairs)
  */
 export function resolveYahooSymbol(rawTicker) {
   if (!rawTicker) return null;
   const upper = rawTicker.trim().toUpperCase();
-  
+
   // Handle Indian NSE tickers directly
   if (upper.endsWith('.NS') || upper.endsWith('.BO') || upper.startsWith('^') || upper.startsWith('NSE:')) {
     return upper.replace('NSE:', '');
   }
+
+  // [GLOBAL] Handle all international exchange suffixes — pass through directly
+  // These are already in Yahoo Finance format and need no transformation
+  const GLOBAL_SUFFIXES = ['.L', '.T', '.HK', '.DE', '.AX', '.KS', '.TO', '.SA', '.PA', '.AS', '.SI', '.MI', '.SW', '.ST', '.OL', '.CO', '.HE'];
+  for (const suffix of GLOBAL_SUFFIXES) {
+    if (upper.endsWith(suffix)) return upper;
+  }
+
+  // [GLOBAL] Handle Forex pairs (e.g., "EURUSD=X")
+  if (upper.endsWith('=X')) return upper;
 
   const clean = upper.replace(/[^A-Z0-9/-]/g, '');
   // Check crypto alias map first
@@ -91,14 +109,13 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
 
   try {
     // Calculate date range — fetch extra days to account for weekends/holidays
-    const endDate   = new Date();
+    const endDate = new Date();
     const startDate = new Date();
     // Add 40% buffer to ensure we get at least `bars` trading days
     startDate.setDate(endDate.getDate() - Math.ceil(bars * 1.4));
 
     const result = await yahooFinance.chart(symbol, {
       period1: startDate.toISOString().split('T')[0],
-      period2: endDate.toISOString().split('T')[0],
       interval: '1d',
     });
 
@@ -110,11 +127,11 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     const ohlcv = result.quotes
       .filter(q => q.close !== null && q.open !== null)
       .map(q => ({
-        date:   new Date(q.date),
-        open:   q.open,
-        high:   q.high,
-        low:    q.low,
-        close:  q.close,
+        date: new Date(q.date),
+        open: q.open,
+        high: q.high,
+        low: q.low,
+        close: q.close,
         volume: q.volume || 0,
       }))
       .sort((a, b) => a.date - b.date)
@@ -122,9 +139,9 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
 
     if (ohlcv.length < 200) {
       return {
-        error:   'INSUFFICIENT_DATA',
+        error: 'INSUFFICIENT_DATA',
         message: `Only ${ohlcv.length} bars available for ${symbol}. Minimum 200 required for Hurst calculation.`,
-        count:   ohlcv.length,
+        count: ohlcv.length,
       };
     }
 
@@ -156,26 +173,26 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
 
   try {
     const endDate = new Date();
-    
+
     // Dates for 1d (needs ~1.4x bars in days)
     const startDate1d = new Date();
     startDate1d.setDate(endDate.getDate() - Math.ceil(bars * 1.4));
-    
+
     // Dates for 1h (needs ~1.4x bars in hours -> / 24 days)
     // Add extra buffer for weekends (crypto trades 24/7, stocks don't)
     const startDate1h = new Date();
     const days1h = Math.min(720, Math.ceil((bars * 1.4) / 24) + 2);
-    startDate1h.setDate(endDate.getDate() - days1h); 
-    
+    startDate1h.setDate(endDate.getDate() - days1h);
+
     // Dates for 15m (needs ~1.4x bars in 15m chunks -> / 96 days)
     const startDate15m = new Date();
     const days15m = Math.min(58, Math.ceil((bars * 1.4) / 96) + 2);
     startDate15m.setDate(endDate.getDate() - days15m);
 
     const [res15m, res1h, res1d] = await Promise.all([
-      yahooFinance.chart(symbol, { period1: startDate15m.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '15m' }).catch(() => null),
-      yahooFinance.chart(symbol, { period1: startDate1h.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '1h' }).catch(() => null),
-      yahooFinance.chart(symbol, { period1: startDate1d.toISOString().split('T')[0], period2: endDate.toISOString().split('T')[0], interval: '1d' }).catch(() => null)
+      yahooFinance.chart(symbol, { period1: startDate15m.toISOString().split('T')[0], interval: '15m' }).catch(() => null),
+      yahooFinance.chart(symbol, { period1: startDate1h.toISOString().split('T')[0], interval: '1h' }).catch(() => null),
+      yahooFinance.chart(symbol, { period1: startDate1d.toISOString().split('T')[0], interval: '1d' }).catch(() => null)
     ]);
 
     const formatData = (res) => {
@@ -183,8 +200,8 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
       return res.quotes
         .filter(q => q.close !== null && q.open !== null)
         .map(q => ({
-          date:   new Date(q.date),
-          open:   q.open, high: q.high, low: q.low, close: q.close, volume: q.volume || 0,
+          date: new Date(q.date),
+          open: q.open, high: q.high, low: q.low, close: q.close, volume: q.volume || 0,
         }))
         .sort((a, b) => a.date - b.date)
         .slice(-bars);
@@ -203,12 +220,12 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
     }
 
     console.log(`[DATA] Fetched Multi-TF for ${symbol} (15m: ${tf15m.length}, 1h: ${tf1h.length}, 1d: ${tf1d.length})`);
-    
-    const finalData = { 
-      symbol, 
-      timeframes: { '15m': tf15m, '1h': tf1h, '1d': tf1d } 
+
+    const finalData = {
+      symbol,
+      timeframes: { '15m': tf15m, '1h': tf1h, '1d': tf1d }
     };
-    
+
     ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
     return finalData;
 
@@ -231,7 +248,7 @@ export function getLogReturns(ohlcv) {
   for (let i = 1; i < closes.length; i++) {
     const current = closes[i];
     const prev = closes[i - 1];
-    
+
     // Failsafe against exchange data gaps (0 or NaN) preventing NaN poisoning in regression models
     if (!current || !prev || prev === 0 || isNaN(current) || isNaN(prev)) {
       returns.push(0);

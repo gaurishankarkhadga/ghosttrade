@@ -22,26 +22,40 @@ globalThis.__ghostLiveMemory = liveMemoryState;
 let ws = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
-
-const TICKER_TO_BINANCE = Object.fromEntries(DEFAULT_CRYPTO_WATCHLIST.map(t => [t, t.replace('-USD', 'USDT').toLowerCase()]));
-const BINANCE_TO_TICKER = Object.fromEntries(DEFAULT_CRYPTO_WATCHLIST.map(t => [t.replace('-USD', 'USDT').toLowerCase(), t]));
+let currentStreamSignature = '';
 
 function normalizeToStream(ticker) {
-    return TICKER_TO_BINANCE[ticker] || ticker.replace('-', '').toLowerCase(); 
+    return ticker.replace('-USD', 'USDT').toLowerCase(); 
 }
 
 function normalizeFromStream(streamStr) {
     const rawSymbol = streamStr.split('@')[0];
-    return BINANCE_TO_TICKER[rawSymbol] || `${rawSymbol.toUpperCase()}-USD`;
+    return `${rawSymbol.toUpperCase().replace('USDT', '-USD')}`;
 }
 
 /**
  * Initializes the WebSocket connection. Non-blocking Promise to ensure server daemon never hangs.
  */
-export function startWebSocketPipeline(tickers = DEFAULT_CRYPTO_WATCHLIST) {
+export function startWebSocketPipeline(tickers = []) {
     return new Promise((resolve) => {
+        const newSignature = [...tickers].sort().join(',');
+
         if (ws) {
-            console.log(`[WEBSOCKET] Pipeline already running.`);
+            if (currentStreamSignature === newSignature) {
+                console.log(`[WEBSOCKET] Pipeline already running with exact same assets.`);
+                return resolve();
+            } else {
+                console.log(`[WEBSOCKET] Dynamic Top 100 List changed. Rebuilding connection...`);
+                // Terminate old connection instantly so we don't leak memory
+                ws.terminate(); 
+                ws = null;
+            }
+        }
+        
+        currentStreamSignature = newSignature;
+
+        if (tickers.length === 0) {
+            console.log(`[WEBSOCKET] No tickers provided. Waiting...`);
             return resolve();
         }
 

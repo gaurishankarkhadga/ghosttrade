@@ -1,24 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe, BookOpen } from 'lucide-react';
+import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe, BookOpen, MessageSquare } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
 
 export default function PromptInputBar({ onSend, disabled }) {
   const [prompt, setPrompt] = useState('');
-  const [market, setMarket] = useState('Global');
+  const [market, setMarket] = useState(() => localStorage.getItem('ghosttrade_market') || 'Crypto');
+  const [language, setLanguage] = useState(() => localStorage.getItem('ghosttrade_language') || 'English');
   const [isMarketDropdownOpen, setIsMarketDropdownOpen] = useState(false);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [attachedImage, setAttachedImage] = useState(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const langDropdownRef = useRef(null);
 
-  const MARKETS = ['Global', 'India', 'AngelOne', 'Groww', 'Zerodha', 'Robinhood'];
+  const MARKETS = ['Crypto', 'United States', 'India', 'United Kingdom', 'Japan', 'Europe', 'Australia', 'Hong Kong', 'South Korea', 'Canada', 'Brazil', 'Singapore', 'Forex'];
+  const LANGUAGES = ['English', 'Hindi', 'Japanese', 'Spanish', 'Portuguese', 'Arabic', 'Korean', 'French', 'German'];
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsMarketDropdownOpen(false);
+      }
+      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target)) {
+        setIsLangDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -27,12 +34,34 @@ export default function PromptInputBar({ onSend, disabled }) {
   
   const { assets, isSimpleMode, toggleSimpleMode } = useGhostStore();
   
-  // Filter activeTickers based on selected market
+  // Filter activeTickers based on selected market (simple heuristic for UI chips)
   let activeTickers = Object.keys(assets);
-  if (market === 'Global' || market === 'Robinhood') {
-    activeTickers = activeTickers.filter(t => t.endsWith('-USD') || !t.includes('.'));
-  } else if (market === 'India' || market === 'AngelOne' || market === 'Groww' || market === 'Zerodha') {
-    activeTickers = activeTickers.filter(t => t.endsWith('.NS'));
+  if (market === 'Crypto') {
+    activeTickers = activeTickers.filter(t => t.endsWith('-USD'));
+  } else if (market === 'India') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.NS') || t.endsWith('.BO'));
+  } else if (market === 'United Kingdom') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.L'));
+  } else if (market === 'Japan') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.T'));
+  } else if (market === 'Europe') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.DE') || t.endsWith('.PA') || t.endsWith('.AS'));
+  } else if (market === 'Australia') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.AX'));
+  } else if (market === 'Hong Kong') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.HK'));
+  } else if (market === 'South Korea') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.KS'));
+  } else if (market === 'Canada') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.TO'));
+  } else if (market === 'Brazil') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.SA'));
+  } else if (market === 'Singapore') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.SI'));
+  } else if (market === 'Forex') {
+    activeTickers = activeTickers.filter(t => t.endsWith('=X'));
+  } else if (market === 'United States') {
+    activeTickers = activeTickers.filter(t => !t.includes('.') && !t.includes('-') && !t.includes('='));
   }
 
   // Show ALL assets without any filtering limits.
@@ -49,7 +78,7 @@ export default function PromptInputBar({ onSend, disabled }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if ((prompt.trim() || attachedImage) && !disabled) {
-      onSend({ text: prompt.trim(), imageBase64: attachedImage });
+      onSend({ text: prompt.trim(), imageBase64: attachedImage, market, language });
       setPrompt('');
       setAttachedImage(null);
       if (textareaRef.current) {
@@ -67,7 +96,7 @@ export default function PromptInputBar({ onSend, disabled }) {
 
   const handleDeepScan = () => {
     if (!disabled) {
-      onSend({ text: `Execute Deep Scan across all quantitative regimes [Market: ${market}]`, imageBase64: null });
+      onSend({ text: `Execute Deep Scan across all quantitative regimes`, imageBase64: null, market, language });
     }
   };
 
@@ -109,7 +138,7 @@ export default function PromptInputBar({ onSend, disabled }) {
                  key={ticker}
                  type="button"
                  className={`quick-action-chip-integrated ${assets[ticker]?.recommendedSize > 0 ? 'winning-chip' : assets[ticker]?.status === 'error' ? 'error-chip' : ''}`} 
-                 onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null })}
+                 onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null, market, language })}
                  disabled={disabled}
                  title={assets[ticker]?.status === 'error' ? 'API Rate Limited' : ''}
                >
@@ -155,7 +184,7 @@ export default function PromptInputBar({ onSend, disabled }) {
               {isSimpleMode ? <BookOpen size={16} strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} />}
             </button>
             <div className="market-dropdown-container" ref={dropdownRef}>
-              <div className="bolt-model-selector" onClick={() => setIsMarketDropdownOpen(!isMarketDropdownOpen)}>
+              <div className="bolt-model-selector" onClick={() => { setIsMarketDropdownOpen(!isMarketDropdownOpen); setIsLangDropdownOpen(false); }}>
                 <Globe size={14} fill="none" stroke="currentColor" strokeWidth={2} /> 
                 {market} <ChevronDown size={14} />
               </div>
@@ -172,9 +201,45 @@ export default function PromptInputBar({ onSend, disabled }) {
                       <div 
                         key={m} 
                         className={`market-dropdown-item ${market === m ? 'active' : ''}`}
-                        onClick={() => { setMarket(m); setIsMarketDropdownOpen(false); }}
+                        onClick={() => { 
+                          setMarket(m); 
+                          localStorage.setItem('ghosttrade_market', m);
+                          setIsMarketDropdownOpen(false); 
+                        }}
                       >
                         {m}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            
+            <div className="market-dropdown-container" ref={langDropdownRef}>
+              <div className="bolt-model-selector" onClick={() => { setIsLangDropdownOpen(!isLangDropdownOpen); setIsMarketDropdownOpen(false); }}>
+                <MessageSquare size={14} fill="none" stroke="currentColor" strokeWidth={2} /> 
+                {language} <ChevronDown size={14} />
+              </div>
+              <AnimatePresence>
+                {isLangDropdownOpen && (
+                  <motion.div 
+                    className="market-dropdown-menu language-menu"
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {LANGUAGES.map(l => (
+                      <div 
+                        key={l} 
+                        className={`market-dropdown-item ${language === l ? 'active' : ''}`}
+                        onClick={() => { 
+                          setLanguage(l); 
+                          localStorage.setItem('ghosttrade_language', l);
+                          setIsLangDropdownOpen(false); 
+                        }}
+                      >
+                        {l}
                       </div>
                     ))}
                   </motion.div>

@@ -151,17 +151,13 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
   let tickers = [];
   if (Array.isArray(marketOrWatchlist)) {
       tickers = marketOrWatchlist;
-  } else if (marketOrWatchlist === 'Global' || marketOrWatchlist === 'Robinhood') {
-      tickers = DEFAULT_CRYPTO_WATCHLIST;
-  } else if (marketOrWatchlist === 'India' || marketOrWatchlist === 'AngelOne' || marketOrWatchlist === 'Groww' || marketOrWatchlist === 'Zerodha') {
-      tickers = DEFAULT_GLOBAL_STOCKS_WATCHLIST;
   } else {
-      tickers = DEFAULT_CRYPTO_WATCHLIST;
+      tickers = DEFAULT_CRYPTO_WATCHLIST; // Fallback if somehow called with a string
   }
 
   const results = [];
-  const BATCH_SIZE = 4; // Lower batch size for massive Phase 1+2 requests
-  const DELAY_MS = 2000; // 2 seconds to respect Binance Limits
+  const BATCH_SIZE = 10; // Increased batch size for fast global scanning
+  const DELAY_MS = 500;  // Reduced delay to scan 170+ assets in ~8 seconds
 
   console.log(`[SCANNER] Initiating Phase 6 Market-Wide Scan for ${tickers.length} assets...`);
   

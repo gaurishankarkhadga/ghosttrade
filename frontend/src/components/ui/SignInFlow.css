@@ -1,6 +1,6 @@
 /* SignInFlow.css */
 
-.signin-wrapper { display: flex; width: 100%; flex-direction: column; min-height: 100vh; background-color: #000; position: relative; color: #fff; font-family: 'Inter', sans-serif; }
+.signin-wrapper { display: flex; width: 100%; flex-direction: column; min-height: 100vh; background-color: #000; position: relative; color: #fff; font-family: 'Inter', sans-serif; overflow: hidden; }
 .canvas-bg-layer { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 0; }
 .canvas-container { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .radial-gradient-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: radial-gradient(circle at center, rgba(0,0,0,1) 0%, transparent 100%); }

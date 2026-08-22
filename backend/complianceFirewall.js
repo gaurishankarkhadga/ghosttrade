@@ -63,6 +63,45 @@ const REPLACEMENT_MAP = [
   { pattern: /\bzero[\s-]?risk\b/gi,               replacement: 'minimal structural risk' },
   { pattern: /\bno[\s-]?risk\b/gi,                 replacement: 'defined-risk setup' },
   { pattern: /\b(?:absolute|100%)\s+certain(?:ty)?\b/gi, replacement: 'high-probability' },
+
+  // === TIER 7: Multilingual Advisory Language (Global Compliance) ===
+  // Hindi (\b doesn't work with Devanagari — use direct matching)
+  { pattern: /खरीदना\s*चाहिए/g, replacement: 'Bullish Inflection Zone (analysis only)' },
+  { pattern: /बेचना\s*चाहिए/g,  replacement: 'Bearish Liquidity Pullback (analysis only)' },
+  { pattern: /आपको\s+खरीदना/g,  replacement: 'Bullish Zone detected — user discretion applies' },
+  { pattern: /आपको\s+बेचना/g,   replacement: 'Bearish Zone detected — user discretion applies' },
+  { pattern: /खरीदें/g,    replacement: 'Bullish Inflection Zone' },
+  { pattern: /बेचें/g,     replacement: 'Bearish Liquidity Pullback' },
+  { pattern: /खरीदो/g,    replacement: 'Bullish Inflection Zone' },
+  { pattern: /बेचो/g,     replacement: 'Bearish Liquidity Pullback' },
+  { pattern: /खरीदना/g,   replacement: 'Bullish Accumulation' },
+  { pattern: /बेचना/g,    replacement: 'Bearish Distribution' },
+  { pattern: /निवेश करें/g, replacement: 'Accumulation Interest Zone' },
+  { pattern: /निवेश करो/g,  replacement: 'Accumulation Interest Zone' },
+  // Japanese
+  { pattern: /買い/g,           replacement: 'Bullish Inflection Zone' },
+  { pattern: /売り/g,           replacement: 'Bearish Liquidity Pullback' },
+  { pattern: /購入/g,           replacement: 'Accumulation Signal' },
+  { pattern: /売却/g,           replacement: 'Distribution Block' },
+  // Spanish
+  { pattern: /\bcomprar\b/gi,   replacement: 'Bullish Inflection Zone' },
+  { pattern: /\bvender\b/gi,    replacement: 'Bearish Liquidity Pullback' },
+  { pattern: /\binvertir\b/gi,  replacement: 'Accumulation Interest Zone' },
+  // Portuguese
+  { pattern: /\bcompre\b/gi,    replacement: 'Bullish Inflection Zone' },
+  { pattern: /\bvenda\b/gi,     replacement: 'Bearish Liquidity Pullback' },
+  // Arabic
+  { pattern: /شراء/g,           replacement: 'Bullish Inflection Zone' },
+  { pattern: /بيع/g,            replacement: 'Bearish Liquidity Pullback' },
+  // Korean
+  { pattern: /매수/g,           replacement: 'Bullish Inflection Zone' },
+  { pattern: /매도/g,           replacement: 'Bearish Liquidity Pullback' },
+  // French
+  { pattern: /\bacheter\b/gi,   replacement: 'Bullish Inflection Zone' },
+  { pattern: /\bvendre\b/gi,    replacement: 'Bearish Liquidity Pullback' },
+  // German
+  { pattern: /\bkaufen\b/gi,    replacement: 'Bullish Inflection Zone' },
+  { pattern: /\bverkaufen\b/gi, replacement: 'Bearish Liquidity Pullback' },
 ];
 
 /**

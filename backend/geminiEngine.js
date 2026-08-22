@@ -136,9 +136,9 @@ function extractTickerFromText(promptText) {
   if (!promptText) return 'UNKNOWN';
   const text = promptText.toUpperCase().trim();
 
-  const CRYPTO = ['BTC','ETH','SOL','XRP','DOGE','ADA','AVAX','DOT','LINK','MATIC','BNB','LTC','ATOM','UNI','NEAR','APT','ARB','OP','SUI','PEPE','WIF','SHIB'];
-  const NSE = ['RELIANCE','TCS','INFY','HDFCBANK','ICICIBANK','SBIN','BHARTIARTL','ITC','KOTAKBANK','LT','WIPRO','TATAMOTORS','TATASTEEL','ADANIENT','BAJFINANCE','MARUTI','SUNPHARMA','HCLTECH','AXISBANK','ULTRACEMCO'];
-  const US = ['AAPL','TSLA','GOOGL','GOOG','AMZN','MSFT','NVDA','META','NFLX','AMD','CRM','ORCL','INTC','QCOM','PYPL','DIS','BA','JPM','GS','V','MA'];
+  const CRYPTO = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC', 'BNB', 'LTC', 'ATOM', 'UNI', 'NEAR', 'APT', 'ARB', 'OP', 'SUI', 'PEPE', 'WIF', 'SHIB'];
+  const NSE = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'WIPRO', 'TATAMOTORS', 'TATASTEEL', 'ADANIENT', 'BAJFINANCE', 'MARUTI', 'SUNPHARMA', 'HCLTECH', 'AXISBANK', 'ULTRACEMCO'];
+  const US = ['AAPL', 'TSLA', 'GOOGL', 'GOOG', 'AMZN', 'MSFT', 'NVDA', 'META', 'NFLX', 'AMD', 'CRM', 'ORCL', 'INTC', 'QCOM', 'PYPL', 'DIS', 'BA', 'JPM', 'GS', 'V', 'MA'];
 
   // Check for ticker-suffix formats first: BTC-USD, ETH/USDT, RELIANCE.NS
   const suffixMatch = text.match(/\b([A-Z]{2,15})(?:\.(NS|BO)|[-\/](USD|USDT|INR))\b/);
@@ -151,7 +151,7 @@ function extractTickerFromText(promptText) {
 
   // Last resort: find any 2-6 letter uppercase word that looks like a ticker
   const genericMatch = text.match(/\b([A-Z]{2,6})\b/);
-  if (genericMatch && !['THE','AND','FOR','NOT','ARE','BUT','HOW','CAN','WHAT','WILL','THIS','THAT','WITH','FROM','ABOUT','ANALYZE','ANALYSIS','TRADE','SCAN','DEEP','ALL'].includes(genericMatch[1])) {
+  if (genericMatch && !['THE', 'AND', 'FOR', 'NOT', 'ARE', 'BUT', 'HOW', 'CAN', 'WHAT', 'WILL', 'THIS', 'THAT', 'WITH', 'FROM', 'ABOUT', 'ANALYZE', 'ANALYSIS', 'TRADE', 'SCAN', 'DEEP', 'ALL'].includes(genericMatch[1])) {
     return genericMatch[1];
   }
 
@@ -168,40 +168,40 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
   // === PHASE 4: DEEP SCAN INTERCEPTOR ===
   if (prompt.startsWith('Execute Deep Scan')) {
-     const marketMatch = prompt.match(/\[Market:\s*([^\]]+)\]/);
-     const market = marketMatch ? marketMatch[1] : 'Global';
-     
-     clientWs.send(JSON.stringify({ status: 'update', text: `\n\n🔍 **INITIATING GLOBAL DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nScanning the entire ${market} market for high-probability setups... please wait.\n\n` }));
+    const marketMatch = prompt.match(/\[Market:\s*([^\]]+)\]/);
+    const market = marketMatch ? marketMatch[1] : 'Global';
 
-     try {
-       const results = await runBulkScanPhase4(market);
-       const topSetups = results.filter(r => r.status === 'success' && r.score >= 50).slice(0, 3);
-       
-       if (topSetups.length === 0) {
-          clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
-       } else {
-          let report = `✅ **SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-          topSetups.forEach((s, idx) => {
-             report += `**#${idx + 1}. ${s.ticker}** (Score: ${s.score}/100)\n`;
-             report += `• **Setup:** ${s.setup_id}\n`;
-             report += `• **Regime:** ${s.macroRegime} (Macro) | ${s.microRegime} (Micro)\n`;
-             report += `• **Entry:** $${s.currentPrice.toFixed(4)}\n`;
-             if (s.takeProfit) report += `• **Take Profit 1:** $${s.takeProfit.toFixed(4)}\n`;
-             if (s.stopLoss) report += `• **Stop Loss:** $${s.stopLoss.toFixed(4)}\n\n`;
-          });
-          
-          const parts = report.split('\n');
-          for (const p of parts) {
-            clientWs.send(JSON.stringify({ status: 'update', text: p + '\n' }));
-            await new Promise(r => setTimeout(r, 40));
-          }
-       }
-     } catch (e) {
-        clientWs.send(JSON.stringify({ status: 'update', text: `❌ Scanner Failed: ${e.message}\n` }));
-     }
-     
-     clientWs.send(JSON.stringify({ status: 'complete' }));
-     return;
+    clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INITIATING GLOBAL DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
+
+    try {
+      const results = await runBulkScanPhase4(market);
+      const topSetups = results.filter(r => r.status === 'success' && r.score >= 50).slice(0, 3);
+
+      if (topSetups.length === 0) {
+        clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
+      } else {
+        let report = `**SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        topSetups.forEach((s, idx) => {
+          report += `**#${idx + 1}. ${s.ticker}** (Score: ${s.score}/100)\n`;
+          report += `• **Setup:** ${s.setup_id}\n`;
+          report += `• **Regime:** ${s.macroRegime} (Macro) | ${s.microRegime} (Micro)\n`;
+          report += `• **Entry:** $${s.currentPrice.toFixed(4)}\n`;
+          if (s.takeProfit) report += `• **Take Profit 1:** $${s.takeProfit.toFixed(4)}\n`;
+          if (s.stopLoss) report += `• **Stop Loss:** $${s.stopLoss.toFixed(4)}\n\n`;
+        });
+
+        const parts = report.split('\n');
+        for (const p of parts) {
+          clientWs.send(JSON.stringify({ status: 'update', text: p + '\n' }));
+          await new Promise(r => setTimeout(r, 40));
+        }
+      }
+    } catch (e) {
+      clientWs.send(JSON.stringify({ status: 'update', text: `❌ Scanner Failed: ${e.message}\n` }));
+    }
+
+    clientWs.send(JSON.stringify({ status: 'complete' }));
+    return;
   }
 
   // Strip data URL prefix if present (frontend sends 'data:image/jpeg;base64,...')
@@ -225,7 +225,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     ticker = extractTickerFromText(prompt);
   }
   console.log(`[PHASE 3] Extracted Ticker: ${ticker} (Mode: ${isImageMode ? 'IMAGE' : 'TEXT'})`);
-  
+
   let phase3Context = '';
   let hurstData = null;
   let regimeData = null;
@@ -274,16 +274,16 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       // Store 1D as primary for downstream compatibility
       hurstData = hurst1d;
       regimeData = regime1d;
-      
+
       // Calculate technical indicators from daily data
       const techContext = calculateAllIndicators(tf1d);
-      
+
       // Advanced Multi-Timeframe Shield Logic
       const closes15m = getClosePrices(tf15m);
       const closes1d = getClosePrices(tf1d);
       const price15m = closes15m[closes15m.length - 1];
       const price1d = closes1d[closes1d.length - 1];
-      
+
       // Trend Confirmation (20/50 SMA)
       const sma20_15m = sma(closes15m, 20) || price15m;
       const sma50_15m = sma(closes15m, 50) || price15m;
@@ -306,7 +306,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       multiRegimeContext += `15m Regime: ${regime15m.regime}${regime15m.regime === 'TRENDING' ? '-' + dir15m : ''} (Hurst: ${hurst15m?.meanH?.toFixed(2) ?? 'N/A'}, Vol: ${atr15m?.regime ?? 'N/A'})\n`;
       multiRegimeContext += `1H Regime:  ${regime1h.regime} (Hurst: ${hurst1h?.meanH?.toFixed(2) ?? 'N/A'})\n`;
       multiRegimeContext += `1D Regime:  ${regime1d.regime}${regime1d.regime === 'TRENDING' ? '-' + dir1d : ''} (Hurst: ${hurst1d?.meanH?.toFixed(2) ?? 'N/A'}, Vol: ${atr1d?.regime ?? 'N/A'})\n`;
-      
+
       const is15mBullish = regime15m.regime === 'TRENDING' && dir15m === 'UP';
       const is15mBearish = regime15m.regime === 'TRENDING' && dir15m === 'DOWN';
       const is1dBullish = regime1d.regime === 'TRENDING' && dir1d === 'UP';
@@ -319,16 +319,16 @@ export async function handleGeminiConnection(clientWs, options = {}) {
         multiRegimeContext += `\n🚨 TIME FRAME SHIELD TRIGGERED: 15m short-term trend is explicitly fighting the 1D macro trend. DO NOT TAKE THIS TRADE. High probability of being a trap. 🚨\n`;
         shieldTriggered = true;
       }
-      
+
       // Rule 2: Mean Reversion Trap (Macro chop, micro trend = liquidity grab)
       if (regime1d.regime === 'MEAN_REVERTING' && regime15m.regime === 'TRENDING') {
         multiRegimeContext += `\n⚠️ MEAN REVERSION TRAP DETECTED: The 1D macro regime is ranging/choppy, but the 15m is trending. This is likely a short-term liquidity grab that will reverse. Fade the 15m trend or DO NOT TRADE. ⚠️\n`;
         shieldTriggered = true;
       }
-      
+
       // Rule 3: Volatility Expansion Warning
       if (atr15m && atr1d && atr15m.percentOfPrice > atr1d.percentOfPrice * 1.5) {
-         multiRegimeContext += `\n⚠️ MICRO-VOLATILITY ANOMALY: 15m volatility is abnormally high compared to the 1D baseline. This indicates news-driven erratic movement or institutional stop-hunting. Reduce position size by 50%. ⚠️\n`;
+        multiRegimeContext += `\n⚠️ MICRO-VOLATILITY ANOMALY: 15m volatility is abnormally high compared to the 1D baseline. This indicates news-driven erratic movement or institutional stop-hunting. Reduce position size by 50%. ⚠️\n`;
       }
 
       if (!shieldTriggered) {
@@ -336,12 +336,12 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       }
 
       regimeData.summaryForAI = multiRegimeContext + "\n" + regimeData.summaryForAI;
-      
+
       // Format institutional data layers
       const flowContext = formatOrderFlowContext(flowData, depthData);
       const futContext = formatFuturesContext(futuresData);
       const macroContext = formatMacroContext(fng, macro);
-      
+
       // Format performance and session context
       let perfContext = '';
       if (tickerStats) {
@@ -356,7 +356,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
           perfContext += `- [${new Date(r.timestamp).toLocaleTimeString()}] Bias: ${r.direction} (${r.confidence}%) | Target: $${r.target || 'N/A'} | Outcome: ${r.outcome}\n`;
         });
       }
-      
+
       phase3Context = `\n\n=== PHASE 3 STATISTICAL GUARDRAILS ===\n${regimeData.summaryForAI}\nUse this mathematical regime in your analysis.\n${techContext}${flowContext}${futContext}${macroContext}${perfContext}`;
     } else {
       console.warn(`[PHASE 3] Data fetch failed for ${ticker}: ${dataResult.error}`);
@@ -395,12 +395,12 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // Stream via REST SSE with Phase 3 integration
-  await streamViaRestSSE(clientWs, API_KEY, finalSystemPrompt, { 
-    ticker, 
-    hurstData, 
-    regimeData, 
-    isImageMode, 
-    imageBase64, 
+  await streamViaRestSSE(clientWs, API_KEY, finalSystemPrompt, {
+    ticker,
+    hurstData,
+    regimeData,
+    isImageMode,
+    imageBase64,
     userPrompt: prompt,
     flowData: flowDataRef,
     tf15m: tf15mRef,
@@ -430,17 +430,43 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     // DETERMINISTIC SIGNAL GENERATOR — Engine decides, not AI
     // ═══════════════════════════════════════════════════════
     let signal = null;
+    let trueLivePrice = null;
+
     if (ticker && ticker !== 'UNKNOWN' && p3Context.candles1d && p3Context.candles1d.length >= 50) {
       console.log(`[SIGNAL GEN] Running deterministic engine for ${ticker}...`);
-      const ofiSource = flowData?.source || 'CANDLE_APPROXIMATION';
-      signal = await generateSignal(ticker, p3Context.candles1d, { candles15m: tf15m, candles1h: tf1h, ofiSource });
+      
+      // Institutional Circuit Breaker: Fetch True Live Price for math anchoring and desync detection
+      trueLivePrice = await fetchLivePrice(ticker);
+      
+      // Data Desynchronization Guard
+      const ohlcvClose = p3Context.candles1d[p3Context.candles1d.length - 1].close;
+      const priceDrift = trueLivePrice ? Math.abs(trueLivePrice - ohlcvClose) / trueLivePrice : 0;
+      
+      if (priceDrift > 0.005) {
+          console.warn(`[CIRCUIT BREAKER] Data desynchronization detected for ${ticker}. Drift: ${(priceDrift*100).toFixed(2)}%. Aborting signal.`);
+          signal = {
+              action: 'SHIELD_MODE',
+              reason: `Data Desynchronization: Market data is stale compared to live price. Drift: ${(priceDrift*100).toFixed(2)}%. Signal aborted.`,
+              direction: 'NEUTRAL',
+              score: 0,
+              currentPrice: trueLivePrice
+          };
+      } else {
+          const ofiSource = flowData?.source || 'CANDLE_APPROXIMATION';
+          signal = await generateSignal(ticker, p3Context.candles1d, { 
+              candles15m: tf15m, 
+              candles1h: tf1h, 
+              ofiSource,
+              livePrice: trueLivePrice 
+          });
+      }
       console.log(`[SIGNAL GEN] ${ticker}: action=${signal.action} direction=${signal.direction} score=${signal.score}`);
     }
 
     // Use engine output if available, otherwise fall back to basic text parsing
     const direction = signal?.direction || 'NEUTRAL';
     const rawConfidence = signal?.score || 50;
-    const currentPrice = signal?.currentPrice || p3Context.currentPrice || await fetchLivePrice(ticker) || 0;
+    const currentPrice = signal?.currentPrice || trueLivePrice || p3Context.currentPrice || 0;
     const primaryTarget = signal?.takeProfit || null;
     const stopLoss = signal?.stopLoss || null;
     const kellyResult = signal?.kelly || { action: 'TRADE', reason: 'Baseline heuristic', kellyF: 0.25, halfKelly: 0.125 };
@@ -458,11 +484,11 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       simpleVerdict += `• Signal Confidence: ${rawConfidence}/100\n`;
       simpleVerdict += `• Overall Trend: ${regimeData?.regime === 'TRENDING' ? 'Strong' : 'Chop/Sideways'}\n`;
       if (signalBlocked) {
-         simpleVerdict += `• AI Status: PAUSED (${blockedReason})\n`;
+        simpleVerdict += `• AI Status: PAUSED (${blockedReason})\n`;
       } else {
-         simpleVerdict += `• AI Status: ACTIVE\n`;
+        simpleVerdict += `• AI Status: ACTIVE\n`;
       }
-      
+
       const parts = sanitizeChunk(simpleVerdict).split(/(MODULE \d+ — [^\n]+)/);
       for (const p of parts) {
         if (!p) continue;
@@ -488,13 +514,13 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
         const spansAll = ciLower < 0.40 && ciUpper > 0.60;
         verdictText += `• Hurst CI: [${ciLower?.toFixed(3)}, ${ciUpper?.toFixed(3)}] ${spansAll ? '— AMBIGUOUS (spans all regimes)' : '— Clean regime read'}\n`;
       }
-  
+
       if (signalBlocked) {
         verdictText += `\n🚨 SHIELD MODE ACTIVATED: ${blockedReason}\n   (Signal rejected to protect capital)\n`;
       } else if (kellyResult?.action === 'TRADE') {
         verdictText += `\n✅ QUANTITATIVE EDGE CONFIRMED\n   Kelly Criterion: ${(kellyResult.kellyF * 100).toFixed(1)}% | Half-Kelly: ${(kellyResult.halfKelly * 100).toFixed(1)}%\n`;
       }
-  
+
       const parts = sanitizeChunk(verdictText).split(/(MODULE \d+ — [^\n]+)/);
       for (const p of parts) {
         if (!p) continue;
@@ -532,10 +558,10 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
           riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
             ? `MAX CONCURRENT TRADES (${riskCheck.count}/3)`
             : riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT'
-            ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
-            : riskCheck.reason === 'CORRELATION_LIMIT'
-            ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
-            : riskCheck.reason;
+              ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
+              : riskCheck.reason === 'CORRELATION_LIMIT'
+                ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
+                : riskCheck.reason;
         }
       } catch (riskErr) {
         console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
@@ -564,7 +590,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       }
     }
 
-    const auditWindowMs = tradeTimeframe === 'SWING' ? 48*3600000 : tradeTimeframe === 'POSITION' ? 7*24*3600000 : 4*3600000;
+    const auditWindowMs = tradeTimeframe === 'SWING' ? 48 * 3600000 : tradeTimeframe === 'POSITION' ? 7 * 24 * 3600000 : 4 * 3600000;
     const auditDue = new Date(Date.now() + auditWindowMs);
 
     const signalData = {
@@ -625,7 +651,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     if (signalHash && ticker && ticker !== 'UNKNOWN' && regimeData?.regime && !signalBlocked) {
       registerSignal(signalHash, ticker, regimeData.regime);
     }
-    
+
     // ═══════════════════════════════════════════════════════
     // PROMPT AUDIT LOGGING — Track general conversational AI advice
     // ═══════════════════════════════════════════════════════
@@ -706,32 +732,32 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop(); // Keep incomplete line in buffer
-        
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.trim().slice(6);
             if (dataStr === '[DONE]' || !dataStr) continue;
-            
+
             try {
               const data = JSON.parse(dataStr);
               if (data.candidates?.[0]?.content?.parts) {
                 for (const part of data.candidates[0].content.parts) {
                   if (part.text) {
                     let text = part.text;
-                    
+
                     // Google API Bug Fix: The experimental 2.5 API occasionally escapes its own 
                     // trailing JSON metadata and injects it into the final text chunk. 
                     // We must strip it out before it hits the UI.
                     const leakIndex = text.indexOf('"}],"role":"model"');
                     if (leakIndex !== -1) text = text.substring(0, leakIndex);
-                    
+
                     const usageIndex = text.indexOf('"usageMetadata"');
                     if (usageIndex !== -1) text = text.substring(0, usageIndex);
-                    
+
                     rawFullText += text;
                     const sanitized = sanitizeChunk(text);
                     fullText += sanitized;
@@ -745,7 +771,7 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
           }
         }
       }
-      
+
       console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
       try {
         await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
@@ -755,7 +781,7 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
       clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
       break; // Exit loop on success
     }
-    
+
     if (!success) {
       console.error('[GEMINI] All models exhausted and failed.');
       clientWs.send(JSON.stringify({ status: 'error', message: 'Gemini API rate limit occurred. Too many people are using the AI right now. Please wait a minute and try again.', rawError: '429 Too Many Requests on all fallback models' }));

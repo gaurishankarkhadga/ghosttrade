@@ -5,6 +5,7 @@ import PromptInputBar from './PromptInputBar';
 import AiMessageBubble from './AiMessageBubble';
 import UserMessageBubble from './UserMessageBubble';
 import { CanvasRevealEffect } from './ui/SignInFlow';
+import CandleThinkingIndicator from './CandleThinkingIndicator';
 import './AiChatInterface.css';
 
 const thinkingMessages = [
@@ -51,7 +52,9 @@ function DynamicThinkingIndicator() {
 
   return (
     <div className="thinking-indicator single-line-think">
-      <div className="thinking-gt-icon">GT</div>
+      <div className="thinking-gt-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+        <CandleThinkingIndicator size={36} />
+      </div>
       <span className="thinking-text font-mono" style={{ fontSize: '0.85rem' }}>
         {displayedText}<span className="typing-cursor" style={{ marginLeft: '2px', height: '12px' }}></span>
       </span>

@@ -1,6 +1,6 @@
 import { atr } from './technicalEngine.js';
 
-export function computeStopLossTakeProfit(candles, side, atrMultiplier = 1.5, rrr = 2.0) {
+export function computeStopLossTakeProfit(candles, side, livePrice, atrMultiplier = 1.5, rrr = 2.0) {
   if (!candles || candles.length < 15) return null;
 
   // Use Wilder's smoothed ATR from technicalEngine for consistency across all engines
@@ -9,21 +9,27 @@ export function computeStopLossTakeProfit(candles, side, atrMultiplier = 1.5, rr
   const currentAtr = atrResult.value;
 
   const currentCandle = candles[candles.length - 1];
-  const currentPrice = currentCandle.close;
+  const currentPrice = livePrice || currentCandle.close;
 
   // Find the structural swing low/high over the last 3 candles for safer placement
   const recentCandles = candles.slice(-3);
   const localLow = Math.min(...recentCandles.map(c => c.low));
   const localHigh = Math.max(...recentCandles.map(c => c.high));
 
-  const slDistance = currentAtr * atrMultiplier;
+  // Enforce a minimum safety buffer so the stop loss is never placed immediately next to the entry price
+  const minBuffer = currentPrice * 0.005; // 0.5% minimum distance
+  const slDistance = Math.max(currentAtr * atrMultiplier, minBuffer);
 
   const normalizedSide = (side || '').toUpperCase() === 'BUY' ? 'LONG' : (side || '').toUpperCase() === 'SELL' ? 'SHORT' : (side || '').toUpperCase();
 
   // Anchor LONG stops below the structural low, SHORT stops above the structural high
-  let stopLoss = normalizedSide === 'LONG' ? localLow - slDistance
-                 : normalizedSide === 'SHORT' ? localHigh + slDistance
-                 : currentPrice;
+  // FAILSAFE: Ensure the SL is strictly on the correct side of the TRUE live entry price
+  let stopLoss = currentPrice;
+  if (normalizedSide === 'LONG') {
+      stopLoss = Math.min(localLow - slDistance, currentPrice - slDistance);
+  } else if (normalizedSide === 'SHORT') {
+      stopLoss = Math.max(localHigh + slDistance, currentPrice + slDistance);
+  }
 
   // Enforce zero bound
   if (stopLoss <= 0) stopLoss = 0.0001;
