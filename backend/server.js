@@ -1,6 +1,7 @@
 // =====================================================
 // GHOSTTRADE SERVER — Institutional Fastify Gateway
 // Wires ALL engines: Chat, Audit, Scanner, Daemons.
+// Phase 7: Fortress Security Hardening Layer
 // =====================================================
 
 import Fastify from 'fastify';
@@ -13,6 +14,14 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 
 dotenv.config();
+
+// === Security Layer Imports ===
+import { validateEnvironment } from './validateEnv.js';
+import { registerSecurityMiddleware, validateWsOrigin, createWsRateLimiter } from './securityMiddleware.js';
+import { sanitizeEmail, validatePassword, sanitizeString, sanitizeMongoQuery, sanitizeTicker, sanitizeName } from './inputValidator.js';
+
+// Validate environment on startup (crashes in production if misconfigured)
+validateEnvironment();
 
 // === Engine Imports ===
 
@@ -39,13 +48,17 @@ import { isMarketOpen, getOpenMarkets } from './marketHoursEngine.js';
 
 
 // === Security ===
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 if (!process.env.JWT_SECRET) {
   console.warn('[SECURITY] WARNING: JWT_SECRET not set in environment. Using insecure fallback. Set JWT_SECRET in .env for production!');
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'ghost-brain-dev-secret-CHANGE-IN-PROD-0xDEV';
-const ACCESS_CODE_HASH = process.env.ACCESS_CODE_HASH || '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'; // bcrypt hash of 'whalesonly'
+const JWT_ISSUER = 'ghosttrade';
+const JWT_AUDIENCE = 'ghosttrade-client';
+// Demo access kept for development/testing — will be removed in production deployment
+const ACCESS_CODE_HASH = IS_PRODUCTION ? null : (process.env.ACCESS_CODE_HASH || '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
 
-const fastify = Fastify({ logger: false });
+const fastify = Fastify({ logger: false, bodyLimit: 1048576 }); // 1MB default body limit
 
 // Rate limiting — apply globally but stricter on auth routes
 await fastify.register(fastifyRateLimit, {
@@ -66,29 +79,56 @@ fastify.register(cors, {
     cb(new Error('CORS: Origin not allowed'), false);
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept', 'X-Request-ID'],
+  credentials: true
 });
 fastify.register(fastifyWebsocket);
 
+// === Register Fortress Security Middleware (Headers, Request IDs, Error Sanitization) ===
+registerSecurityMiddleware(fastify);
+
+// WebSocket rate limiter factory — 10 messages/second per connection
+const wsRateLimiter = createWsRateLimiter(10, 1000);
+
+// OAuth state tokens — TTL map for CSRF protection
+const oauthStateTokens = new Map();
+
 fastify.decorateRequest('user', null);
 
-fastify.addHook('onRequest', async (request, reply) => {
-  const url = request.raw.url;
-  
-  // Protect specific REST routes
-  if (url.startsWith('/api/execution/') || url.startsWith('/api/audit/') || url.startsWith('/api/broker/')) {
-    try {
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return reply.code(401).send({ error: 'Missing or invalid Authorization header.' });
-      }
+// === PUBLIC ROUTES (no auth required) ===
+const PUBLIC_ROUTES = [
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/markets',
+  '/api/paddle/webhook',
+  '/api/chat/stream',
+  '/api/broadcast',
+];
 
-      const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, JWT_SECRET);
-      request.user = decoded;
-    } catch (err) {
-      return reply.code(401).send({ error: 'Unauthorized: Invalid or expired token.' });
+fastify.addHook('onRequest', async (request, reply) => {
+  const url = request.raw.url?.split('?')[0]; // Strip query params for matching
+  
+  // Skip auth for non-API routes (WebSocket upgrades handled separately)
+  if (!url || !url.startsWith('/api/')) return;
+
+  // Skip auth for explicitly public routes
+  if (PUBLIC_ROUTES.some(route => url === route)) return;
+
+  // ALL other /api/* routes require authentication
+  try {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return reply.code(401).send({ error: 'Missing or invalid Authorization header.' });
     }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
+    request.user = decoded;
+  } catch (err) {
+    return reply.code(401).send({ error: 'Unauthorized: Invalid or expired token.' });
   }
 });
 
@@ -111,23 +151,36 @@ fastify.post('/api/auth/login', {
     }
   }
 }, async (request, reply) => {
-  const { email, password } = request.body;
-  if (!email || !password) {
+  const body = sanitizeMongoQuery(request.body || {});
+  const { password } = body;
+  
+  // Validate email format and prevent NoSQL injection
+  const emailCheck = sanitizeEmail(body.email);
+  if (!emailCheck.valid) {
+    return reply.code(400).send({ error: emailCheck.error || 'Invalid email format.' });
+  }
+  if (!password || typeof password !== 'string') {
     return reply.code(400).send({ error: 'Email and password are required.' });
   }
 
   const db = await getDb();
-  const user = await db.collection('users').findOne({ email });
+  const user = await db.collection('users').findOne({ email: emailCheck.sanitized });
 
   // Check hashed password against DB user
   const passwordValid = user ? await bcrypt.compare(password, user.passwordHash) : false;
-  // Fallback: check against access code hash (for whalesonly bypass / admin initial setup)
-  const accessCodeValid = !passwordValid ? await bcrypt.compare(password, ACCESS_CODE_HASH) : false;
+  // Demo fallback: only in development mode for testing
+  const accessCodeValid = (!passwordValid && ACCESS_CODE_HASH) ? await bcrypt.compare(password, ACCESS_CODE_HASH) : false;
 
   if (passwordValid || accessCodeValid) {
-    const tokenPayload = { authenticated: true, email: user?.email || email, role: user?.role || 'trader' };
+    const tokenPayload = { 
+      sub: user?.email || emailCheck.sanitized,
+      email: user?.email || emailCheck.sanitized, 
+      role: user?.role || 'trader',
+      iss: JWT_ISSUER,
+      aud: JWT_AUDIENCE,
+    };
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '24h' });
-    return reply.send({ token, email: user?.email || email, role: user?.role || 'trader', promptsUsed: user?.promptsUsed || 0 });
+    return reply.send({ token, email: user?.email || emailCheck.sanitized, role: user?.role || 'trader', promptsUsed: user?.promptsUsed || 0 });
   }
 
   return reply.code(401).send({ error: 'Invalid credentials. Access Denied.' });
@@ -142,36 +195,48 @@ fastify.post('/api/auth/signup', {
     }
   }
 }, async (request, reply) => {
-  const { name, email, password } = request.body;
+  const body = sanitizeMongoQuery(request.body || {});
+  const { password } = body;
 
-  if (!email || !password) {
-    return reply.code(400).send({ error: 'Email and password are required.' });
+  // Validate email
+  const emailCheck = sanitizeEmail(body.email);
+  if (!emailCheck.valid) {
+    return reply.code(400).send({ error: emailCheck.error || 'Invalid email format.' });
   }
-  if (password.length < 8) {
-    return reply.code(400).send({ error: 'Password must be at least 8 characters.' });
+  
+  // Validate password strength
+  const pwdCheck = validatePassword(password);
+  if (!pwdCheck.valid) {
+    return reply.code(400).send({ error: pwdCheck.error });
+  }
+
+  // Sanitize name
+  const cleanName = sanitizeName(body.name);
+  if (!cleanName) {
+    return reply.code(400).send({ error: 'Valid name is required.' });
   }
 
   const db = await getDb();
-  const existingUser = await db.collection('users').findOne({ email });
+  const existingUser = await db.collection('users').findOne({ email: emailCheck.sanitized });
   
   if (existingUser) {
     return reply.code(409).send({ error: 'Account with this email already exists.' });
   }
 
   // Hash password before storing — NEVER store plaintext
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12); // Increased cost factor from 10 to 12
   
   await db.collection('users').insertOne({
-    name,
-    email,
+    name: cleanName,
+    email: emailCheck.sanitized,
     passwordHash,
     role: 'trader',
     promptsUsed: 0,
     createdAt: new Date().toISOString()
   });
 
-  const token = jwt.sign({ authenticated: true, email, role: 'trader' }, JWT_SECRET, { expiresIn: '24h' });
-  return reply.send({ token, email, name, role: 'trader', promptsUsed: 0 });
+  const token = jwt.sign({ sub: emailCheck.sanitized, email: emailCheck.sanitized, role: 'trader', iss: JWT_ISSUER, aud: JWT_AUDIENCE }, JWT_SECRET, { expiresIn: '24h' });
+  return reply.send({ token, email: emailCheck.sanitized, name: cleanName, role: 'trader', promptsUsed: 0 });
 });
 
 fastify.post('/api/auth/paddle-sync', async (request, reply) => {
@@ -192,7 +257,7 @@ fastify.post('/api/auth/paddle-sync', async (request, reply) => {
     );
     
     // Issue a new token with updated role
-    const newToken = jwt.sign({ authenticated: true, email: decoded.email, role: newRole }, JWT_SECRET, { expiresIn: '24h' });
+    const newToken = jwt.sign({ sub: decoded.email, email: decoded.email, role: newRole, iss: JWT_ISSUER, aud: JWT_AUDIENCE }, JWT_SECRET, { expiresIn: '24h' });
     return reply.send({ token: newToken, role: newRole });
   } catch (err) {
     return reply.code(401).send({ error: 'Invalid token' });
@@ -573,16 +638,26 @@ fastify.get('/api/markets', async (request, reply) => {
 });
 
 // =====================================================
-// NATIVE BACKTEST ENGINE API
+// NATIVE BACKTEST ENGINE API (Auth + Rate Limited)
 // =====================================================
-fastify.post('/api/backtest', async (request, reply) => {
-  try {
-    const { asset, days } = request.body || {};
-    if (!asset) {
-      return reply.code(400).send({ error: 'Asset ticker is required' });
+fastify.post('/api/backtest', {
+  config: {
+    rateLimit: {
+      max: 3,
+      timeWindow: '1 minute',
+      errorResponseBuilder: () => ({ statusCode: 429, error: 'Backtest rate limit exceeded. Max 3 per minute.' })
     }
+  }
+}, async (request, reply) => {
+  try {
+    const body = sanitizeMongoQuery(request.body || {});
+    const cleanTicker = sanitizeTicker(body.asset);
+    if (!cleanTicker) {
+      return reply.code(400).send({ error: 'Valid asset ticker is required.' });
+    }
+    const days = Math.min(Math.max(Number(body.days) || 730, 30), 1825); // Clamp 30-1825 days
 
-    const result = await runBacktestInWorker(asset, days || 730);
+    const result = await runBacktestInWorker(cleanTicker, days);
     
     if (result.error) {
        return reply.code(500).send(result);
@@ -662,63 +737,86 @@ fastify.post('/api/paddle/webhook', async (request, reply) => {
 
 fastify.register(async function chatRoutes(fastify) {
   fastify.get('/api/chat/stream', { websocket: true }, (socket, req) => {
+    // === SECURITY: Origin Validation ===
+    if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
+      socket.close(1008, 'Origin not allowed');
+      return;
+    }
+
+    // === SECURITY: Per-connection rate limiter ===
+    const checkRate = wsRateLimiter(socket);
+
     console.log('[CHAT WS] Client connected to /api/chat/stream');
 
     socket.on('message', async (rawMessage) => {
+      // Rate limit check
+      if (!checkRate()) return;
+
       try {
-        const message = JSON.parse(rawMessage.toString());
-
-        if (message.type === 'START_ANALYSIS') {
-          // 1. Verify Authentication
-          const token = req.query.token;
-          if (!token) {
-            socket.send(JSON.stringify({ status: 'error', message: 'Unauthorized. Please login.' }));
-            return socket.close(1008, 'Unauthorized');
-          }
-
-          let decoded;
-          try {
-            decoded = jwt.verify(token, JWT_SECRET);
-          } catch (err) {
-            socket.send(JSON.stringify({ status: 'error', message: 'Session expired. Please login again.' }));
-            return socket.close(1008, 'Session Expired');
-          }
-
-          // 2. Check Trial Limits
-          const db = await getDb();
-          const user = await db.collection('users').findOne({ email: decoded.email });
-          
-          if (!user) {
-            socket.send(JSON.stringify({ status: 'error', message: 'User not found.' }));
-            return socket.close(1008, 'User Not Found');
-          }
-
-          const role = user.role || 'trader';
-          const promptsUsed = user.promptsUsed || 0;
-
-          if (role === 'trader' && promptsUsed >= 3) {
-            socket.send(JSON.stringify({ 
-              status: 'error', 
-              message: 'FREE_TRIAL_EXCEEDED' 
-            }));
-            return; // Don't close socket immediately, let frontend handle the message
-          }
-
-          // 3. Increment Prompt Count
-          await db.collection('users').updateOne(
-            { email: decoded.email },
-            { $inc: { promptsUsed: 1 } }
-          );
-
-          // 4. Run Analysis
-          await handleGeminiConnection(socket, {
-            prompt: message.prompt || '',
-            imageBase64: message.image || null,
-            language: message.language || 'English',
-            isSimpleMode: message.isSimpleMode || false,
-            promptsUsed: promptsUsed
-          });
+        let message;
+        try {
+          message = JSON.parse(rawMessage.toString());
+        } catch (parseErr) {
+          socket.send(JSON.stringify({ status: 'error', message: 'Invalid message format.' }));
+          return;
         }
+
+        // === SECURITY: Message type whitelist ===
+        if (message.type !== 'START_ANALYSIS') {
+          socket.send(JSON.stringify({ status: 'error', message: 'Unknown message type.' }));
+          return;
+        }
+
+        // 1. Verify Authentication
+        const token = req.query.token;
+        if (!token) {
+          socket.send(JSON.stringify({ status: 'error', message: 'Unauthorized. Please login.' }));
+          return socket.close(1008, 'Unauthorized');
+        }
+
+        let decoded;
+        try {
+          decoded = jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
+        } catch (err) {
+          socket.send(JSON.stringify({ status: 'error', message: 'Session expired. Please login again.' }));
+          return socket.close(1008, 'Session Expired');
+        }
+
+        // 2. Check Trial Limits
+        const db = await getDb();
+        const user = await db.collection('users').findOne({ email: decoded.email });
+        
+        if (!user) {
+          socket.send(JSON.stringify({ status: 'error', message: 'User not found.' }));
+          return socket.close(1008, 'User Not Found');
+        }
+
+        const role = user.role || 'trader';
+        const promptsUsed = user.promptsUsed || 0;
+
+        if (role === 'trader' && promptsUsed >= 3) {
+          socket.send(JSON.stringify({ 
+            status: 'error', 
+            message: 'FREE_TRIAL_EXCEEDED' 
+          }));
+          return; // Don't close socket immediately, let frontend handle the message
+        }
+
+        // 3. Increment Prompt Count
+        await db.collection('users').updateOne(
+          { email: decoded.email },
+          { $inc: { promptsUsed: 1 } }
+        );
+
+        // 4. Run Analysis (sanitize prompt input)
+        const sanitizedPrompt = sanitizeString(message.prompt || '', 5000);
+        await handleGeminiConnection(socket, {
+          prompt: sanitizedPrompt || '',
+          imageBase64: message.image || null,
+          language: sanitizeString(message.language, 30) || 'English',
+          isSimpleMode: !!message.isSimpleMode,
+          promptsUsed: promptsUsed
+        });
       } catch (err) {
         console.error('[CHAT WS] Processing error:', err.message);
         try {
@@ -755,9 +853,15 @@ workerEvents.on('GHOST_BRAIN_UPDATE', broadcast);
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
   fastify.get('/', { websocket: true }, (socket, req) => {
+    // === SECURITY: Origin Validation ===
+    if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
+      socket.close(1008, 'Origin not allowed');
+      return;
+    }
+
     const token = req.query.token;
     try {
-      jwt.verify(token, JWT_SECRET);
+      jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
     } catch (e) {
       socket.close(1008, 'Unauthorized');
       return;

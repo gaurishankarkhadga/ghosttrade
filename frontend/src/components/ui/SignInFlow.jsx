@@ -181,11 +181,19 @@ export const SignInPage = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Password Strength
+  // Password Strength — Aligned with Backend Security Policy
   const getPasswordStrength = (pwd) => {
     if (!pwd) return { label: '', color: 'transparent' };
-    if (pwd.length < 6) return { label: 'Weak', color: '#ef4444' };
-    if (pwd.length < 10 || !/\d/.test(pwd)) return { label: 'Medium', color: '#f59e0b' };
+    
+    let strengthScore = 0;
+    if (pwd.length >= 8) strengthScore++;
+    if (/[a-z]/.test(pwd)) strengthScore++;
+    if (/[A-Z]/.test(pwd)) strengthScore++;
+    if (/\d/.test(pwd)) strengthScore++;
+    if (/[^A-Za-z0-9]/.test(pwd)) strengthScore++; // Bonus for special chars
+
+    if (strengthScore < 3) return { label: 'Weak', color: '#ef4444' };
+    if (strengthScore === 3 || strengthScore === 4) return { label: 'Medium', color: '#f59e0b' };
     return { label: 'Strong', color: '#10b981' };
   };
   const strength = getPasswordStrength(signupPassword);
@@ -214,7 +222,12 @@ export const SignInPage = ({ onLoginSuccess }) => {
     setErrorMsg('');
     if (!signupName || !signupEmail || !signupPassword) return setErrorMsg('Please complete all required fields.');
     if (signupPassword !== signupConfirmPassword) return setErrorMsg('Passwords do not match.');
-    if (signupPassword.length < 6) return setErrorMsg('Password must be at least 6 characters.');
+    
+    // Strict institutional password policy validation
+    if (signupPassword.length < 8) return setErrorMsg('Password must be at least 8 characters.');
+    if (!/[a-z]/.test(signupPassword)) return setErrorMsg('Password must contain at least one lowercase letter.');
+    if (!/[A-Z]/.test(signupPassword)) return setErrorMsg('Password must contain at least one uppercase letter.');
+    if (!/\d/.test(signupPassword)) return setErrorMsg('Password must contain at least one number.');
 
     setIsLoading(true);
     const result = await onLoginSuccess({ isSignup: true, name: signupName, email: signupEmail, password: signupPassword });

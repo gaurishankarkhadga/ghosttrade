@@ -197,7 +197,6 @@ export default function PerformanceDashboard() {
           })() }}>
             {totalPredictions < 5 ? 'N/A' : `${edgeExpectancy >= 0 ? '+' : ''}${edgeExpectancy.toFixed(2)}R`}
           </span>
-          <span style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>(Win%×{avgWinR.toFixed(1)}R - Loss%×1R)</span>
         </div>
       </div>
 
@@ -703,3 +702,6 @@ export default function PerformanceDashboard() {
     </div>
   );
 }
+
+
+

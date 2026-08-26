@@ -2,6 +2,7 @@
 // MONGODB CONFIGURATION — Local & Cloud Database Connector
 // Supports local mongod and MongoDB Atlas.
 // Phase 3: Adds indexes for signals, calibration, compliance.
+// Phase 7: Security hardening — TLS, TTL indexes, audit logging.
 // =====================================================
 
 import { MongoClient } from 'mongodb';
@@ -15,6 +16,8 @@ dotenv.config();
 
 const MONGO_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.MONGODB_DB_NAME || 'ghosttrade';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const IS_CLOUD = MONGO_URI && (MONGO_URI.includes('+srv') || MONGO_URI.includes('mongodb.net'));
 
 if (!MONGO_URI) {
   console.warn('[WARNING] MONGODB_URI is not set in environment variables. Database operations will fail.');
@@ -42,6 +45,8 @@ export async function getDb() {
       w: 'majority',
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 10000,
+      // === SECURITY: Enforce TLS for cloud connections ===
+      ...(IS_CLOUD ? { tls: true, tlsInsecure: false } : {}),
     });
 
     await client.connect();
@@ -61,7 +66,19 @@ export async function getDb() {
     await db.collection('compliance_violations').createIndex({ term: 1, timestamp: -1 });
     await db.collection('regime_invalidations').createIndex({ ticker: 1, invalidatedAt: -1 });
 
-    console.log(`[MONGO] Connected to ${DB_NAME} cluster`);
+    // === SECURITY: Unique indexes ===
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    await db.collection('broker_credentials').createIndex({ userId: 1, broker: 1 }, { unique: true });
+
+    // === SECURITY: TTL indexes for auto-cleanup of transient data ===
+    await db.collection('compliance_violations').createIndex(
+      { timestamp: 1 }, { expireAfterSeconds: 180 * 24 * 60 * 60 } // 180 days
+    );
+    await db.collection('regime_invalidations').createIndex(
+      { invalidatedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 } // 90 days
+    );
+
+    console.log(`[MONGO] ✅ Connected to ${DB_NAME} cluster (TLS: ${IS_CLOUD ? 'enforced' : 'local'})`);
     return db;
   } catch (error) {
     console.error('[MONGO] Connection failed:', error.message);

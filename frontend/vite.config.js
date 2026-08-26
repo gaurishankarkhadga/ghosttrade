@@ -7,6 +7,14 @@ export default defineConfig({
     port: 5173
   },
   build: {
+    sourcemap: false, // === SECURITY: Prevent source code leakage ===
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // === SECURITY: Prevent data leakage in production console ===
+        drop_debugger: true,
+      },
+    },
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {

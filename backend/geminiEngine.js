@@ -28,6 +28,7 @@ import { fetchFuturesData, formatFuturesContext } from './openInterestEngine.js'
 import { fetchFearAndGreed, fetchMacroCorrelations, formatMacroContext } from './macroEngine.js';
 import { predict5to10mHorizon } from './predictiveEngine.js';
 import { generateTradeLesson } from './educationalMentorEngine.js';
+import { getWatchlistForRegions, listAvailableRegions } from './globalWatchlists.js';
 import { generateSignal } from './signalGenerator.js';
 import { runBulkScanPhase4 } from './scannerEngine.js';
 
@@ -167,14 +168,23 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0 } = options;
 
   // === PHASE 4: DEEP SCAN INTERCEPTOR ===
-  if (prompt.startsWith('Execute Deep Scan')) {
-    const marketMatch = prompt.match(/\[Market:\s*([^\]]+)\]/);
+  if (prompt.includes('Execute Deep Scan')) {
+    const marketMatch = prompt.match(/Market Region = ([^\]]+)/);
     const market = marketMatch ? marketMatch[1] : 'Global';
 
-    clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INITIATING GLOBAL DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
+    let tickersToScan = [];
+    if (market === 'Global') {
+      tickersToScan = getWatchlistForRegions(listAvailableRegions());
+    } else {
+      // The frontend sends user-friendly names, map them back to keys if needed, or use them directly if they match
+      const key = market.toUpperCase().replace(/\s+/g, '');
+      tickersToScan = getWatchlistForRegions([key]);
+    }
+
+    clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INITIATING ${market.toUpperCase()} DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
 
     try {
-      const results = await runBulkScanPhase4(market);
+      const results = await runBulkScanPhase4(tickersToScan);
       const topSetups = results.filter(r => r.status === 'success' && r.score >= 50).slice(0, 3);
 
       if (topSetups.length === 0) {

@@ -9,6 +9,7 @@
 // - Auth tags prevent tampering
 // - Master key from env var BROKER_ENCRYPTION_KEY
 // - If no master key set, generates ephemeral key (dev mode only)
+// - Phase 7: Key rotation support via BROKER_ENCRYPTION_KEY_OLD
 // =====================================================
 
 import crypto from 'crypto';
@@ -17,8 +18,11 @@ import { getDb } from './mongoConfig.js';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // 128-bit IV for GCM
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
 // Master encryption key — MUST be set in production via .env
 let ENCRYPTION_KEY = null;
+let ENCRYPTION_KEY_OLD = null; // For key rotation support
 
 function getMasterKey() {
   if (ENCRYPTION_KEY) return ENCRYPTION_KEY;
@@ -27,12 +31,34 @@ function getMasterKey() {
   if (envKey && envKey.length === 64) {
     // Valid 32-byte hex key
     ENCRYPTION_KEY = Buffer.from(envKey, 'hex');
+  } else if (IS_PRODUCTION) {
+    // PRODUCTION: Crash immediately — cannot encrypt without a proper key
+    console.error('[BROKER KEY MANAGER] ❌ FATAL: BROKER_ENCRYPTION_KEY is required in production.');
+    console.error('[BROKER KEY MANAGER] Generate one: openssl rand -hex 32');
+    process.exit(1);
   } else {
     // Dev mode: generate ephemeral key (keys won't survive restart)
     console.warn('[BROKER KEY MANAGER] ⚠️ BROKER_ENCRYPTION_KEY not set. Using ephemeral key. Set a 64-char hex key in .env for production.');
     ENCRYPTION_KEY = crypto.randomBytes(32);
   }
   return ENCRYPTION_KEY;
+}
+
+/**
+ * Gets the old master key for key rotation.
+ * When BROKER_ENCRYPTION_KEY_OLD is set, decrypt will try old key on failure.
+ */
+function getOldMasterKey() {
+  if (ENCRYPTION_KEY_OLD !== null) return ENCRYPTION_KEY_OLD;
+
+  const envKeyOld = process.env.BROKER_ENCRYPTION_KEY_OLD;
+  if (envKeyOld && envKeyOld.length === 64) {
+    ENCRYPTION_KEY_OLD = Buffer.from(envKeyOld, 'hex');
+    console.log('[BROKER KEY MANAGER] Old rotation key detected. Will attempt re-encryption on access.');
+  } else {
+    ENCRYPTION_KEY_OLD = false; // Mark as checked
+  }
+  return ENCRYPTION_KEY_OLD;
 }
 
 /**

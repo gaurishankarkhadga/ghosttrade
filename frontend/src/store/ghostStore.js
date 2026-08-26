@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 const useGhostStore = create(
   persist(
@@ -130,7 +130,9 @@ const useGhostStore = create(
       initAuditData: async () => {
         try {
           const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-          const res = await fetch(`${baseUrl}/api/audit`);
+          const res = await fetch(`${baseUrl}/api/audit`, {
+            headers: { 'Authorization': `Bearer ${get().token}` }
+          });
           const data = await res.json();
           if (res.ok) {
             set({
@@ -204,7 +206,7 @@ const useGhostStore = create(
             const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
             await fetch(`${baseUrl}/api/audit/trade/${tradeId}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
               body: JSON.stringify({ status: 'OPEN', executedAt: new Date().toISOString() })
             });
           } catch (e) {
@@ -230,7 +232,7 @@ const useGhostStore = create(
             const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
             await fetch(`${baseUrl}/api/audit/trade/${tradeId}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
               body: JSON.stringify({ status: 'CANCELLED', closedAt: new Date().toISOString() })
             });
           } catch (e) {
@@ -410,10 +412,10 @@ const useGhostStore = create(
                set(state => ({ promptLogs: [...state.promptLogs, newPromptLog] }));
                
                fetch(`${baseUrl}/api/audit/prompt`, {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify(newPromptLog)
-               }).catch(e => console.error("Failed to sync prompt to DB:", e));
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
+                body: JSON.stringify(newPromptLog)
+              }).catch(e => console.error("Failed to sync prompt audit:", e));
             } else if (data.status === 'error') {
                if (data.message === 'FREE_TRIAL_EXCEEDED') {
                  set(state => ({ 
@@ -455,7 +457,8 @@ const useGhostStore = create(
       }
     }),
     {
-      name: 'ghosttrade-auth', // localStorage key
+      name: 'ghosttrade-auth', // storage key
+      storage: createJSONStorage(() => sessionStorage), // === SECURITY: Move from localStorage to sessionStorage ===
       partialize: (state) => ({
         // Only persist auth credentials — all other state is fetched fresh from DB
         isAuthenticated: state.isAuthenticated,
