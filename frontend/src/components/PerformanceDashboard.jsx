@@ -13,6 +13,9 @@ export default function PerformanceDashboard() {
   const closedPaperTrades = useGhostStore((state) => state.closedPaperTrades) || [];
   const promptLogs = useGhostStore((state) => state.promptLogs) || [];
   const aiSignals = useGhostStore((state) => state.aiSignals) || [];
+  const systemPerformance = useGhostStore((state) => state.systemPerformance) || {
+    totalTrades: 0, wins: 0, losses: 0, winRate: 0, averageWinPercent: 0, averageLossPercent: 0, systemEV: 0, netPnlPercent: 0
+  };
   const cancelTrade = useGhostStore((state) => state.cancelTrade);
   const approveTrade = useGhostStore((state) => state.approveTrade);
   const initAuditData = useGhostStore((state) => state.initAuditData);
@@ -124,6 +127,39 @@ export default function PerformanceDashboard() {
         </h2>
       </div>
 
+      <div style={{ marginBottom: '16px', fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>Realized PnL Performance (Closed Trades)</div>
+      <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+        <div className="metric-box">
+          <span className="metric-box-label">Total Closed Trades</span>
+          <span className="metric-box-value">{systemPerformance.totalTrades}</span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">System Win Rate</span>
+          <span className="metric-box-value">{systemPerformance.winRate}%</span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">Average Win</span>
+          <span className="metric-box-value" style={{ color: '#34d399' }}>+{systemPerformance.averageWinPercent}%</span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">Average Loss</span>
+          <span className="metric-box-value" style={{ color: '#f87171' }}>-{systemPerformance.averageLossPercent}%</span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">System EV / Trade</span>
+          <span className="metric-box-value" style={{ color: systemPerformance.systemEV >= 0 ? '#34d399' : '#f87171' }}>
+            {systemPerformance.systemEV >= 0 ? '+' : ''}{systemPerformance.systemEV}%
+          </span>
+        </div>
+        <div className="metric-box">
+          <span className="metric-box-label">Total Net PnL</span>
+          <span className="metric-box-value" style={{ color: systemPerformance.netPnlPercent >= 0 ? '#34d399' : '#f87171' }}>
+            {systemPerformance.netPnlPercent >= 0 ? '+' : ''}{systemPerformance.netPnlPercent}%
+          </span>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '16px', fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>AI Signals Verification (Predicted vs Actual)</div>
       <div className="metrics-grid">
         <div className="metric-box">
           <span className="metric-box-label">Verified Predictions</span>
@@ -449,11 +485,25 @@ export default function PerformanceDashboard() {
                   }
                 } else {
                   if (isWin) {
-                    statusText = 'Target Hit (Win)';
+                    if (sig.resolvedReason && sig.resolvedReason.toLowerCase().includes('target progress')) {
+                      statusText = 'Target Progress (Win)';
+                    } else if (sig.resolvedReason && sig.resolvedReason.toLowerCase().includes('high-water mark')) {
+                      statusText = 'Direction Confirmed (Win)';
+                    } else if (sig.resolvedReason && sig.resolvedReason.toLowerCase().includes('expiration')) {
+                      statusText = 'Expired in Profit (Win)';
+                    } else {
+                      statusText = 'Verified (Win)';
+                    }
                     statusClass = 'win';
                     icon = <Check size={12} />;
                   } else if (isLoss) {
-                    statusText = 'Stop Hit (Loss)';
+                    if (sig.resolvedReason && sig.resolvedReason.toLowerCase().includes('invalidation')) {
+                      statusText = 'Stop Hit (Loss)';
+                    } else if (sig.resolvedReason && sig.resolvedReason.toLowerCase().includes('expiration')) {
+                      statusText = 'Expired in Loss (Loss)';
+                    } else {
+                      statusText = 'Missed Move (Loss)';
+                    }
                     statusClass = 'loss';
                     icon = <ArrowLeft size={12} style={{ transform: 'rotate(-45deg)' }} />;
                   }

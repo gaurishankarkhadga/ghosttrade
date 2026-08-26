@@ -14,7 +14,7 @@
 // to PAPER mode automatically. Existing PAPER behavior
 // is 100% unchanged from prior version.
 // =====================================================
-import { canOpenNewTrade, checkBlackSwanLiquidityCircuitBreaker } from './riskControlEngine.js';
+import { canOpenNewTrade } from './riskControlEngine.js';
 import { computeKelly } from './kellyEngine.js';
 import { getDb } from './mongoConfig.js';
 import { createAdapter, loadAllAdapters } from './brokerAdapter.js';
@@ -128,7 +128,8 @@ class UnifiedExecutionEngine {
         takeProfit,
         accountBalance = 100000,
         regime = 'TRENDING',
-        overrideMode
+        overrideMode,
+        kellyOverride
     }, userId) {
         if (!userId) {
             throw new Error('[EXECUTION ENGINE] userId is required for trade execution.');
@@ -141,24 +142,17 @@ class UnifiedExecutionEngine {
 
         console.log(`\n⚡ [EXECUTION] Processing ${side} setup on ${asset} @ $${entryPrice} [Mode: ${activeMode}]`);
 
-        // 1. Black Swan Circuit Breaker Check
-        const blackSwanCheck = checkBlackSwanLiquidityCircuitBreaker(0.05, 0);
-        if (blackSwanCheck.triggered) {
-            console.warn(`❌ [EXECUTION BLOCKED] ${blackSwanCheck.reason}: ${blackSwanCheck.detail}`);
-            return { success: false, reason: blackSwanCheck.reason, detail: blackSwanCheck.detail };
-        }
-
-        // 2. Portfolio Risk Check (Concurrent trade limits & correlation)
+        // 1. Portfolio Risk Check (includes Black Swan circuit breaker for crypto via live depth data)
         const riskCheck = await canOpenNewTrade(asset, side);
         if (!riskCheck.allowed) {
             console.warn(`❌ [EXECUTION BLOCKED] Risk control denied trade: ${riskCheck.reason}`);
             return { success: false, reason: riskCheck.reason };
         }
 
-        // 3. Position Sizing via Continuous Half-Kelly Engine
-        const kellyResult = computeKelly({
-            mean_return: 0.025, // Empirical mean return estimate
-            variance: 0.0004,    // Empirical variance estimate
+        // 2. Position Sizing — Use signal-level Kelly if provided, otherwise compute from regime
+        const kellyResult = kellyOverride || computeKelly({
+            mean_return: 0.025,
+            variance: 0.0004,
             regime
         });
 

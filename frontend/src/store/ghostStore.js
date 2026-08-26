@@ -124,6 +124,7 @@ const useGhostStore = create(
       // --- Audit State ---
       promptLogs: [],
       aiSignals: [],
+      systemPerformance: null,
 
 
       initAuditData: async () => {
@@ -136,7 +137,8 @@ const useGhostStore = create(
               activePaperTrades: data.activePaperTrades || [],
               closedPaperTrades: data.closedPaperTrades || [],
               promptLogs: data.promptLogs || [],
-              aiSignals: data.aiSignals || []
+              aiSignals: data.aiSignals || [],
+              systemPerformance: data.systemPerformance || null
             });
           }
         } catch (e) {

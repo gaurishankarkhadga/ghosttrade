@@ -13,17 +13,13 @@ import { atr, sma } from './technicalEngine.js';
 import { computeKelly } from './kellyEngine.js';
 import { fetchAssetSentiment } from './sentimentEngine.js';
 import { calculateRotationImpacts, SECTOR_MAP } from './correlationEngine.js';
-import { sendDiscordSignal } from './discordEngine.js';
+
 import { detectPatterns } from './patternEngine.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST } from './sharedConfig.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
 import { getDb } from './mongoConfig.js';
-import { canOpenNewTrade } from './riskControlEngine.js';
-import fs from 'fs';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-let daemonInterval = null;
 
 /**
  * Scans a single ticker using Phase 1, 2, and 6 logic
@@ -156,17 +152,29 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
   }
 
   const results = [];
-  const BATCH_SIZE = 10; // Increased batch size for fast global scanning
-  const DELAY_MS = 500;  // Reduced delay to scan 170+ assets in ~8 seconds
+  const BATCH_SIZE = 10;
+  const DELAY_MS = 500;
+  const SENTIMENT_BATCH_SIZE = 10;
 
+  const scanStartTime = Date.now();
   console.log(`[SCANNER] Initiating Phase 6 Market-Wide Scan for ${tickers.length} assets...`);
   
-  // [PHASE 6] Pre-Fetch Sentiment for ALL assets to map the Rotation Impact
+  // [PHASE 6] Pre-Fetch Sentiment for ALL assets — batched to avoid serial 34s bottleneck
   console.log(`[CORRELATION] Analyzing entire market sentiment to map Liquidity Rotation...`);
   const allSentiments = [];
-  for (const t of tickers) {
-     const s = await fetchAssetSentiment(t);
-     allSentiments.push({ ticker: t, sentimentBias: s.bias, multiplier: s.multiplier, alerts: s.alerts });
+  for (let i = 0; i < tickers.length; i += SENTIMENT_BATCH_SIZE) {
+    const sentimentBatch = tickers.slice(i, i + SENTIMENT_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      sentimentBatch.map(async (t) => {
+        try {
+          const s = await fetchAssetSentiment(t);
+          return { ticker: t, sentimentBias: s.bias, multiplier: s.multiplier, alerts: s.alerts };
+        } catch (e) {
+          return { ticker: t, sentimentBias: 'NEUTRAL', multiplier: 1.0, alerts: [`Sentiment fetch failed: ${e.message}`] };
+        }
+      })
+    );
+    allSentiments.push(...batchResults);
   }
   
   // Calculate the cross-asset rotation impact matrix
@@ -181,7 +189,7 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
       const impact = rotationMatrix[ticker];
       
       const mergedImpact = {
-         multiplier: impact.multiplier, // Override with rotation multiplier (which crushes toxic to 0.0 and boosts competitors to 1.25)
+         multiplier: impact.multiplier,
          bias: baseSentiment.sentimentBias,
          alerts: [...baseSentiment.alerts, ...impact.alerts]
       };
@@ -209,76 +217,18 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
     return (b.evNet || 0) - (a.evNet || 0);
   });
 
-  return results;
-}
-
-/**
- * DAEMON MODE: Runs in the background 24/7
- */
-export function startScannerDaemon(intervalMinutes = 15) {
-  if (daemonInterval) clearInterval(daemonInterval);
-  
-  console.log(`[DAEMON] Ghost Scanner Daemon Started (Interval: ${intervalMinutes}m)`);
-  
-  const tick = async () => {
-    const timestamp = new Date().toISOString();
-    console.log(`\n[${timestamp}] DAEMON TICK: Scanning Top 20 Market Assets...`);
-    const results = await runBulkScanPhase4();
-    
-    const topSetups = results.filter(r => r.score >= 80);
-    
-    if (topSetups.length > 0) {
-      console.log(`\n🚨 HIGH PROBABILITY SETUPS FOUND 🚨`);
-      
-      // OPTION A: Portfolio Correlation Limiter. 
-      // If multiple setups fire at once, only take the absolute best EV one to prevent crypto correlation blow-up.
-      const bestSetup = topSetups[0]; // Already sorted by EV descending
-      
-      console.log(`[CORRELATION SHIELD] Detected ${topSetups.length} signals. Executing Option A (Top 1 Only) to prevent over-leverage.`);
-      console.log(`\n=> [EXECUTE] ${bestSetup.ticker} | QuantScore: ${bestSetup.score}/100 | Setup: ${bestSetup.setup_id} | Kelly Size: ${bestSetup.recommendedSize.toFixed(1)}%`);
-      console.log(`   - Macro: ${bestSetup.macroRegime} | Micro: ${bestSetup.microRegime} | Shield: ${bestSetup.shieldTriggered}`);
-      console.log(`   - Valid Until: ${bestSetup.validUntil} (DO NOT EXECUTE AFTER)`);
-      console.log(`   - Stop Loss: $${bestSetup.stopLoss?.toFixed(2) || 'N/A'} | Take Profit: $${bestSetup.takeProfit?.toFixed(2) || 'N/A'}`);
-      console.log(`   - Kelly Reason: ${bestSetup.kellyReason}`);
-      
-      // PORTFOLIO RISK GATE — Enforce daily loss limits, concurrent caps, correlation blocking
-      let riskOk = true;
-      try {
-        const tradeSide = bestSetup.microRegime === 'UP' ? 'LONG' : 'SHORT';
-        const riskCheck = await canOpenNewTrade(bestSetup.ticker, tradeSide);
-        if (!riskCheck.allowed) {
-          riskOk = false;
-          console.warn(`[RISK CONTROL] 🛑 BLOCKED: ${bestSetup.ticker} — Reason: ${riskCheck.reason}${riskCheck.conflicting_asset ? ` (conflicts with ${riskCheck.conflicting_asset})` : ''}`);
-        }
-      } catch (riskErr) {
-        console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
-      }
-
-      // DISPATCH TO DISCORD (Production Distribution Layer) — only if risk allows
-      if (riskOk) {
-        sendDiscordSignal(bestSetup).catch(err => console.error(`[DAEMON] Discord dispatch failed:`, err));
-      } else {
-        console.log(`[DAEMON] Signal suppressed by Risk Control Engine. No dispatch.`);
-      }
-
-      if (topSetups.length > 1) {
-          console.log(`\n[SUPPRESSED SIGNALS - SAVED FROM CORRELATION RISK]`);
-          topSetups.slice(1).forEach(s => {
-              console.log(`   - SUPPRESSED: ${s.ticker} (Score: ${s.score}, Setup: ${s.setup_id})`);
-          });
-      }
-    } else {
-      console.log(`[DAEMON] No setups met the >= 80 Score threshold. Market is choppy. Shield protecting capital.`);
-    }
+  // Data health metrics — log data quality per scan cycle
+  const healthMetrics = {
+    totalAssets: tickers.length,
+    success: results.filter(r => r.status === 'success').length,
+    skipped: results.filter(r => r.status === 'skipped').length,
+    errored: results.filter(r => r.status === 'error').length,
+    scanDurationMs: Date.now() - scanStartTime,
   };
+  console.log(`[SCANNER HEALTH] ${healthMetrics.success}/${healthMetrics.totalAssets} success | ${healthMetrics.skipped} skipped | ${healthMetrics.errored} errors | ${healthMetrics.scanDurationMs}ms total`);
 
-  tick(); // Run immediately
-  daemonInterval = setInterval(tick, intervalMinutes * 60 * 1000);
-}
+  // Attach health metrics to the results array for frontend consumption
+  results._health = healthMetrics;
 
-export function stopScannerDaemon() {
-  if (daemonInterval) {
-    clearInterval(daemonInterval);
-    console.log(`[DAEMON] Scanner Stopped.`);
-  }
+  return results;
 }

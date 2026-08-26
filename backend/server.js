@@ -15,8 +15,8 @@ import crypto from 'crypto';
 dotenv.config();
 
 // === Engine Imports ===
-import { getDynamicCryptoWatchlist } from './discoveryEngine.js';
-import { runBulkScanPhase4 } from './scannerEngine.js';
+
+
 import { 
   DEFAULT_CRYPTO_WATCHLIST, 
   DEFAULT_GLOBAL_STOCKS_WATCHLIST, 
@@ -29,8 +29,9 @@ import { handleGeminiConnection } from './geminiEngine.js';
 import { startAuditDaemon } from './auditDaemon.js';
 import { startRegimeMonitor, registerClient } from './regimeMonitor.js';
 import { getDb } from './mongoConfig.js';
-import { runBacktest } from './backtestEngine.js';
 import { executionManager } from './executionEngine.js';
+import { startScannerWorker, startAuditWorker, runBacktestInWorker, workerEvents } from './workerPool.js';
+import { getSystemPerformance } from './performanceEngine.js';
 // === Global System Imports ===
 import { storeBrokerKeys, deleteBrokerKeys, listConnectedBrokers, SUPPORTED_BROKERS } from './brokerKeyManager.js';
 import { MARKET_REGIONS, listAvailableRegions, getTotalAssetCount, getWatchlistForRegions } from './globalWatchlists.js';
@@ -205,18 +206,19 @@ fastify.post('/api/auth/paddle-sync', async (request, reply) => {
 fastify.get('/api/audit', async (request, reply) => {
   try {
     if (!dbReady) {
-      return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
+      return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [], systemPerformance: null });
     }
     const db = await getDb();
     const activePaperTrades = await db.collection('paper_trades').find({ status: { $in: ['OPEN', 'PENDING_CONFIRMATION'] } }).sort({ executedAt: -1 }).toArray();
     const closedPaperTrades = await db.collection('paper_trades').find({ status: { $in: ['WIN', 'LOSS', 'CANCELLED'] } }).sort({ closedAt: -1 }).limit(100).toArray();
     const promptLogs = await db.collection('prompt_logs').find({}).sort({ timestamp: -1 }).limit(200).toArray();
     const aiSignals = await db.collection('signals').find({}).sort({ timestamp: -1 }).limit(200).toArray();
+    const systemPerformance = await getSystemPerformance();
 
-    return reply.send({ activePaperTrades, closedPaperTrades, promptLogs, aiSignals });
+    return reply.send({ activePaperTrades, closedPaperTrades, promptLogs, aiSignals, systemPerformance });
   } catch (e) {
     console.error('[AUDIT API] GET /api/audit failed:', e.message);
-    return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
+    return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [], systemPerformance: null });
   }
 });
 
@@ -570,8 +572,6 @@ fastify.get('/api/markets', async (request, reply) => {
   });
 });
 
-// Broker credentials logic has been deprecated.
-
 // =====================================================
 // NATIVE BACKTEST ENGINE API
 // =====================================================
@@ -582,7 +582,7 @@ fastify.post('/api/backtest', async (request, reply) => {
       return reply.code(400).send({ error: 'Asset ticker is required' });
     }
 
-    const result = await runBacktest(asset, days || 730);
+    const result = await runBacktestInWorker(asset, days || 730);
     
     if (result.error) {
        return reply.code(500).send(result);
@@ -749,63 +749,8 @@ function broadcast(payload) {
   }
 }
 
-async function runGhostBrainLoop() {
-  if (isBrainRunning) return;
-  isBrainRunning = true;
-
-  console.log('[DAEMON] Starting Ghost Brain Multi-Market Backend Loop (Binance + NSE)...');
-
-  // Initial fetch for dynamic Phase 0 Top 100 Crypto funnel
-  let dynamicCryptoList = await getDynamicCryptoWatchlist();
-
-  // Start WebSocket for Crypto level 2 depth
-  await startWebSocketPipeline(dynamicCryptoList);
-
-  const globalAssets = getWatchlistForRegions(listAvailableRegions());
-  let activeWatchlist = [...new Set([...dynamicCryptoList, ...globalAssets])];
-
-  console.log(`[DAEMON] Waiting for initial order flow telemetry buffer to fill for ${activeWatchlist.length} assets...`);
-  for (let i = 0; i < 15; i++) {
-    const firstCrypto = dynamicCryptoList[0] || 'BTC-USD';
-    const firstTrades = liveMemoryState.aggTrades[firstCrypto];
-    if (firstTrades && firstTrades.length > 0) {
-      console.log(`[DAEMON] Telemetry buffer filled (${firstTrades.length} trades for ${firstCrypto}). Proceeding to initial scan.`);
-      break;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-
-  // Run initial scan
-  try {
-    console.log('[DAEMON] Executing initial multi-market scan...');
-    const initialResults = await runBulkScanPhase4(activeWatchlist);
-    broadcast(initialResults);
-  } catch (e) {
-    console.error('[DAEMON] Initial scan error:', e.message);
-  }
-
-  // Continuous loop
-  while (true) {
-    if (connectedClients.size > 0) {
-      try {
-        // Refresh the dynamic list every loop (the engine caches for 5 mins automatically)
-        dynamicCryptoList = await getDynamicCryptoWatchlist();
-        
-        // Ensure WebSocket is updated with any new tickers seamlessly
-        await startWebSocketPipeline(dynamicCryptoList);
-
-        const globalAssets = getWatchlistForRegions(listAvailableRegions());
-        activeWatchlist = [...new Set([...dynamicCryptoList, ...globalAssets])];
-
-        const results = await runBulkScanPhase4(activeWatchlist);
-        broadcast(results);
-      } catch (e) {
-        console.error('[DAEMON] Loop error:', e.message);
-      }
-    }
-    await new Promise(r => setTimeout(r, 3000));
-  }
-}
+// Listen for updates from the Scanner Worker Thread
+workerEvents.on('GHOST_BRAIN_UPDATE', broadcast);
 
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
@@ -825,7 +770,7 @@ fastify.register(async function brainRoutes(fastify) {
     registerClient(socket);
 
     // Start the engine if it's the first client
-    runGhostBrainLoop();
+    startScannerWorker();
 
     socket.on('close', () => {
       connectedClients.delete(socket);
@@ -859,7 +804,7 @@ const start = async () => {
 
     // Start Self-Healing Feedback Loop Daemons
     if (dbReady) {
-      startAuditDaemon();
+      startAuditWorker();
       startRegimeMonitor();
 
       // Note: State recovery for LIVE trades has been removed. All trades are purely PAPER now.

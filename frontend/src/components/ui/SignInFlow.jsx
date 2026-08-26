@@ -121,9 +121,9 @@ function MiniNavbar({ onModeSwitch }) {
           <AnimatedProLogo size={48} color="#ffffff" isAnimating={true} />
         </div>
         <nav className="desktop-nav">
-          <AnimatedNavLink href="#">Terminal</AnimatedNavLink>
-          <AnimatedNavLink href="#">Intelligence</AnimatedNavLink>
-          <AnimatedNavLink href="#">System Status</AnimatedNavLink>
+          <AnimatedNavLink href="#">About</AnimatedNavLink>
+          <AnimatedNavLink href="#">Features</AnimatedNavLink>
+          <AnimatedNavLink href="#">Pricing</AnimatedNavLink>
         </nav>
         <div className="auth-buttons">
           <button className="login-btn" onClick={() => onModeSwitch('login')}>Sign In</button>
@@ -143,9 +143,9 @@ function MiniNavbar({ onModeSwitch }) {
 
       <div className={`mobile-menu ${isOpen ? 'open' : 'closed'}`}>
         <nav className="mobile-nav-links">
-          <a href="#"><Terminal size={18} /><span>Terminal</span></a>
-          <a href="#"><BrainCircuit size={18} /><span>Intelligence</span></a>
-          <a href="#"><Activity size={18} /><span>System Status</span></a>
+          <a href="#"><Terminal size={18} /><span>About</span></a>
+          <a href="#"><Activity size={18} /><span>Features</span></a>
+          <a href="#"><BrainCircuit size={18} /><span>Pricing</span></a>
         </nav>
         <div className="mobile-auth-buttons">
           <button className="login-btn mobile-action-btn" onClick={() => { setIsOpen(false); onModeSwitch('login'); }}>
