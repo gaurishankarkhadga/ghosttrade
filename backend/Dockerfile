@@ -18,23 +18,9 @@ WORKDIR /app
 # Set Node environment to production
 ENV NODE_ENV=production
 
-# Copy necessary files from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/server.js ./
-COPY --from=builder /app/mongoConfig.js ./
-COPY --from=builder /app/sharedConfig.js ./
-# Copy core directories
-COPY --from=builder /app/routes ./routes
-COPY --from=builder /app/models ./models
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/workers ./workers
-
-# (Optional) If you have more files needed for production, they will be copied above, 
-# but we are explicitly avoiding copying test scripts.
-# Since the backend uses ES modules and many loosely coupled files, 
-# it's safer to copy all .js files, but exclude tests via .dockerignore.
-# We'll override the explicit copies above and just copy everything that .dockerignore allows:
+# Copy the entire app from the builder stage. 
+# We don't need to explicitly copy node_modules and then /app again.
+# Kaniko fails when you try to overwrite symlinks twice.
 COPY --from=builder /app ./
 
 # Change ownership to the restricted node user
