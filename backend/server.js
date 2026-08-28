@@ -74,6 +74,8 @@ const ALLOWED_ORIGINS = [
 
 fastify.register(cors, {
   origin: (origin, cb) => {
+    console.log(`[CORS DEBUG] Incoming Frontend URL (Origin):`, origin);
+    
     // SECURITY WARNING: CORS is currently permissive. 
     // It automatically accepts any origin because FRONTEND_URL wasn't strictly configured.
     // This prevents the Netlify blockage but should be locked down later.
