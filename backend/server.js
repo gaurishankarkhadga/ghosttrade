@@ -66,17 +66,11 @@ await fastify.register(fastifyRateLimit, {
 });
 
 const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:4173',
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  'https://ghosttradeai-test.netlify.app'
 ];
 
 fastify.register(cors, {
-  // SECURITY WARNING: origin is set to true.
-  // This automatically reflects ANY requesting origin back to the client.
-  // This bypasses strict origin checking to guarantee Netlify works.
-  origin: true,
+  origin: 'https://ghosttradeai-test.netlify.app',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept', 'X-Request-ID'],
   credentials: true

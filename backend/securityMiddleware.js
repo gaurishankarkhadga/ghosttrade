@@ -129,10 +129,11 @@ export function registerSecurityMiddleware(fastify) {
 export function validateWsOrigin(req, allowedOrigins) {
   const origin = req.headers?.origin;
 
-  // Allow connections with no Origin header (server-to-server, mobile apps, CLI tools)
+  // Allow connections with no Origin header (server-to-server, mobile apps, CLI tools, CloudFront stripped)
   if (!origin) return true;
 
-  return allowedOrigins.includes(origin);
+  // Strict enforcement for Netlify
+  return origin === 'https://ghosttradeai-test.netlify.app';
 }
 
 /**
