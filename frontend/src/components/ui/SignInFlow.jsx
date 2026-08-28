@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Terminal, BrainCircuit, Activity, LogIn, UserPlus } from 'lucide-react';
@@ -102,17 +102,27 @@ const Shader = ({ source, uniforms, maxFps = 60 }) => <Canvas className="canvas-
 
 // Animated Top Navbar
 const AnimatedNavLink = ({ href, children }) => (
-  <a href={href} className="nav-link"><div className="nav-link-inner"><span>{children}</span><span>{children}</span></div></a>
+  <Link to={href} className="nav-link"><div className="nav-link-inner"><span>{children}</span><span>{children}</span></div></Link>
 );
 
-function MiniNavbar({ onModeSwitch }) {
+export function MiniNavbar({ onModeSwitch }) {
   const [isOpen, setIsOpen] = useState(false);
   const [headerShapeClass, setHeaderShapeClass] = useState('rounded-full');
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (isOpen) setHeaderShapeClass('rounded-xl');
     else setTimeout(() => setHeaderShapeClass('rounded-full'), 300);
   }, [isOpen]);
+
+  const handleAction = (mode) => {
+    if (onModeSwitch) {
+      onModeSwitch(mode);
+    } else {
+      // If we are on /about, navigating to connect should set the correct mode
+      navigate('/connect', { state: { mode } });
+    }
+  };
 
   return (
     <header className={`mini-navbar ${headerShapeClass}`}>
@@ -121,15 +131,15 @@ function MiniNavbar({ onModeSwitch }) {
           <AnimatedProLogo size={48} color="#ffffff" isAnimating={true} />
         </div>
         <nav className="desktop-nav">
-          <AnimatedNavLink href="#">About</AnimatedNavLink>
+          <AnimatedNavLink href="/about">About</AnimatedNavLink>
           <AnimatedNavLink href="#">Features</AnimatedNavLink>
           <AnimatedNavLink href="#">Pricing</AnimatedNavLink>
         </nav>
         <div className="auth-buttons">
-          <button className="login-btn" onClick={() => onModeSwitch('login')}>Sign In</button>
+          <button className="login-btn" onClick={() => handleAction('login')}>Sign In</button>
           <div className="signup-container">
             <div className="signup-glow"></div>
-            <button className="signup-btn" onClick={() => onModeSwitch('signup')}>Create Account</button>
+            <button className="signup-btn" onClick={() => handleAction('signup')}>Create Account</button>
           </div>
         </div>
         <button className="mobile-menu-toggle" onClick={() => setIsOpen(!isOpen)}>
@@ -143,15 +153,15 @@ function MiniNavbar({ onModeSwitch }) {
 
       <div className={`mobile-menu ${isOpen ? 'open' : 'closed'}`}>
         <nav className="mobile-nav-links">
-          <a href="#"><Terminal size={18} /><span>About</span></a>
+          <Link to="/about"><Terminal size={18} /><span>About</span></Link>
           <a href="#"><Activity size={18} /><span>Features</span></a>
           <a href="#"><BrainCircuit size={18} /><span>Pricing</span></a>
         </nav>
         <div className="mobile-auth-buttons">
-          <button className="login-btn mobile-action-btn" onClick={() => { setIsOpen(false); onModeSwitch('login'); }}>
+          <button className="login-btn mobile-action-btn" onClick={() => { setIsOpen(false); handleAction('login'); }}>
             <LogIn size={16} /><span>Sign In</span>
           </button>
-          <button className="signup-btn mobile-action-btn" onClick={() => { setIsOpen(false); onModeSwitch('signup'); }}>
+          <button className="signup-btn mobile-action-btn" onClick={() => { setIsOpen(false); handleAction('signup'); }}>
             <UserPlus size={16} /><span>Create Account</span>
           </button>
         </div>
@@ -160,9 +170,31 @@ function MiniNavbar({ onModeSwitch }) {
   );
 }
 
+// PUBLIC LAYOUT WRAPPER (Shared by Connect and About)
+export const PublicLayout = ({ children, initialCanvasVisible = true, reverseCanvasVisible = false, onModeSwitch }) => {
+  return (
+    <div className="signin-wrapper">
+      <div className="canvas-bg-layer">
+        {initialCanvasVisible && <CanvasRevealEffect animationSpeed={3} colors={[[255, 255, 255], [255, 255, 255]]} dotSize={6} reverse={false} />}
+        {reverseCanvasVisible && <CanvasRevealEffect animationSpeed={4} colors={[[255, 255, 255], [255, 255, 255]]} dotSize={6} reverse={true} />}
+        <div className="radial-gradient-overlay" />
+        <div className="linear-gradient-top" />
+      </div>
+
+      <div className="content-layer">
+        <MiniNavbar onModeSwitch={onModeSwitch} />
+        <div className="main-area" style={{ flex: 1, overflowY: 'auto', scrollBehavior: 'smooth' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // MAIN COMPONENT (Merging 21st.dev animations with GhostTrade Logic)
 export const SignInPage = ({ onLoginSuccess }) => {
-  const [step, setStep] = useState("login"); // 'login' | 'signup' | 'success'
+  const location = useLocation();
+  const [step, setStep] = useState(location.state?.mode || "login"); // 'login' | 'signup' | 'success'
   const [initialCanvasVisible, setInitialCanvasVisible] = useState(true);
   const [reverseCanvasVisible, setReverseCanvasVisible] = useState(false);
 
@@ -248,22 +280,15 @@ export const SignInPage = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="signin-wrapper">
-      <div className="canvas-bg-layer">
-        {initialCanvasVisible && <CanvasRevealEffect animationSpeed={3} colors={[[255, 255, 255], [255, 255, 255]]} dotSize={6} reverse={false} />}
-        {reverseCanvasVisible && <CanvasRevealEffect animationSpeed={4} colors={[[255, 255, 255], [255, 255, 255]]} dotSize={6} reverse={true} />}
-        <div className="radial-gradient-overlay" />
-        <div className="linear-gradient-top" />
-      </div>
-
-      <div className="content-layer">
-        <MiniNavbar onModeSwitch={(mode) => { setStep(mode); setErrorMsg(''); }} />
-
-        <div className="main-area">
-          <div className="form-container" style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
-              <AnimatedProLogo size={800} color="#ffffff" isAnimating={true} />
-            </div>
+    <PublicLayout 
+      initialCanvasVisible={initialCanvasVisible} 
+      reverseCanvasVisible={reverseCanvasVisible} 
+      onModeSwitch={(mode) => { setStep(mode); setErrorMsg(''); }}
+    >
+      <div className="form-container" style={{ position: 'relative', width: '100%', maxWidth: '440px', margin: '0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100%' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
+          <AnimatedProLogo size={800} color="#ffffff" isAnimating={true} />
+        </div>
             <div className="form-inner" style={{ position: 'relative', zIndex: 1, transform: 'translateY(-40px)' }}>
               <AnimatePresence mode="wait">
                 {step === "login" ? (
@@ -347,9 +372,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
                 )}
               </AnimatePresence>
             </div>
-          </div>
-        </div>
       </div>
-    </div>
+    </PublicLayout>
   );
 };

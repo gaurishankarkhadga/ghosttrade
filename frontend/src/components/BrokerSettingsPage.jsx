@@ -31,30 +31,51 @@ const BROKER_INFO = {
 
 function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
   const info = BROKER_INFO[brokerKey];
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const token = useGhostStore(state => state.token);
+  const fetchBrokerStatus = useGhostStore(state => state.fetchBrokerStatus);
 
-  const handleConnectClick = async () => {
-    if (isConnected || isRedirecting) return;
-    setIsRedirecting(true);
+  const handleConnectClick = () => {
+    if (isConnected) return;
+    setIsEditing(!isEditing);
+  };
 
+  const handleConnectSubmit = async (e) => {
+    e.preventDefault();
+    if (!apiKey || !apiSecret) {
+      alert('API Key and Secret are required.');
+      return;
+    }
+    
+    setIsSubmitting(true);
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${baseUrl}/api/broker/oauth/authorize?broker=${brokerKey}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const res = await fetch(`${baseUrl}/api/broker/keys`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ broker: brokerKey, apiKey, apiSecret })
       });
       const data = await res.json();
       
-      if (res.ok && data.url) {
-        window.location.href = data.url;
+      if (res.ok) {
+        setIsEditing(false);
+        setApiKey('');
+        setApiSecret('');
+        await fetchBrokerStatus();
       } else {
-        alert(data.error || 'Failed to initiate OAuth flow');
-        setIsRedirecting(false);
+        alert(data.error || 'Failed to connect broker');
       }
     } catch (err) {
-      console.error('OAuth initiation failed:', err);
-      alert('Network error while initiating OAuth');
-      setIsRedirecting(false);
+      console.error('Connection failed:', err);
+      alert('Network error while connecting');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -63,7 +84,7 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
       <div 
         className="broker-card-header" 
         onClick={handleConnectClick}
-        style={{ cursor: isConnected ? 'default' : 'pointer', opacity: isRedirecting ? 0.7 : 1 }}
+        style={{ cursor: isConnected ? 'default' : 'pointer' }}
       >
         <div className="broker-identity">
           <div className="broker-dot" style={{ background: info.color }} />
@@ -80,18 +101,54 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
             </div>
           ) : (
             <div className="broker-connect-hint">
-              {isRedirecting ? (
-                <span className="text-gray-400 text-sm">Redirecting...</span>
-              ) : (
-                <>
-                  <Link2 size={14} />
-                  <span>Connect</span>
-                </>
-              )}
+              <Link2 size={14} />
+              <span>{isEditing ? 'Cancel' : 'Connect'}</span>
             </div>
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {isEditing && !isConnected && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="broker-manual-connect-form"
+            style={{ overflow: 'hidden' }}
+          >
+            <form onSubmit={handleConnectSubmit} style={{ padding: '16px 20px', borderTop: '1px solid #1e293b' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>API Key</label>
+                <input 
+                  type="text" 
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste your API key here"
+                  style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+                />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>API Secret</label>
+                <input 
+                  type="password" 
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder="Paste your API secret here"
+                  style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                style={{ width: '100%', padding: '10px', background: info.color, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: isSubmitting ? 'wait' : 'pointer' }}
+              >
+                {isSubmitting ? 'Connecting...' : `Connect ${info.name}`}
+              </button>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {isConnected && (
         <div className="broker-connected-info">

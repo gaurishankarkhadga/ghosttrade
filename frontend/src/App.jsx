@@ -11,6 +11,7 @@ import BrokerSettingsPage from './components/BrokerSettingsPage';
 import OAuthCallback from './components/OAuthCallback';
 
 import { PricingModal } from './components/PricingModal';
+import GhostAbout from './components/GhostAbout';
 
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
@@ -67,6 +68,9 @@ export default function App() {
         } 
       />
       
+      {/* Public About Route */}
+      <Route path="/about" element={<GhostAbout />} />
+
       {/* Protected Terminal Workspace Route */}
       <Route 
         path="/terminal" 

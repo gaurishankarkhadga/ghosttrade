@@ -1,0 +1,918 @@
+/* ===================================================================
+   GHOSTTRADE INSTITUTIONAL ABOUT PAGE STYLESHEET
+   Strict Adherence to GhostTrade Base CSS Design System
+   Zero Box-Shadows | Zero Filters/Blurs | Zero Transform-Scales
+   =================================================================== */
+
+:root {
+  --color-ghost-obsidian: #050505;
+  --color-ghost-surface: #0c0c0e;
+  --color-ghost-surface-hover: #141418;
+  --color-ghost-accent: #ffffff;
+  --color-ghost-buy: #10b981;
+  --color-ghost-sell: #ef4444;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-subtle: #1e293b;
+  --border-medium: #334155;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base Page Layout Container */
+.ghost-about-page {
+  min-height: 100vh;
+  width: 100%;
+  flex: 1;
+  background-color: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===================================================================
+   1. HERO SECTION
+   =================================================================== */
+.about-hero-section {
+  position: relative;
+  min-height: calc(100vh - 80px);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 80px 24px 40px 24px;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 0 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.hero-content h1 {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 4.2vw, 56px);
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0 0 24px 0;
+  letter-spacing: -1px;
+  white-space: nowrap;
+  width: 100%;
+  color: var(--text-primary);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtext {
+  font-size: clamp(15px, 1.8vw, 18px);
+  color: var(--text-secondary);
+  max-width: 720px;
+  line-height: 1.7;
+  margin: 0 0 40px 0;
+  font-weight: 400;
+}
+
+.hero-cta-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 32px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.cta-btn.primary {
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #ffffff;
+}
+
+.cta-btn.primary:hover {
+  background: #e2e8f0;
+  border-color: #e2e8f0;
+}
+
+.cta-btn.secondary {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+.cta-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ===================================================================
+   2. GENERAL ABOUT SECTION LAYOUT
+   =================================================================== */
+.about-section {
+  width: 100%;
+  padding: 100px 24px;
+  position: relative;
+  z-index: 10;
+  border-top: none;
+}
+
+.section-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 60px;
+  text-align: center;
+}
+
+.section-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ghost-buy);
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.section-header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.5vw, 42px);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+  letter-spacing: -0.5px;
+}
+
+.section-header p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 680px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ===================================================================
+   3. ARCHITECTURE TABS & TRADING VISUAL WIDGETS
+   =================================================================== */
+.arch-nav-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  background: var(--color-ghost-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tab-btn:hover {
+  background: var(--color-ghost-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.tab-btn.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.arch-tab-content {
+  width: 100%;
+  background: var(--color-ghost-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tab-pane {
+  padding: 40px;
+}
+
+.tab-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.tab-info h3 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+}
+
+.tab-info p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0 0 24px 0;
+}
+
+.spec-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spec-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.icon-emerald {
+  color: var(--color-ghost-buy);
+  flex-shrink: 0;
+}
+
+/* Trading Visual Panel (Replaces Code Blocks) */
+.tab-visual-panel {
+  background: #000000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.visual-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+
+.trading-widget {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.widget-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr 1.2fr;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--color-ghost-surface);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.widget-row.header-row {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding-bottom: 4px;
+}
+
+.widget-row .ticker {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.text-emerald { color: var(--color-ghost-buy); }
+.text-rose { color: var(--color-ghost-sell); }
+.text-muted { color: var(--text-muted); }
+
+.badge-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-tag.green {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-ghost-buy);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-tag.red {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-ghost-sell);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-tag.gray {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-tag.yellow {
+  background: rgba(234, 179, 8, 0.1);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+/* Execution Pipeline Visual */
+.pipeline-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--color-ghost-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  gap: 16px;
+}
+
+.pipeline-step.active {
+  border-color: var(--color-ghost-buy);
+}
+
+.step-num {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.step-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.step-details .title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.step-details .sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.step-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.step-badge.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-ghost-buy);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Risk Dashboard Visual */
+.risk-widget {
+  padding: 24px;
+}
+
+.risk-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.risk-metric-row.margin-top {
+  margin-top: 24px;
+}
+
+.risk-metric-row .label {
+  color: var(--text-muted);
+  font-weight: 600;
+
+}
+
+.risk-metric-row .val {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-ghost-sell);
+  border-radius: 9999px;
+}
+
+.progress-fill.green {
+  background: var(--color-ghost-buy);
+}
+
+.risk-status-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ===================================================================
+   4. INSTITUTIONAL COMPARISON MATRIX TABLE
+   =================================================================== */
+.matrix-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--color-ghost-surface);
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.matrix-table th {
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.matrix-table td {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.matrix-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.matrix-table .spec-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-table .retail-val {
+  color: var(--text-muted);
+}
+
+.matrix-table .quant-val {
+  color: var(--text-primary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.matrix-table .highlight-col {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* ===================================================================
+   5. METRICS GRID SECTION (UNIQUE SELECTOR NAMES)
+   =================================================================== */
+.ghost-about-metrics-section {
+  background: transparent !important;
+}
+
+.ghost-about-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  background: transparent !important;
+}
+
+.ghost-about-metric-card {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 150ms ease;
+}
+
+.ghost-about-metric-card:hover {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: transparent !important;
+}
+
+.ghost-about-metric-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 16px;
+}
+
+.ghost-about-metric-val {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  letter-spacing: -1px;
+}
+
+.ghost-about-metric-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ===================================================================
+   6. FAQ ACCORDION SECTION
+   =================================================================== */
+.faq-list {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.faq-item {
+  background: var(--color-ghost-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.faq-item:hover {
+  border-color: var(--border-medium);
+}
+
+.faq-question {
+  width: 100%;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  gap: 16px;
+}
+
+.faq-chevron {
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.faq-item.open .faq-chevron {
+  transform: rotate(180deg);
+  color: var(--text-primary);
+}
+
+.faq-answer {
+  padding: 0 24px 24px 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.faq-answer p {
+  margin: 0;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* ===================================================================
+   7. FINAL CTA SECTION
+   =================================================================== */
+.final-cta-section {
+  padding: 120px 24px;
+  background: transparent;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.final-cta-section .section-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.final-cta-section h2 {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 3.2vw, 40px);
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.final-cta-section p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin: 0 0 36px 0;
+  text-align: center;
+  width: 100%;
+}
+
+.cta-action-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+/* ===================================================================
+   8. INSTITUTIONAL FOOTER STYLING
+   =================================================================== */
+.about-footer {
+  width: 100%;
+  border-top: 1px solid var(--border-subtle);
+  background: #000000;
+  padding: 80px 24px 40px 24px;
+  position: relative;
+  z-index: 10;
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.footer-top {
+  display: grid;
+  grid-template-columns: 1.5fr 3fr;
+  gap: 64px;
+  margin-bottom: 60px;
+}
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.brand-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.brand-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 360px;
+}
+
+.footer-links-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.footer-col h4 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
+  margin: 0 0 20px 0;
+}
+
+.footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer-col ul li a {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.footer-col ul li a:hover {
+  color: var(--text-primary);
+}
+
+.footer-bottom {
+  padding-top: 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.footer-bottom .copyright,
+.footer-bottom .disclaimer {
+  text-align: center;
+  width: 100%;
+}
+
+/* ===================================================================
+   9. RESPONSIVE BREAKPOINTS
+   =================================================================== */
+@media (max-width: 1024px) {
+  .hero-content h1 {
+    font-size: clamp(20px, 4vw, 44px);
+    white-space: normal;
+  }
+  
+  .tab-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  
+  .ghost-about-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .footer-top {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  .about-hero-section {
+    padding: 60px 16px 30px 16px;
+  }
+  
+  .hero-cta-group {
+    flex-direction: column;
+  }
+  
+  .cta-btn {
+    width: 100%;
+  }
+  
+  .tab-pane {
+    padding: 24px 16px;
+  }
+  
+  .ghost-about-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .footer-links-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+/* ===================================================================
+   10. FIXED BACKGROUND LOGO WATERMARK & SCROLL REVEAL SYSTEM
+   =================================================================== */
+.ghost-about-page {
+  position: relative;
+  z-index: 1;
+}
+
+.ghost-about-bg-logo {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Staggered Delay Utilities */
+.scroll-reveal.delay-100 { transition-delay: 80ms; }
+.scroll-reveal.delay-150 { transition-delay: 120ms; }
+.scroll-reveal.delay-200 { transition-delay: 160ms; }
+.scroll-reveal.delay-250 { transition-delay: 200ms; }
+.scroll-reveal.delay-300 { transition-delay: 240ms; }
+.scroll-reveal.delay-400 { transition-delay: 320ms; }
+.scroll-reveal.delay-500 { transition-delay: 400ms; }
+.scroll-reveal.delay-600 { transition-delay: 480ms; }
