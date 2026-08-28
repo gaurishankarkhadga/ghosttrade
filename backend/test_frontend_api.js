@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const BASE_URL = 'http://localhost:5000';
 const EMAIL = 'ai-tester@ghosttrade.com';
-const JWT_SECRET = 'ghost-brain-institutional-0x7f3a9b2e1d4c'; // from .env
-
+const JWT_SECRET = process.env.JWT_SECRET;
 async function testFrontendApiOneByOne() {
   console.log("==================================================");
   console.log("🖥️ FRONTEND API INTEGRATION TEST (ONE-BY-ONE)");

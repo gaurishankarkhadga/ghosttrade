@@ -1,0 +1,23 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+.env
+.env.*
+
+.git
+.gitignore
+
+# Tests and Scratch files
+test_*.js
+scratch*/
+scratch.js
+*output*.txt
+*results*.txt
+*.log
+
+# Docker stuff
+Dockerfile
+.dockerignore

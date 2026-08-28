@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghosttrade-backend:latest
+    container_name: ghosttrade_backend
+    ports:
+      - "5000:5000"
+    environment:
+      # If using the local mongodb service below, use this URI:
+      # MONGODB_URI: mongodb://mongodb:27017/ghosttrade
+      # Otherwise, it will pull from your local backend/.env file 
+      # or system environment variables.
+      - NODE_ENV=production
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - ghosttrade-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ghosttrade-frontend:latest
+    container_name: ghosttrade_frontend
+    ports:
+      - "3000:80" # Maps local port 3000 to the container's Nginx port 80
+    environment:
+      - VITE_BACKEND_URL=http://localhost:5000
+    restart: unless-stopped
+    networks:
+      - ghosttrade-network
+
+  # Optional local MongoDB for isolated testing without hitting Atlas
+  mongodb:
+    image: mongo:6.0
+    container_name: ghosttrade_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ghosttrade-mongo-data:/data/db
+    restart: unless-stopped
+    networks:
+      - ghosttrade-network
+
+networks:
+  ghosttrade-network:
+    driver: bridge
+
+volumes:
+  ghosttrade-mongo-data:
