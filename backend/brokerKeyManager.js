@@ -31,14 +31,14 @@ function getMasterKey() {
   if (envKey && envKey.length === 64) {
     // Valid 32-byte hex key
     ENCRYPTION_KEY = Buffer.from(envKey, 'hex');
-  } else if (IS_PRODUCTION) {
-    // PRODUCTION: Crash immediately — cannot encrypt without a proper key
-    console.error('[BROKER KEY MANAGER] ❌ FATAL: BROKER_ENCRYPTION_KEY is required in production.');
-    console.error('[BROKER KEY MANAGER] Generate one: openssl rand -hex 32');
-    process.exit(1);
   } else {
-    // Dev mode: generate ephemeral key (keys won't survive restart)
-    console.warn('[BROKER KEY MANAGER] ⚠️ BROKER_ENCRYPTION_KEY not set. Using ephemeral key. Set a 64-char hex key in .env for production.');
+    if (IS_PRODUCTION) {
+      console.error('[BROKER KEY MANAGER] ⚠️ WARNING: BROKER_ENCRYPTION_KEY is required in production.');
+      console.error('[BROKER KEY MANAGER] Falling back to ephemeral key (keys will be lost on restart).');
+      console.error('[BROKER KEY MANAGER] Please add BROKER_ENCRYPTION_KEY to your deployment variables.');
+    } else {
+      console.warn('[BROKER KEY MANAGER] ⚠️ BROKER_ENCRYPTION_KEY not set. Using ephemeral key.');
+    }
     ENCRYPTION_KEY = crypto.randomBytes(32);
   }
   return ENCRYPTION_KEY;

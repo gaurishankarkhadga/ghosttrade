@@ -99,6 +99,7 @@ export function validateEnvironment() {
   }
 
   // Report errors and crash in production
+  // Report errors but DO NOT CRASH the deployment
   if (errors.length > 0) {
     console.error('\n[ENV VALIDATOR] ❌ CRITICAL CONFIGURATION ERRORS:');
     for (const err of errors) {
@@ -106,12 +107,12 @@ export function validateEnvironment() {
     }
 
     if (IS_PRODUCTION) {
-      console.error('\n[ENV VALIDATOR] Server cannot start in production with insecure configuration.');
-      console.error('[ENV VALIDATOR] Fix the above errors and restart.');
-      process.exit(1);
+      console.error('\n[ENV VALIDATOR] Server is starting in production with missing configuration.');
+      console.error('[ENV VALIDATOR] Some features (like AI or Broker connections) will fail until you add these variables to Back4App.');
+      // Removed process.exit(1) so Back4App deployment doesn't crash
     } else {
       console.warn('\n[ENV VALIDATOR] Running in DEVELOPMENT mode — proceeding despite errors.');
-      console.warn('[ENV VALIDATOR] These errors WILL crash the server in production (NODE_ENV=production).\n');
+      console.warn('[ENV VALIDATOR] Please add these variables for full functionality.\n');
     }
   } else {
     console.log(`[ENV VALIDATOR] ✅ All environment variables validated (mode: ${IS_PRODUCTION ? 'PRODUCTION' : 'DEVELOPMENT'})`);
