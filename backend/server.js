@@ -914,7 +914,8 @@ const start = async () => {
       // Note: State recovery for LIVE trades has been removed. All trades are purely PAPER now.
     }
 
-    await fastify.listen({ port: 5000, host: '0.0.0.0' });
+    const PORT = process.env.PORT || 5000;
+    await fastify.listen({ port: PORT, host: '0.0.0.0' });
     console.log('🚀 GhostTrade Server listening on http://localhost:5000');
     console.log('   ├── /api/auth/login      (POST)');
     console.log('   ├── /api/auth/signup     (POST)');

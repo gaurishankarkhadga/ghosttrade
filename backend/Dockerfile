@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies (often needed for node-gyp or specific packages)
@@ -12,7 +12,7 @@ RUN npm ci
 COPY . .
 
 # Stage 2: Production
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 
 # Set Node environment to production
