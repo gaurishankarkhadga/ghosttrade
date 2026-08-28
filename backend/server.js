@@ -729,101 +729,108 @@ fastify.post('/api/paddle/webhook', async (request, reply) => {
 // =====================================================
 
 fastify.register(async function chatRoutes(fastify) {
-  fastify.get('/api/chat/stream', { websocket: true }, (socket, req) => {
-    // === SECURITY: Origin Validation ===
-    if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
-      socket.close(1008, 'Origin not allowed');
-      return;
-    }
-
-    // === SECURITY: Per-connection rate limiter ===
-    const checkRate = wsRateLimiter(socket);
-
-    console.log('[CHAT WS] Client connected to /api/chat/stream');
-
-    socket.on('message', async (rawMessage) => {
-      // Rate limit check
-      if (!checkRate()) return;
-
-      try {
-        let message;
-        try {
-          message = JSON.parse(rawMessage.toString());
-        } catch (parseErr) {
-          socket.send(JSON.stringify({ status: 'error', message: 'Invalid message format.' }));
-          return;
-        }
-
-        // === SECURITY: Message type whitelist ===
-        if (message.type !== 'START_ANALYSIS') {
-          socket.send(JSON.stringify({ status: 'error', message: 'Unknown message type.' }));
-          return;
-        }
-
-        // 1. Verify Authentication
-        const token = req.query.token;
-        if (!token) {
-          socket.send(JSON.stringify({ status: 'error', message: 'Unauthorized. Please login.' }));
-          return socket.close(1008, 'Unauthorized');
-        }
-
-        let decoded;
-        try {
-          decoded = jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
-        } catch (err) {
-          socket.send(JSON.stringify({ status: 'error', message: 'Session expired. Please login again.' }));
-          return socket.close(1008, 'Session Expired');
-        }
-
-        // 2. Check Trial Limits
-        const db = await getDb();
-        const user = await db.collection('users').findOne({ email: decoded.email });
-        
-        if (!user) {
-          socket.send(JSON.stringify({ status: 'error', message: 'User not found.' }));
-          return socket.close(1008, 'User Not Found');
-        }
-
-        const role = user.role || 'trader';
-        const promptsUsed = user.promptsUsed || 0;
-
-        if (role === 'trader' && promptsUsed >= 3) {
-          socket.send(JSON.stringify({ 
-            status: 'error', 
-            message: 'FREE_TRIAL_EXCEEDED' 
-          }));
-          return; // Don't close socket immediately, let frontend handle the message
-        }
-
-        // 3. Increment Prompt Count
-        await db.collection('users').updateOne(
-          { email: decoded.email },
-          { $inc: { promptsUsed: 1 } }
-        );
-
-        // 4. Run Analysis (sanitize prompt input)
-        const sanitizedPrompt = sanitizeString(message.prompt || '', 5000);
-        await handleGeminiConnection(socket, {
-          prompt: sanitizedPrompt || '',
-          imageBase64: message.image || null,
-          language: sanitizeString(message.language, 30) || 'English',
-          isSimpleMode: !!message.isSimpleMode,
-          promptsUsed: promptsUsed
-        });
-      } catch (err) {
-        console.error('[CHAT WS] Processing error:', err.message);
-        try {
-          socket.send(JSON.stringify({
-            status: 'error',
-            message: 'Analysis engine encountered an error. Please try again.'
-          }));
-        } catch (_) { /* socket may be closed */ }
+  fastify.route({
+    method: ['GET', 'HEAD'],
+    url: '/api/chat/stream',
+    handler: (req, reply) => {
+      reply.send({ status: 'ok', service: 'GhostTrade Chat WS' });
+    },
+    wsHandler: (socket, req) => {
+      // === SECURITY: Origin Validation ===
+      if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
+        socket.close(1008, 'Origin not allowed');
+        return;
       }
-    });
 
-    socket.on('close', () => {
-      console.log('[CHAT WS] Client disconnected from /api/chat/stream');
-    });
+      // === SECURITY: Per-connection rate limiter ===
+      const checkRate = wsRateLimiter(socket);
+
+      console.log('[CHAT WS] Client connected to /api/chat/stream');
+
+      socket.on('message', async (rawMessage) => {
+        // Rate limit check
+        if (!checkRate()) return;
+
+        try {
+          let message;
+          try {
+            message = JSON.parse(rawMessage.toString());
+          } catch (parseErr) {
+            socket.send(JSON.stringify({ status: 'error', message: 'Invalid message format.' }));
+            return;
+          }
+
+          // === SECURITY: Message type whitelist ===
+          if (message.type !== 'START_ANALYSIS') {
+            socket.send(JSON.stringify({ status: 'error', message: 'Unknown message type.' }));
+            return;
+          }
+
+          // 1. Verify Authentication
+          const token = req.query?.token;
+          if (!token) {
+            socket.send(JSON.stringify({ status: 'error', message: 'Unauthorized. Please login.' }));
+            return socket.close(1008, 'Unauthorized');
+          }
+
+          let decoded;
+          try {
+            decoded = jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
+          } catch (err) {
+            socket.send(JSON.stringify({ status: 'error', message: 'Session expired. Please login again.' }));
+            return socket.close(1008, 'Session Expired');
+          }
+
+          // 2. Check Trial Limits
+          const db = await getDb();
+          const user = await db.collection('users').findOne({ email: decoded.email });
+          
+          if (!user) {
+            socket.send(JSON.stringify({ status: 'error', message: 'User not found.' }));
+            return socket.close(1008, 'User Not Found');
+          }
+
+          const role = user.role || 'trader';
+          const promptsUsed = user.promptsUsed || 0;
+
+          if (role === 'trader' && promptsUsed >= 3) {
+            socket.send(JSON.stringify({ 
+              status: 'error', 
+              message: 'FREE_TRIAL_EXCEEDED' 
+            }));
+            return; // Don't close socket immediately, let frontend handle the message
+          }
+
+          // 3. Increment Prompt Count
+          await db.collection('users').updateOne(
+            { email: decoded.email },
+            { $inc: { promptsUsed: 1 } }
+          );
+
+          // 4. Run Analysis (sanitize prompt input)
+          const sanitizedPrompt = sanitizeString(message.prompt || '', 5000);
+          await handleGeminiConnection(socket, {
+            prompt: sanitizedPrompt || '',
+            imageBase64: message.image || null,
+            language: sanitizeString(message.language, 30) || 'English',
+            isSimpleMode: !!message.isSimpleMode,
+            promptsUsed: promptsUsed
+          });
+        } catch (err) {
+          console.error('[CHAT WS] Processing error:', err.message);
+          try {
+            socket.send(JSON.stringify({
+              status: 'error',
+              message: 'Analysis engine encountered an error. Please try again.'
+            }));
+          } catch (_) { /* socket may be closed */ }
+        }
+      });
+
+      socket.on('close', () => {
+        console.log('[CHAT WS] Client disconnected from /api/chat/stream');
+      });
+    }
   });
 });
 
@@ -845,34 +852,42 @@ workerEvents.on('GHOST_BRAIN_UPDATE', broadcast);
 
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
-  fastify.get('/', { websocket: true }, (socket, req) => {
-    // === SECURITY: Origin Validation ===
-    if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
-      socket.close(1008, 'Origin not allowed');
-      return;
+  fastify.route({
+    method: ['GET', 'HEAD'],
+    url: '/',
+    handler: (req, reply) => {
+      // Health check for Render / AWS
+      reply.send({ status: 'ok', service: 'GhostTrade Backend API' });
+    },
+    wsHandler: (socket, req) => {
+      // === SECURITY: Origin Validation ===
+      if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
+        socket.close(1008, 'Origin not allowed');
+        return;
+      }
+
+      const token = req.query?.token;
+      try {
+        jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
+      } catch (e) {
+        socket.close(1008, 'Unauthorized');
+        return;
+      }
+
+      connectedClients.add(socket);
+      console.log(`[WS] Client Connected. Total viewers: ${connectedClients.size}`);
+
+      // Register client for regime invalidation alerts
+      registerClient(socket);
+
+      // Start the engine if it's the first client
+      startScannerWorker();
+
+      socket.on('close', () => {
+        connectedClients.delete(socket);
+        console.log(`[WS] Client Disconnected. Total viewers: ${connectedClients.size}`);
+      });
     }
-
-    const token = req.query.token;
-    try {
-      jwt.verify(token, JWT_SECRET, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE });
-    } catch (e) {
-      socket.close(1008, 'Unauthorized');
-      return;
-    }
-
-    connectedClients.add(socket);
-    console.log(`[WS] Client Connected. Total viewers: ${connectedClients.size}`);
-
-    // Register client for regime invalidation alerts
-    registerClient(socket);
-
-    // Start the engine if it's the first client
-    startScannerWorker();
-
-    socket.on('close', () => {
-      connectedClients.delete(socket);
-      console.log(`[WS] Client Disconnected. Total viewers: ${connectedClients.size}`);
-    });
   });
 });
 
