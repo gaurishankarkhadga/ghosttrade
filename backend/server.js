@@ -729,8 +729,11 @@ fastify.post('/api/paddle/webhook', async (request, reply) => {
 // =====================================================
 
 fastify.register(async function chatRoutes(fastify) {
+  // Add a dedicated HEAD route to instantly answer Render's health checks
+  fastify.head('/api/chat/stream', (req, reply) => reply.send({ status: 'ok', service: 'GhostTrade Chat WS' }));
+  
   fastify.route({
-    method: ['GET', 'HEAD'],
+    method: 'GET', // MUST strictly be a string 'GET' for websockets, not an array
     url: '/api/chat/stream',
     handler: (req, reply) => {
       reply.send({ status: 'ok', service: 'GhostTrade Chat WS' });
@@ -852,8 +855,11 @@ workerEvents.on('GHOST_BRAIN_UPDATE', broadcast);
 
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
+  // Add a dedicated HEAD route to instantly answer Render's health checks
+  fastify.head('/', (req, reply) => reply.send({ status: 'ok', service: 'GhostTrade Backend API' }));
+
   fastify.route({
-    method: ['GET', 'HEAD'],
+    method: 'GET', // MUST strictly be a string 'GET' for websockets, not an array
     url: '/',
     handler: (req, reply) => {
       // Health check for Render / AWS

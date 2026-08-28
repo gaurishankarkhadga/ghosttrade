@@ -7,7 +7,7 @@ RUN apk add --no-cache python3 make g++
 
 COPY package*.json ./
 # Clean install to ensure reproducible builds
-RUN npm ci
+RUN npm install
 
 COPY . .
 
