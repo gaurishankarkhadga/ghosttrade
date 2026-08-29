@@ -1,78 +1,169 @@
 // =====================================================
-// GLOBAL ANALYSIS CACHE — "1 = ALL" Architecture
+// GLOBAL ANALYSIS CACHE — "1 = ALL" Architecture (Hybrid)
 // Single source of truth for pre-computed asset analysis.
-// The scanner worker computes enriched signals for ALL
-// assets continuously. This cache stores the latest results
-// so ANY trader gets instant data — zero per-user recalculation.
+// Supports massive scaling via Upstash Redis REST API.
+// Falls back to local memory if Upstash is not configured.
 // =====================================================
 
-const globalCache = {};
-let lastUpdateTimestamp = null;
-let scanCycleCount = 0;
+import { Redis } from '@upstash/redis';
+import 'dotenv/config';
+
+// 1. Initialize Upstash Redis if configured
+let redis = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  try {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    console.log('[GLOBAL CACHE] Upstash Redis connected for massive scaling.');
+  } catch (err) {
+    console.error('[GLOBAL CACHE] Upstash init failed, falling back to local RAM:', err.message);
+  }
+} else {
+  console.log('[GLOBAL CACHE] No Upstash config found. Using local RAM fallback.');
+}
+
+// 2. Local Fallback State
+const localCache = {};
+let localLastUpdateTimestamp = null;
+let localScanCycleCount = 0;
 
 /**
  * Updates the global cache with enriched scan results.
- * Called by the server when the scanner worker broadcasts GHOST_BRAIN_UPDATE.
- * @param {Array} enrichedResults - Array of enriched asset objects from scanner
+ * @param {Array} enrichedResults - Array of enriched asset objects
  */
-export function updateGlobalCache(enrichedResults) {
+export async function updateGlobalCache(enrichedResults) {
   if (!Array.isArray(enrichedResults)) return;
 
+  const totalAssets = enrichedResults.length;
+  let withSignals = 0;
+  
+  if (redis) {
+    try {
+      // Create an object for HSET (key: asset.ticker, value: JSON string)
+      const pipeline = redis.pipeline();
+      const assetsData = {};
+      for (const asset of enrichedResults) {
+        if (!asset || !asset.ticker) continue;
+        const assetObj = { ...asset, cachedAt: Date.now() };
+        if (assetObj.signalData && assetObj.signalData.action !== 'NO_SIGNAL') withSignals++;
+        assetsData[assetObj.ticker] = JSON.stringify(assetObj);
+      }
+      
+      // Store all assets in a single hash called "ghosttrade:assets"
+      pipeline.hset('ghosttrade:assets', assetsData);
+      // Store metadata
+      pipeline.set('ghosttrade:metadata:lastUpdate', Date.now());
+      pipeline.incr('ghosttrade:metadata:scanCycleCount');
+      
+      await pipeline.exec();
+      console.log(`[UPSTASH CACHE] Updated: ${totalAssets} assets | ${withSignals} with signals`);
+      return;
+    } catch (e) {
+      console.error('[UPSTASH CACHE] Write failed, falling back to local memory:', e.message);
+    }
+  }
+
+  // Local RAM Fallback
   for (const asset of enrichedResults) {
     if (!asset || !asset.ticker) continue;
-    globalCache[asset.ticker] = {
-      ...asset,
-      cachedAt: Date.now()
-    };
+    const assetObj = { ...asset, cachedAt: Date.now() };
+    if (assetObj.signalData && assetObj.signalData.action !== 'NO_SIGNAL') withSignals++;
+    localCache[assetObj.ticker] = assetObj;
   }
-  lastUpdateTimestamp = Date.now();
-  scanCycleCount++;
-  
-  const totalAssets = Object.keys(globalCache).length;
-  const withSignals = Object.values(globalCache).filter(a => a.signalData && a.signalData.action !== 'NO_SIGNAL').length;
-  console.log(`[GLOBAL CACHE] Updated: ${totalAssets} assets cached | ${withSignals} with signals | Cycle #${scanCycleCount}`);
+  localLastUpdateTimestamp = Date.now();
+  localScanCycleCount++;
+  console.log(`[LOCAL CACHE] Updated: ${totalAssets} assets | ${withSignals} with signals | Cycle #${localScanCycleCount}`);
 }
 
 /**
  * Returns the pre-computed analysis for a specific ticker.
  * @param {string} ticker - Asset ticker (e.g., 'BTC-USD')
- * @returns {Object|null} Full enriched asset data or null if not cached
+ * @returns {Object|null} Full enriched asset data or null
  */
-export function getGlobalAssetAnalysis(ticker) {
+export async function getGlobalAssetAnalysis(ticker) {
   if (!ticker) return null;
-  
-  // Try exact match first
-  if (globalCache[ticker]) return globalCache[ticker];
-  
-  // Try common suffix variations (user might type BTC, cache has BTC-USD)
-  const cryptoKey = `${ticker}-USD`;
-  if (globalCache[cryptoKey]) return globalCache[cryptoKey];
-  
-  const nseKey = `${ticker}.NS`;
-  if (globalCache[nseKey]) return globalCache[nseKey];
-  
+  const keysToTry = [ticker, `${ticker}-USD`, `${ticker}.NS`];
+
+  if (redis) {
+    try {
+      // HGET returns the parsed JSON object automatically with @upstash/redis
+      for (const key of keysToTry) {
+        const data = await redis.hget('ghosttrade:assets', key);
+        if (data) return typeof data === 'string' ? JSON.parse(data) : data;
+      }
+      return null;
+    } catch (e) {
+      console.error('[UPSTASH CACHE] Read failed:', e.message);
+    }
+  }
+
+  // Local RAM Fallback
+  for (const key of keysToTry) {
+    if (localCache[key]) return localCache[key];
+  }
   return null;
 }
 
 /**
- * Returns ALL cached assets as an array (for broadcasting to new clients).
+ * Returns ALL cached assets as an array (for broadcasting).
  * @returns {Array} Array of all cached asset objects
  */
-export function getAllCachedAssets() {
-  return Object.values(globalCache);
+export async function getAllCachedAssets() {
+  if (redis) {
+    try {
+      // HGETALL returns an object like { "BTC-USD": {...}, "ETH-USD": {...} }
+      const allData = await redis.hgetall('ghosttrade:assets');
+      if (allData) {
+        return Object.values(allData).map(val => typeof val === 'string' ? JSON.parse(val) : val);
+      }
+      return [];
+    } catch (e) {
+      console.error('[UPSTASH CACHE] GetAll failed:', e.message);
+    }
+  }
+  
+  // Local RAM Fallback
+  return Object.values(localCache);
 }
 
 /**
  * Returns cache freshness info.
  * @returns {Object} { ageMs, scanCycleCount, totalAssets }
  */
-export function getCacheInfo() {
+export async function getCacheInfo() {
+  if (redis) {
+    try {
+      const pipeline = redis.pipeline();
+      pipeline.get('ghosttrade:metadata:lastUpdate');
+      pipeline.get('ghosttrade:metadata:scanCycleCount');
+      pipeline.hlen('ghosttrade:assets');
+      const results = await pipeline.exec();
+      
+      const lastUpdate = results[0] ? Number(results[0]) : null;
+      const count = results[1] ? Number(results[1]) : 0;
+      const length = results[2] ? Number(results[2]) : 0;
+      
+      return {
+        ageMs: lastUpdate ? Date.now() - lastUpdate : null,
+        lastUpdateTimestamp: lastUpdate,
+        scanCycleCount: count,
+        totalAssets: length,
+        isStale: lastUpdate ? (Date.now() - lastUpdate) > 120000 : true
+      };
+    } catch (e) {
+      console.error('[UPSTASH CACHE] Info failed:', e.message);
+    }
+  }
+
+  // Local RAM Fallback
   return {
-    ageMs: lastUpdateTimestamp ? Date.now() - lastUpdateTimestamp : null,
-    lastUpdateTimestamp,
-    scanCycleCount,
-    totalAssets: Object.keys(globalCache).length,
-    isStale: lastUpdateTimestamp ? (Date.now() - lastUpdateTimestamp) > 120000 : true // Stale if > 2 minutes
+    ageMs: localLastUpdateTimestamp ? Date.now() - localLastUpdateTimestamp : null,
+    lastUpdateTimestamp: localLastUpdateTimestamp,
+    scanCycleCount: localScanCycleCount,
+    totalAssets: Object.keys(localCache).length,
+    isStale: localLastUpdateTimestamp ? (Date.now() - localLastUpdateTimestamp) > 120000 : true
   };
 }
 

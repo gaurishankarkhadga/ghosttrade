@@ -15,6 +15,7 @@
     "@fastify/websocket": "^11.3.0",
     "@google/generative-ai": "^0.24.1",
     "@paddle/paddle-node-sdk": "^3.8.0",
+    "@upstash/redis": "^1.38.3",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

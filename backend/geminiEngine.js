@@ -188,7 +188,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     );
     
     if (isSimpleLookup) {
-      const cachedAsset = getGlobalAssetAnalysis(extractedTicker);
+      const cachedAsset = await getGlobalAssetAnalysis(extractedTicker);
       
       if (cachedAsset && cachedAsset.signalData) {
         console.log(`[GLOBAL CACHE HIT] ${extractedTicker} — serving pre-computed analysis (0ms recalculation)`);
@@ -228,7 +228,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INSTANT ${market.toUpperCase()} DEEP SCAN** _(from Global Cache)_\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
 
     // Read from global cache instead of running a fresh scan
-    const allCached = getAllCachedAssets();
+    const allCached = await getAllCachedAssets();
     let relevantAssets = allCached;
     
     // Filter by market if not Global
@@ -280,7 +280,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
         report += `\n`;
       });
 
-      const cacheInfo = getCacheInfo();
+      const cacheInfo = await getCacheInfo();
       report += `_Data freshness: ${cacheInfo.ageMs ? Math.round(cacheInfo.ageMs / 1000) : '?'}s ago | Scan cycle #${cacheInfo.scanCycleCount}_\n`;
 
       const parts = report.split('\n');

@@ -642,8 +642,8 @@ fastify.get('/api/markets', async (request, reply) => {
 // =====================================================
 
 fastify.get('/api/assets', async (request, reply) => {
-  const cached = getAllCachedAssets();
-  const cacheInfo = getCacheInfo();
+  const cached = await getAllCachedAssets();
+  const cacheInfo = await getCacheInfo();
   return reply.send({
     assets: cached,
     cacheInfo
@@ -651,12 +651,12 @@ fastify.get('/api/assets', async (request, reply) => {
 });
 
 fastify.get('/api/assets/cache/info', async (request, reply) => {
-  return reply.send(getCacheInfo());
+  return reply.send(await getCacheInfo());
 });
 
 fastify.get('/api/assets/:ticker', async (request, reply) => {
   const { ticker } = request.params;
-  const asset = getGlobalAssetAnalysis(ticker?.toUpperCase());
+  const asset = await getGlobalAssetAnalysis(ticker?.toUpperCase());
   if (!asset) {
     return reply.code(404).send({ 
       error: 'Asset not in global cache yet.',
@@ -878,9 +878,9 @@ fastify.register(async function chatRoutes(fastify) {
 // GHOST BRAIN WEBSOCKET — Scanner Broadcast
 // =====================================================
 
-function broadcast(payload) {
+async function broadcast(payload) {
   // === "1 = ALL" Architecture: Update global cache with enriched scanner results ===
-  updateGlobalCache(payload);
+  await updateGlobalCache(payload);
   
   const message = JSON.stringify({ type: 'GHOST_BRAIN_UPDATE', payload });
   for (const client of connectedClients) {
@@ -905,7 +905,7 @@ fastify.register(async function brainRoutes(fastify) {
       // Health check for Render / AWS
       reply.send({ status: 'ok', service: 'GhostTrade Backend API' });
     },
-    wsHandler: (socket, req) => {
+    wsHandler: async (socket, req) => {
       // === SECURITY: Origin Validation ===
       if (!validateWsOrigin(req, ALLOWED_ORIGINS)) {
         socket.close(1008, 'Origin not allowed');
@@ -928,7 +928,7 @@ fastify.register(async function brainRoutes(fastify) {
 
       // === "1 = ALL": Immediately send cached global state to new client ===
       // So the trader sees all asset data instantly without waiting for the next scan cycle
-      const cachedAssets = getAllCachedAssets();
+      const cachedAssets = await getAllCachedAssets();
       if (cachedAssets.length > 0) {
         try {
           socket.send(JSON.stringify({ type: 'GHOST_BRAIN_UPDATE', payload: cachedAssets }));
