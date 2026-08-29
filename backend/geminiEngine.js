@@ -41,10 +41,18 @@ const SIGNAL_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 const lastSignalTime = new Map();
 
 const MODELS = [
-  'models/gemini-2.5-pro',
-  'models/gemini-2.5-flash',
-  'models/gemini-2.0-flash'
+  'models/gemini-3.7-flash',
+  'models/gemini-3.6-flash',
+  'models/gemini-3.5-flash',
+  'models/gemini-3.1-pro-preview',
+  'models/gemini-flash-latest',
+  'models/gemini-pro-latest'
 ];
+
+function getApiKeys() {
+  const rawKeys = process.env.GEMINI_API_KEY || '';
+  return rawKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
+}
 
 const SYSTEM_PROMPT = `You are a quantitative institutional-grade analytical engine. Your output MUST be extremely concise, clean, and sharp. No fluff, no paragraphs, no emojis. 
 
@@ -107,27 +115,45 @@ const USER_PROMPT = `Analyze this chart and output the strict summary format exa
 /**
  * Fast Phase 3 pass to extract ticker from image before main stream.
  */
-async function extractTickerFromImage(base64Image, apiKey, model = MODELS[1]) { // Defaulting to the flash model from array
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: "Extract the primary financial asset ticker symbol (e.g., BTC, AAPL, EURUSD) from this chart. Reply with ONLY the ticker string. If none is found, reply UNKNOWN." },
-            { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
-          ]
-        }]
-      })
-    });
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'UNKNOWN';
-    return text.replace(/[^A-Z0-9-]/g, '').substring(0, 10) || 'UNKNOWN';
-  } catch (e) {
-    console.warn('[GEMINI] Ticker extraction failed:', e.message);
+async function extractTickerFromImage(base64Image) {
+  const apiKeys = getApiKeys();
+  if (apiKeys.length === 0) {
+    console.warn('[GEMINI] No API keys found for ticker extraction.');
     return 'UNKNOWN';
   }
+
+  for (const apiKey of apiKeys) {
+    for (const model of MODELS) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: "Extract the primary financial asset ticker symbol (e.g., BTC, AAPL, EURUSD) from this chart. Reply with ONLY the ticker string. If none is found, reply UNKNOWN." },
+                { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+              ]
+            }]
+          })
+        });
+        
+        if (!response.ok) {
+           console.warn(`[GEMINI Ticker Extraction] ${model} failed with ${response.status}. Switching...`);
+           continue; // Try next model/key
+        }
+
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'UNKNOWN';
+        return text.replace(/[^A-Z0-9-]/g, '').substring(0, 10) || 'UNKNOWN';
+      } catch (e) {
+        console.warn(`[GEMINI Ticker Extraction] Failed on ${model}: ${e.message.split('\n')[0]}. Switching...`);
+      }
+    }
+  }
+  
+  console.warn('[GEMINI] Ticker extraction failed on ALL keys and models.');
+  return 'UNKNOWN';
 }
 
 /**
@@ -305,17 +331,18 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     imageBase64 = imageBase64.split(',')[1];
   }
   const isImageMode = !!imageBase64;
-  const API_KEY = process.env.GEMINI_API_KEY;
+  const API_KEYS = getApiKeys();
 
-  if (!API_KEY) {
-    clientWs.send(JSON.stringify({ status: 'error', message: 'The system cannot connect because the AI API key is missing. Please check the backend configuration.', rawError: 'Missing GEMINI_API_KEY in environment variables' }));
+  if (API_KEYS.length === 0) {
+    clientWs.send(JSON.stringify({ status: 'error', message: 'The system cannot connect because all AI API keys are missing. Please check the backend configuration.', rawError: 'Missing GEMINI_API_KEY in environment variables' }));
     return;
   }
 
   // === Phase 3: Pre-Stream Analysis (Extract Ticker -> Fetch OHLCV -> Hurst -> Regime) ===
   let ticker;
   if (isImageMode) {
-    ticker = await extractTickerFromImage(imageBase64, API_KEY);
+    // extractTickerFromImage now handles its own keys
+    ticker = await extractTickerFromImage(imageBase64);
   } else {
     ticker = extractTickerFromText(prompt);
   }
@@ -490,7 +517,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // Stream via REST SSE with Phase 3 integration
-  await streamViaRestSSE(clientWs, API_KEY, finalSystemPrompt, {
+  await streamViaRestSSE(clientWs, API_KEYS, finalSystemPrompt, {
     ticker,
     hurstData,
     regimeData,
@@ -774,7 +801,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
 /**
  * Fallback: REST SSE streaming with Phase 3 integration
  */
-async function streamViaRestSSE(clientWs, apiKey, systemPrompt, p3Context = {}) {
+async function streamViaRestSSE(clientWs, apiKeys, systemPrompt, p3Context = {}) {
   const { isImageMode, imageBase64, userPrompt } = p3Context;
 
   // Build content parts based on analysis mode
@@ -805,32 +832,56 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
   let rawFullText = '';
   try {
     let success = false;
-    for (const model of MODELS) {
-      console.log(`[GEMINI] Attempting REST SSE with ${model}...`);
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${apiKey}&alt=sse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    let streamReader = null;
+    let successfulModel = null;
 
-      if (!response.ok) {
-        console.warn(`[GEMINI] ${model} failed with status: ${response.status}`);
-        continue;
+    // OUTER LOOP: Iterate over all available API keys
+    keyLoop: for (const apiKey of apiKeys) {
+      const maskedKey = apiKey.substring(0, 6) + '...';
+      
+      // INNER LOOP: Iterate over all models for the current key
+      for (const model of MODELS) {
+        console.log(`[GEMINI] Attempting REST SSE with ${model} on Key ${maskedKey}`);
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${apiKey}&alt=sse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            console.warn(`[GEMINI] ${model} failed with status: ${response.status}. Switching...`);
+            continue; // Move to next model
+          }
+
+          console.log(`[GEMINI] Connected successfully to ${model} via Key ${maskedKey}`);
+          success = true;
+          successfulModel = model;
+          streamReader = response.body.getReader();
+          break keyLoop; // Break out of ALL loops, we have a successful connection
+        } catch (err) {
+          console.warn(`[GEMINI] Network error on ${model}: ${err.message}. Switching...`);
+          continue;
+        }
       }
+    }
 
-      console.log(`[GEMINI] Connected successfully to ${model}`);
-      success = true;
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
+    if (!success || !streamReader) {
+      console.error('[GEMINI] ALL Keys and ALL Models failed (Rate Limit or Outage).');
+      clientWs.send(JSON.stringify({ status: 'error', message: 'All AI models are currently overwhelmed or rate-limited. Please wait a few seconds and try again.', rawError: 'Total cascade failure' }));
+      return;
+    }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // Keep incomplete line in buffer
+    while (true) {
+      const { done, value } = await streamReader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line in buffer
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -874,13 +925,7 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
         console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
       }
       clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
-      break; // Exit loop on success
-    }
 
-    if (!success) {
-      console.error('[GEMINI] All models exhausted and failed.');
-      clientWs.send(JSON.stringify({ status: 'error', message: 'Gemini API rate limit occurred. Too many people are using the AI right now. Please wait a minute and try again.', rawError: '429 Too Many Requests on all fallback models' }));
-    }
   } catch (error) {
     console.error('[REST-SSE] Stream connection error:', error);
     clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the AI. Retrying...', rawError: error.message }));
