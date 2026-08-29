@@ -18,6 +18,7 @@ import { detectPatterns } from './patternEngine.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST } from './sharedConfig.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
 import { getDb } from './mongoConfig.js';
+import { generateSignal } from './signalGenerator.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -30,7 +31,9 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     const dataResult = await fetchMultiTimeframeOHLCV(ticker, 300);
     if (dataResult.error || !dataResult.timeframes) return { ticker, status: 'error', reason: 'TF Fetch Failed' };
 
-    const { tf15m, tf1d } = { tf15m: dataResult.timeframes['15m'], tf1d: dataResult.timeframes['1d'] };
+    const tf15m = dataResult.timeframes['15m'];
+    const tf1h = dataResult.timeframes['1h'];
+    const tf1d = dataResult.timeframes['1d'];
     const hurst15m = calculateHurst(getLogReturns(tf15m));
     const hurst1d = calculateHurst(getLogReturns(tf1d));
     const regime15m = classifyRegime(hurst15m);
@@ -122,6 +125,42 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
 
     const validUntil = new Date(Date.now() + 15 * 60000).toISOString();
 
+    // ═══════════════════════════════════════════════════════
+    // [GLOBAL ANALYSIS] Run full generateSignal() using already-fetched data.
+    // This pre-computes the complete signal + trade card for ALL traders.
+    // No per-user recalculation needed — "1 = ALL" architecture.
+    // ═══════════════════════════════════════════════════════
+    let signalData = null;
+    let tradeCard = null;
+    try {
+      const ofiSource = (flowData && flowData.available) ? 'BINANCE_AGGTRADE' : 'CANDLE_APPROXIMATION';
+      signalData = await generateSignal(ticker, tf1d, {
+        candles15m: tf15m,
+        candles1h: tf1h,
+        ofiSource,
+        livePrice: price
+      });
+
+      // Build trade card if signal is actionable
+      if (signalData && signalData.action === 'TRADE') {
+        tradeCard = {
+          asset: ticker,
+          side: signalData.tradeSide,
+          entryPrice: signalData.currentPrice,
+          stopLoss: signalData.stopLoss,
+          takeProfit: signalData.takeProfit,
+          kellySize: signalData.kelly?.halfKelly || 0,
+          pattern: signalData.pattern || signalData.setupId || 'ENGINE_DETECTED',
+          regime: regime1d.regime,
+          source: 'GLOBAL_SCANNER',
+          buyerPercent: signalData.buyerPercent || 50,
+          hurstScore: hurst1d?.meanH ? Number(hurst1d.meanH.toFixed(2)) : 0.50
+        };
+      }
+    } catch (sigErr) {
+      console.warn(`[SCANNER] generateSignal failed for ${ticker}: ${sigErr.message}`);
+    }
+
     return {
       ticker,
       status: 'success',
@@ -136,7 +175,10 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
       validUntil,
       stopLoss: sl,
       takeProfit: tp,
-      kellyReason: dbKellyResult.reason
+      kellyReason: dbKellyResult.reason,
+      // === Global Analysis Enrichment ("1 = ALL") ===
+      signalData: signalData || null,
+      tradeCard: tradeCard || null
     };
   } catch (err) {
     return { ticker, status: 'error', reason: err.message };

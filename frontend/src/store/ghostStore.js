@@ -302,10 +302,13 @@ const useGhostStore = create(
           try {
             const data = JSON.parse(event.data);
             if (data.type === 'GHOST_BRAIN_UPDATE') {
-              // data.payload is array of perfectly filtered asset results from the Phase 4 bulk scan
+              // data.payload is array of enriched asset results from the Global Scanner
+              // Each asset now includes signalData and tradeCard (pre-computed for all traders)
               const newAssets = {};
+              let withSignals = 0;
               data.payload.forEach(asset => {
                  newAssets[asset.ticker] = asset;
+                 if (asset.signalData && asset.signalData.action !== 'NO_SIGNAL') withSignals++;
               });
               
               set((state) => {
@@ -313,6 +316,8 @@ const useGhostStore = create(
                   assets: { ...state.assets, ...newAssets }
                 };
               });
+              
+              console.log(`[GHOST BRAIN] Global cache update: ${Object.keys(newAssets).length} assets | ${withSignals} with signals`);
             }
           } catch (e) {
             console.error('WS Parse Error', e);

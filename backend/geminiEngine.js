@@ -31,6 +31,7 @@ import { generateTradeLesson } from './educationalMentorEngine.js';
 import { getWatchlistForRegions, listAvailableRegions } from './globalWatchlists.js';
 import { generateSignal } from './signalGenerator.js';
 import { runBulkScanPhase4 } from './scannerEngine.js';
+import { getGlobalAssetAnalysis, getAllCachedAssets, formatCachedAnalysisAsChat, getCacheInfo } from './globalAnalysisCache.js';
 
 // =====================================================
 // SIGNAL COOLDOWN — Prevents duplicate signal spam
@@ -167,52 +168,136 @@ function extractTickerFromText(promptText) {
 export async function handleGeminiConnection(clientWs, options = {}) {
   const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0 } = options;
 
-  // === PHASE 4: DEEP SCAN INTERCEPTOR ===
+  // === "1 = ALL" GLOBAL CACHE INTERCEPTOR ===
+  // If the prompt is just a ticker name (not a custom question, not an image),
+  // serve the pre-computed global analysis instantly from cache.
+  // This is the core of the "1 = ALL" architecture — zero per-user recalculation.
+  const imageBase64Raw = options.imageBase64 || null;
+  const isImageRequest = !!imageBase64Raw;
+  
+  if (!isImageRequest && !prompt.includes('Execute Deep Scan')) {
+    // Extract ticker from the prompt text
+    const cleanPrompt = prompt.replace(/\[Context: Market Region = [^\]]+\]\n?/, '').trim();
+    const extractedTicker = extractTickerFromText(cleanPrompt);
+    
+    // Check if this is a simple ticker lookup (not a complex question)
+    // A simple lookup is when the user prompt IS essentially just a ticker name
+    const isSimpleLookup = extractedTicker !== 'UNKNOWN' && (
+      cleanPrompt.length <= 15 || // Short prompt = likely just a ticker
+      cleanPrompt.toUpperCase().replace(/[^A-Z0-9]/g, '') === extractedTicker.replace(/[^A-Z0-9]/g, '') // Prompt IS the ticker
+    );
+    
+    if (isSimpleLookup) {
+      const cachedAsset = getGlobalAssetAnalysis(extractedTicker);
+      
+      if (cachedAsset && cachedAsset.signalData) {
+        console.log(`[GLOBAL CACHE HIT] ${extractedTicker} — serving pre-computed analysis (0ms recalculation)`);
+        
+        // Stream the cached analysis as formatted chat text
+        const analysisText = formatCachedAnalysisAsChat(cachedAsset);
+        const lines = analysisText.split('\n');
+        for (const line of lines) {
+          clientWs.send(JSON.stringify({ status: 'update', text: line + '\n' }));
+          await new Promise(r => setTimeout(r, 30));
+        }
+        
+        // Send trade card if signal is actionable
+        if (cachedAsset.tradeCard && cachedAsset.signalData.action === 'TRADE') {
+          clientWs.send(JSON.stringify({
+            status: 'trade_card',
+            tradeData: {
+              ...cachedAsset.tradeCard,
+              source: 'GLOBAL_CACHE'
+            }
+          }));
+        }
+        
+        clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: cachedAsset.currentPrice || null }));
+        return; // Done — no Gemini API call, no data fetching, no CPU work
+      }
+      // If no cache hit, fall through to the full pipeline (first-time analysis)
+      console.log(`[GLOBAL CACHE MISS] ${extractedTicker} — falling through to full analysis pipeline`);
+    }
+  }
+
+  // === PHASE 4: DEEP SCAN INTERCEPTOR (Now reads from global cache) ===
   if (prompt.includes('Execute Deep Scan')) {
     const marketMatch = prompt.match(/Market Region = ([^\]]+)/);
     const market = marketMatch ? marketMatch[1] : 'Global';
 
-    let tickersToScan = [];
-    if (market === 'Global') {
-      tickersToScan = getWatchlistForRegions(listAvailableRegions());
-    } else {
-      // The frontend sends user-friendly names, map them back to keys if needed, or use them directly if they match
+    clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INSTANT ${market.toUpperCase()} DEEP SCAN** _(from Global Cache)_\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
+
+    // Read from global cache instead of running a fresh scan
+    const allCached = getAllCachedAssets();
+    let relevantAssets = allCached;
+    
+    // Filter by market if not Global
+    if (market !== 'Global') {
       const key = market.toUpperCase().replace(/\s+/g, '');
-      tickersToScan = getWatchlistForRegions([key]);
+      const tickersForMarket = getWatchlistForRegions([key]);
+      const tickerSet = new Set(tickersForMarket);
+      relevantAssets = allCached.filter(a => tickerSet.has(a.ticker));
     }
 
-    clientWs.send(JSON.stringify({ status: 'update', text: `\n\n **INITIATING ${market.toUpperCase()} DEEP SCAN...**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` }));
-
-    try {
-      const results = await runBulkScanPhase4(tickersToScan);
-      const topSetups = results.filter(r => r.status === 'success' && r.score >= 50).slice(0, 3);
-
-      if (topSetups.length === 0) {
-        clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
-      } else {
-        let report = `**SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        topSetups.forEach((s, idx) => {
-          report += `**#${idx + 1}. ${s.ticker}** (Score: ${s.score}/100)\n`;
-          report += `• **Setup:** ${s.setup_id}\n`;
-          report += `• **Regime:** ${s.macroRegime} (Macro) | ${s.microRegime} (Micro)\n`;
-          report += `• **Entry:** $${s.currentPrice.toFixed(4)}\n`;
-          if (s.takeProfit) report += `• **Take Profit 1:** $${s.takeProfit.toFixed(4)}\n`;
-          if (s.stopLoss) report += `• **Stop Loss:** $${s.stopLoss.toFixed(4)}\n\n`;
-        });
-
-        const parts = report.split('\n');
-        for (const p of parts) {
-          clientWs.send(JSON.stringify({ status: 'update', text: p + '\n' }));
-          await new Promise(r => setTimeout(r, 40));
+    if (relevantAssets.length === 0) {
+      // Fallback: if cache is empty (scanner hasn't run yet), run a fresh scan
+      clientWs.send(JSON.stringify({ status: 'update', text: `⏳ Cache warming up... Running fresh scan...\n\n` }));
+      try {
+        let tickersToScan = [];
+        if (market === 'Global') {
+          tickersToScan = getWatchlistForRegions(listAvailableRegions());
+        } else {
+          const key = market.toUpperCase().replace(/\s+/g, '');
+          tickersToScan = getWatchlistForRegions([key]);
         }
+        const results = await runBulkScanPhase4(tickersToScan);
+        relevantAssets = results.filter(r => r.status === 'success');
+      } catch (e) {
+        clientWs.send(JSON.stringify({ status: 'update', text: `❌ Scanner Failed: ${e.message}\n` }));
+        clientWs.send(JSON.stringify({ status: 'complete' }));
+        return;
       }
-    } catch (e) {
-      clientWs.send(JSON.stringify({ status: 'update', text: `❌ Scanner Failed: ${e.message}\n` }));
+    }
+
+    const topSetups = relevantAssets
+      .filter(r => r.status === 'success' && r.score >= 50)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 5);
+
+    if (topSetups.length === 0) {
+      clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
+    } else {
+      let report = `**SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      topSetups.forEach((s, idx) => {
+        const dirIcon = s.signalData?.direction === 'BULLISH' ? '🟢' : s.signalData?.direction === 'BEARISH' ? '🔴' : '⚪';
+        report += `**#${idx + 1}. ${dirIcon} ${s.ticker}** (Score: ${s.score}/100)\n`;
+        report += `• **Setup:** ${s.setup_id || s.signalData?.setupId || 'N/A'}\n`;
+        report += `• **Direction:** ${s.signalData?.direction || 'N/A'} | **Regime:** ${s.macroRegime} (Macro) | ${s.microRegime} (Micro)\n`;
+        report += `• **Entry:** $${s.currentPrice?.toFixed ? s.currentPrice.toFixed(4) : s.currentPrice}\n`;
+        if (s.signalData?.takeProfit || s.takeProfit) report += `• **Take Profit:** $${(s.signalData?.takeProfit || s.takeProfit)?.toFixed ? (s.signalData?.takeProfit || s.takeProfit).toFixed(4) : (s.signalData?.takeProfit || s.takeProfit)}\n`;
+        if (s.signalData?.stopLoss || s.stopLoss) report += `• **Stop Loss:** $${(s.signalData?.stopLoss || s.stopLoss)?.toFixed ? (s.signalData?.stopLoss || s.stopLoss).toFixed(4) : (s.signalData?.stopLoss || s.stopLoss)}\n`;
+        if (s.signalData?.kelly?.halfKelly) report += `• **Kelly Size:** ${(s.signalData.kelly.halfKelly * 100).toFixed(1)}%\n`;
+        report += `\n`;
+      });
+
+      const cacheInfo = getCacheInfo();
+      report += `_Data freshness: ${cacheInfo.ageMs ? Math.round(cacheInfo.ageMs / 1000) : '?'}s ago | Scan cycle #${cacheInfo.scanCycleCount}_\n`;
+
+      const parts = report.split('\n');
+      for (const p of parts) {
+        clientWs.send(JSON.stringify({ status: 'update', text: p + '\n' }));
+        await new Promise(r => setTimeout(r, 40));
+      }
     }
 
     clientWs.send(JSON.stringify({ status: 'complete' }));
     return;
   }
+
+  // === DEEP THINK PIPELINE (User-specific, secure, UNCHANGED) ===
+  // Everything below this line is the original per-user analysis pipeline.
+  // It only runs for custom questions, image uploads, and complex prompts.
+  // This is NOT touched by the "1 = ALL" architecture.
 
   // Strip data URL prefix if present (frontend sends 'data:image/jpeg;base64,...')
   let imageBase64 = options.imageBase64 || null;

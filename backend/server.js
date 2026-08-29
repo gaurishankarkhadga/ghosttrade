@@ -41,6 +41,7 @@ import { getDb } from './mongoConfig.js';
 import { executionManager } from './executionEngine.js';
 import { startScannerWorker, startAuditWorker, runBacktestInWorker, workerEvents } from './workerPool.js';
 import { getSystemPerformance } from './performanceEngine.js';
+import { updateGlobalCache, getGlobalAssetAnalysis, getAllCachedAssets, getCacheInfo } from './globalAnalysisCache.js';
 // === Global System Imports ===
 import { storeBrokerKeys, deleteBrokerKeys, listConnectedBrokers, SUPPORTED_BROKERS } from './brokerKeyManager.js';
 import { MARKET_REGIONS, listAvailableRegions, getTotalAssetCount, getWatchlistForRegions } from './globalWatchlists.js';
@@ -96,6 +97,8 @@ const PUBLIC_ROUTES = [
   '/api/paddle/webhook',
   '/api/chat/stream',
   '/api/broadcast',
+  '/api/assets',
+  '/api/assets/cache/info',
 ];
 
 fastify.addHook('onRequest', async (request, reply) => {
@@ -106,6 +109,9 @@ fastify.addHook('onRequest', async (request, reply) => {
 
   // Skip auth for explicitly public routes
   if (PUBLIC_ROUTES.some(route => url === route)) return;
+
+  // Skip auth for global asset cache lookups (/api/assets/:ticker)
+  if (url.startsWith('/api/assets/')) return;
 
   // ALL other /api/* routes require authentication
   try {
@@ -631,6 +637,37 @@ fastify.get('/api/markets', async (request, reply) => {
 });
 
 // =====================================================
+// GLOBAL ASSET CACHE API — "1 = ALL" Architecture
+// Instant pre-computed signal lookups. No per-user recalculation.
+// =====================================================
+
+fastify.get('/api/assets', async (request, reply) => {
+  const cached = getAllCachedAssets();
+  const cacheInfo = getCacheInfo();
+  return reply.send({
+    assets: cached,
+    cacheInfo
+  });
+});
+
+fastify.get('/api/assets/cache/info', async (request, reply) => {
+  return reply.send(getCacheInfo());
+});
+
+fastify.get('/api/assets/:ticker', async (request, reply) => {
+  const { ticker } = request.params;
+  const asset = getGlobalAssetAnalysis(ticker?.toUpperCase());
+  if (!asset) {
+    return reply.code(404).send({ 
+      error: 'Asset not in global cache yet.',
+      message: 'The scanner has not processed this asset yet. Wait for the next scan cycle (~60s).',
+      ticker 
+    });
+  }
+  return reply.send(asset);
+});
+
+// =====================================================
 // NATIVE BACKTEST ENGINE API (Auth + Rate Limited)
 // =====================================================
 fastify.post('/api/backtest', {
@@ -842,6 +879,9 @@ fastify.register(async function chatRoutes(fastify) {
 // =====================================================
 
 function broadcast(payload) {
+  // === "1 = ALL" Architecture: Update global cache with enriched scanner results ===
+  updateGlobalCache(payload);
+  
   const message = JSON.stringify({ type: 'GHOST_BRAIN_UPDATE', payload });
   for (const client of connectedClients) {
     if (client.readyState === 1) {
@@ -885,6 +925,18 @@ fastify.register(async function brainRoutes(fastify) {
 
       // Register client for regime invalidation alerts
       registerClient(socket);
+
+      // === "1 = ALL": Immediately send cached global state to new client ===
+      // So the trader sees all asset data instantly without waiting for the next scan cycle
+      const cachedAssets = getAllCachedAssets();
+      if (cachedAssets.length > 0) {
+        try {
+          socket.send(JSON.stringify({ type: 'GHOST_BRAIN_UPDATE', payload: cachedAssets }));
+          console.log(`[WS] Sent ${cachedAssets.length} cached assets to new client instantly.`);
+        } catch (e) {
+          // Socket may have closed already, safe to ignore
+        }
+      }
 
       // Start the engine if it's the first client
       startScannerWorker();

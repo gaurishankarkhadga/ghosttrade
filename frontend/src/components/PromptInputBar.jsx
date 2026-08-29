@@ -130,21 +130,53 @@ export default function PromptInputBar({ onSend, disabled }) {
   return (
     <form onSubmit={handleSubmit} className="bolt-prompt-form">
       <div className="bolt-prompt-container">
-        {/* Integrated Quick Action Chips (Prompt-Less Execution) */}
+        {/* Integrated Quick Action Chips — Enriched with Global Signal Data */}
         <div className="quick-action-row-integrated">
           {displayTickers.length > 0 ? (
-            displayTickers.map(ticker => (
-               <button 
-                 key={ticker}
-                 type="button"
-                 className={`quick-action-chip-integrated ${assets[ticker]?.recommendedSize > 0 ? 'winning-chip' : assets[ticker]?.status === 'error' ? 'error-chip' : ''}`} 
-                 onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null, market, language })}
-                 disabled={disabled}
-                 title={assets[ticker]?.status === 'error' ? 'API Rate Limited' : ''}
-               >
-                 {assets[ticker]?.status === 'error' ? '⚠️ ' : '⚡ '}{ticker}
-               </button>
-            ))
+            displayTickers.map(ticker => {
+               const assetData = assets[ticker];
+               const signal = assetData?.signalData;
+               const hasTradeSignal = signal?.action === 'TRADE';
+               const isShield = signal?.action === 'SHIELD_MODE';
+               const direction = signal?.direction;
+               
+               // Determine chip visual state from global cache
+               let chipClass = 'quick-action-chip-integrated';
+               let chipIcon = '⚡ ';
+               
+               if (assetData?.status === 'error') {
+                 chipClass += ' error-chip';
+                 chipIcon = '⚠️ ';
+               } else if (hasTradeSignal) {
+                 chipClass += ' winning-chip';
+                 chipIcon = direction === 'BULLISH' ? '🟢 ' : '🔴 ';
+               } else if (isShield) {
+                 chipIcon = '🛡️ ';
+               } else if (assetData?.recommendedSize > 0) {
+                 chipClass += ' winning-chip';
+               }
+               
+               const title = hasTradeSignal 
+                 ? `${direction} | Score: ${signal.score}/100 | ${signal.tradeSide}` 
+                 : isShield 
+                   ? `Shield Mode: ${signal?.reason?.substring(0, 60) || 'No edge'}` 
+                   : assetData?.status === 'error' 
+                     ? 'API Rate Limited' 
+                     : `Score: ${assetData?.score || 0}/100`;
+
+               return (
+                 <button 
+                   key={ticker}
+                   type="button"
+                   className={chipClass} 
+                   onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null, market, language })}
+                   disabled={disabled}
+                   title={title}
+                 >
+                   {chipIcon}{ticker}
+                 </button>
+               );
+            })
           ) : (
             Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="quick-action-chip-skeleton"></div>
