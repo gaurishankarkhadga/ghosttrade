@@ -4,7 +4,7 @@ import { initializePaddle } from '@paddle/paddle-js';
 import useGhostStore from '../store/ghostStore';
 import './PricingModal.css';
 
-const PADDLE_CLIENT_TOKEN = import.meta.env.VITE_PADDLE_CLIENT_TOKEN || import.meta.env.PADDLE_CLIENT_SIDE_TOKEN || 'test_983c8aac7b0b49697a609af84c6';
+const PADDLE_CLIENT_TOKEN = import.meta.env.VITE_PADDLE_CLIENT_TOKEN || import.meta.env.PADDLE_CLIENT_SIDE_TOKEN;
 const PADDLE_ENV = import.meta.env.VITE_PADDLE_ENV || 'sandbox';
 
 const TIER_ORDER = {

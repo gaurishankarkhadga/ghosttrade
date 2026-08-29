@@ -53,7 +53,11 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 if (!process.env.JWT_SECRET) {
   console.warn('[SECURITY] WARNING: JWT_SECRET not set in environment. Using insecure fallback. Set JWT_SECRET in .env for production!');
 }
-const JWT_SECRET = process.env.JWT_SECRET || 'ghost-brain-dev-secret-CHANGE-IN-PROD-0xDEV';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
 const JWT_ISSUER = 'ghosttrade';
 const JWT_AUDIENCE = 'ghosttrade-client';
 // Demo access kept for development/testing — will be removed in production deployment
@@ -66,12 +70,10 @@ await fastify.register(fastifyRateLimit, {
   global: false, // Only apply where explicitly added
 });
 
-const ALLOWED_ORIGINS = [
-  'https://ghosttradeai-test.netlify.app'
-];
+const ALLOWED_ORIGINS = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : ['http://localhost:5173'];
 
 fastify.register(cors, {
-  origin: 'https://ghosttradeai-test.netlify.app',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept', 'X-Request-ID'],
   credentials: true
@@ -487,15 +489,18 @@ fastify.get('/api/broker/oauth/authorize', async (request, reply) => {
 
   switch (broker) {
     case 'BINANCE':
-      const binanceClientId = process.env.BINANCE_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      const binanceClientId = process.env.BINANCE_CLIENT_ID;
+      if (!binanceClientId) return reply.code(500).send({ error: 'Binance OAuth not configured' });
       authUrl = `https://accounts.binance.com/en/oauth/authorize?response_type=code&client_id=${binanceClientId}&redirect_uri=${redirectUri}&state=${stateToken}`;
       break;
     case 'ALPACA':
-      const alpacaClientId = process.env.ALPACA_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      const alpacaClientId = process.env.ALPACA_CLIENT_ID;
+      if (!alpacaClientId) return reply.code(500).send({ error: 'Alpaca OAuth not configured' });
       authUrl = `https://app.alpaca.markets/oauth/authorize?response_type=code&client_id=${alpacaClientId}&redirect_uri=${redirectUri}&state=${stateToken}&scope=data,trading,account`;
       break;
     case 'IBKR':
-      const ibkrClientId = process.env.IBKR_CLIENT_ID || 'GHOSTTRADE_DEMO_CLIENT_ID';
+      const ibkrClientId = process.env.IBKR_CLIENT_ID;
+      if (!ibkrClientId) return reply.code(500).send({ error: 'IBKR OAuth not configured' });
       authUrl = `https://ndcdyn.interactivebrokers.com/sso/Login?response_type=code&client_id=${ibkrClientId}&redirect_uri=${redirectUri}&state=${stateToken}`;
       break;
     default:
