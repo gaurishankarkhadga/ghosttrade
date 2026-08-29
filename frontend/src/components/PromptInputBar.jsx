@@ -247,10 +247,10 @@ export default function PromptInputBar({ onSend, disabled }) {
               </AnimatePresence>
             </div>
             
-            <div className="market-dropdown-container" ref={langDropdownRef}>
+            <div className="market-dropdown-container" ref={langDropdownRef} style={{ marginLeft: '-0.45rem' }}>
               <div className="bolt-model-selector" onClick={() => { setIsLangDropdownOpen(!isLangDropdownOpen); setIsMarketDropdownOpen(false); }}>
                 <MessageSquare size={14} fill="none" stroke="currentColor" strokeWidth={2} /> 
-                {language} <ChevronDown size={14} />
+                {language.substring(0, 3)} <ChevronDown size={14} />
               </div>
               <AnimatePresence>
                 {isLangDropdownOpen && (
@@ -280,15 +280,17 @@ export default function PromptInputBar({ onSend, disabled }) {
             </div>
           </div>
           <div className="bolt-right-actions">
-            <button type="button" onClick={handleDeepScan} className="bolt-text-btn" disabled={disabled}>
-              <Activity size={14} /> <span>Deep Scan</span>
+            <button type="button" onClick={handleDeepScan} className="bolt-text-btn" disabled={disabled} style={{ paddingLeft: '0.9rem', paddingRight: '0.9rem' }}>
+              <Activity size={14} strokeWidth={2.5} className="think-icon" /> <span>Deep Scan</span>
             </button>
             <button
               type="submit"
               disabled={!isActive}
               className={`bolt-submit-btn-wide ${isActive ? 'active' : 'disabled'}`}
+              title="Execute"
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '0.5rem' }}
             >
-              Execute <ArrowRight size={14} strokeWidth={2.5} />
+              <ArrowRight size={16} strokeWidth={2.5} />
             </button>
           </div>
         </div>

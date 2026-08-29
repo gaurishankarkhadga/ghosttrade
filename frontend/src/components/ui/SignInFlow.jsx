@@ -183,7 +183,7 @@ export const PublicLayout = ({ children, initialCanvasVisible = true, reverseCan
 
       <div className="content-layer">
         <MiniNavbar onModeSwitch={onModeSwitch} />
-        <div className="main-area" style={{ flex: 1, overflowY: 'auto', scrollBehavior: 'smooth' }}>
+        <div className="main-area" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
           {children}
         </div>
       </div>
@@ -286,10 +286,10 @@ export const SignInPage = ({ onLoginSuccess }) => {
       onModeSwitch={(mode) => { setStep(mode); setErrorMsg(''); }}
     >
       <div className="form-container" style={{ position: 'relative', width: '100%', maxWidth: '440px', margin: '0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100%' }}>
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
-          <AnimatedProLogo size={800} color="#ffffff" isAnimating={true} />
+        <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
+          <AnimatedProLogo size={600} color="#ffffff" isAnimating={true} />
         </div>
-            <div className="form-inner" style={{ position: 'relative', zIndex: 1, transform: 'translateY(-40px)' }}>
+            <div className="form-inner" style={{ position: 'relative', zIndex: 1, transform: 'translateY(-110px)' }}>
               <AnimatePresence mode="wait">
                 {step === "login" ? (
                   <motion.div key="login" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper">

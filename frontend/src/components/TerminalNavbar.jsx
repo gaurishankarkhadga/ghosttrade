@@ -42,7 +42,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
       <aside className="terminal-bottom-controls desktop-only">
         <button onClick={() => navigate('/pricing')} className="icon-action-btn" style={{ color: '#00e699' }}>
           <ShieldCheck size={16} />
-          <span className="dock-tooltip">Pro Membership</span>
+          <span className="dock-tooltip">Subscription</span>
         </button>
 
         {/* Execution Mode Button — Opens Broker Settings */}
@@ -53,7 +53,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
         >
           {isLive ? <Zap size={16} /> : <Globe size={16} />}
           <span className="dock-tooltip">
-            {isLive ? `LIVE MODE — ${executionMode.replace('LIVE_', '')}` : 'Paper Mode — Broker Settings'}
+            {isLive ? `LIVE MODE — ${executionMode.replace('LIVE_', '')}` : 'Paper Mode — Connect'}
           </span>
         </button>
 
@@ -66,7 +66,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
         ) : (
           <button onClick={() => navigate('/audit')} className="icon-action-btn">
             <BarChart2 size={16} />
-            <span className="dock-tooltip">Performance Audit</span>
+            <span className="dock-tooltip">Dashboard</span>
           </button>
         )}
 
@@ -91,15 +91,10 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
 
       {/* MOBILE VIEW: New Top Frosted Navbar */}
       <header className="terminal-top-navbar mobile-only">
-        <div className="brand-dots">
-          <span className="brand-dot"></span>
-          <span className="brand-dot"></span>
-          <span className="brand-dot"></span>
-          <span className="brand-dot"></span>
-        </div>
+
 
         <div className="terminal-brand-logo" style={{ display: 'flex', alignItems: 'center' }}>
-          <AnimatedProLogo size={36} color="#ffffff" isAnimating={false} />
+          <AnimatedProLogo size={48} color="#ffffff" isAnimating={false} />
         </div>
 
         <div className="profile-section" ref={dropdownRef}>
@@ -138,12 +133,12 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
 
                 <button className="dropdown-item" onClick={() => navigate('/pricing')}>
                   <ShieldCheck size={16} color="#00e699" />
-                  <span style={{ color: '#00e699', fontWeight: 600 }}>Pro Membership / Plans</span>
+                  <span style={{ color: '#00e699', fontWeight: 600 }}>Subscription</span>
                 </button>
 
                 <button className="dropdown-item" onClick={() => { navigate('/settings'); setIsDropdownOpen(false); }}>
                   <Settings size={16} />
-                  <span>Broker Settings</span>
+                  <span>Connect</span>
                 </button>
 
                 {isAuditPage ? (
@@ -154,7 +149,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                 ) : (
                   <button className="dropdown-item" onClick={() => navigate('/audit')}>
                     <BarChart2 size={16} />
-                    <span>Audit & Performance</span>
+                    <span>Dashboard</span>
                   </button>
                 )}
 
