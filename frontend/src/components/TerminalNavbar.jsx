@@ -90,7 +90,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
       </aside>
 
       {/* MOBILE VIEW: New Top Frosted Navbar */}
-      <header className="terminal-top-navbar mobile-only">
+      <header className={`terminal-top-navbar mobile-only ${isAuditPage ? 'audit-mobile-hidden' : ''}`}>
 
 
         <div className="terminal-brand-logo" style={{ display: 'flex', alignItems: 'center' }}>
@@ -131,7 +131,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
 
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '2px 0' }} />
 
-                <button className="dropdown-item" onClick={() => navigate('/pricing')}>
+                <button className="dropdown-item" onClick={() => { navigate('/pricing'); setIsDropdownOpen(false); }}>
                   <ShieldCheck size={16} color="#00e699" />
                   <span style={{ color: '#00e699', fontWeight: 600 }}>Subscription</span>
                 </button>
@@ -142,12 +142,12 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                 </button>
 
                 {isAuditPage ? (
-                  <button className="dropdown-item" onClick={() => navigate('/terminal')}>
+                  <button className="dropdown-item" onClick={() => { navigate('/terminal'); setIsDropdownOpen(false); }}>
                     <Terminal size={16} />
                     <span>Chat Terminal</span>
                   </button>
                 ) : (
-                  <button className="dropdown-item" onClick={() => navigate('/audit')}>
+                  <button className="dropdown-item" onClick={() => { navigate('/audit'); setIsDropdownOpen(false); }}>
                     <BarChart2 size={16} />
                     <span>Dashboard</span>
                   </button>
@@ -159,7 +159,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                 </button>
 
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
-                <button className="dropdown-item danger" onClick={onLockTerminal}>
+                <button className="dropdown-item danger" onClick={() => { onLockTerminal(); setIsDropdownOpen(false); }}>
                   <LogOut size={16} />
                   <span>Lock Terminal</span>
                 </button>

@@ -259,10 +259,15 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     
     // Filter by market if not Global
     if (market !== 'Global') {
-      const key = market.toUpperCase().replace(/\s+/g, '');
-      const tickersForMarket = getWatchlistForRegions([key]);
-      const tickerSet = new Set(tickersForMarket);
-      relevantAssets = allCached.filter(a => tickerSet.has(a.ticker));
+      if (market.toUpperCase() === 'CRYPTO') {
+        // Use all cached crypto assets (Top 100 dynamic list) instead of static 20
+        relevantAssets = allCached.filter(a => a.ticker && a.ticker.endsWith('-USD'));
+      } else {
+        const key = market.toUpperCase().replace(/\s+/g, '');
+        const tickersForMarket = getWatchlistForRegions([key]);
+        const tickerSet = new Set(tickersForMarket);
+        relevantAssets = allCached.filter(a => tickerSet.has(a.ticker));
+      }
     }
 
     if (relevantAssets.length === 0) {

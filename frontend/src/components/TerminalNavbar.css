@@ -320,4 +320,8 @@
     width: calc(100% - 2rem);
     padding: 0.5rem 1rem;
   }
+
+  .audit-mobile-hidden {
+    display: none !important;
+  }
 }

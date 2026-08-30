@@ -136,8 +136,12 @@ export function PricingModal() {
         setLoadingPriceId(null);
       }
     } else {
-      alert('Paddle payment engine is initializing... Please try again in 2 seconds.');
       setLoadingPriceId(null);
+      if (!PADDLE_CLIENT_TOKEN) {
+        setInitError('Payment gateway not configured. Please add VITE_PADDLE_CLIENT_TOKEN to your .env file.');
+      } else if (!initError) {
+        setInitError('Payment engine is still initializing. Please wait a moment and try again.');
+      }
     }
   };
 

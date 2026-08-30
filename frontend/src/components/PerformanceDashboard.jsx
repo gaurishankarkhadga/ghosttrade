@@ -1,12 +1,111 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, Copy, Check } from 'lucide-react';
+import { Activity, ArrowLeft, Copy, Check, ChevronDown, ChevronRight, X, Lightbulb } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import './PerformanceDashboard.css';
+
+const highlightKeywords = (text) => {
+  if (!text) return null;
+  // Split the text to isolate markdown bolding and trading keywords
+  const parts = text.split(/(\*\*.*?\*\*|\bLONG\b|\bSHORT\b|\bBULLISH\b|\bBEARISH\b|\bTP\d*\b|\bSL\d*\b|\$\d+(?:\.\d+)?)/g);
+  
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} style={{ color: '#F8FAFC' }}>{part.slice(2, -2)}</strong>;
+    }
+    if (part === 'LONG' || part === 'BULLISH') {
+      return <span key={i} style={{ color: '#34D399', fontWeight: 600 }}>{part}</span>;
+    }
+    if (part === 'SHORT' || part === 'BEARISH') {
+      return <span key={i} style={{ color: '#F87171', fontWeight: 600 }}>{part}</span>;
+    }
+    if (part.startsWith('TP') || part.startsWith('SL')) {
+      return <span key={i} style={{ color: '#FBBF24', fontWeight: 600 }}>{part}</span>;
+    }
+    if (part.startsWith('$')) {
+      return <span key={i} style={{ color: '#E2E8F0', fontWeight: 600 }}>{part}</span>;
+    }
+    return part;
+  });
+};
+
+const cleanTextToBullets = (text) => {
+  if (!text) return null;
+  
+  // Split by newlines, Markdown lists, or literal bullet points
+  let points = text.split(/(?:\n+)|(?:\s+-\s+)|(?:\s+\*\s+)|(?:•\s+)/).map(p => p.trim());
+  
+  // If it's just one big block, try to break it up by sentences
+  if (points.length <= 1) {
+    points = text.split(/(?<=[.?!])\s+(?=[A-Z])/).map(p => p.trim());
+  }
+
+  // Clean up remaining leading bullet characters, but KEEP internal **bold** tags
+  points = points
+    .map(p => p.replace(/^[-*•>]\s*/, '').trim())
+    .filter(p => p.length > 5) // Ignore tiny fragments
+    .filter(p => /[a-zA-Z0-9]/.test(p)); // Destroy any line that does not contain at least one letter or number (e.g., unicode dividers)
+
+  if (points.length === 0) return <div className="modal-proof-text">{highlightKeywords(text)}</div>;
+
+  return (
+    <ul className="clean-proof-list">
+      {points.map((p, idx) => (
+        <li key={idx}>{highlightKeywords(p)}</li>
+      ))}
+    </ul>
+  );
+};
+
+const formatAIProof = (text) => {
+  if (!text) return null;
+  
+  let verdict = '';
+  let levels = '';
+  let reasoning = '';
+  
+  const verdictMatch = text.match(/PREDICTION VERDICT:(.*?)(?=TRADE LEVELS:|$)/is);
+  const levelsMatch = text.match(/TRADE LEVELS:(.*?)(?=SIMPLE REASONING:|$)/is);
+  const reasoningMatch = text.match(/SIMPLE REASONING:(.*)/is);
+  
+  if (verdictMatch) verdict = verdictMatch[1].trim();
+  if (levelsMatch) levels = levelsMatch[1].trim();
+  if (reasoningMatch) reasoning = reasoningMatch[1].trim();
+  
+  if (!verdict && !levels && !reasoning) {
+     return <div className="ai-proof-raw">{cleanTextToBullets(text)}</div>;
+  }
+  
+  return (
+    <div className="ai-proof-structured-modal">
+      {verdict && (
+         <div className="modal-proof-card verdict-card">
+           <div className="modal-proof-header"><Check size={14} className="proof-icon" /> <span className="proof-header-title">The AI's Verdict</span></div>
+           <div className="modal-proof-text">{cleanTextToBullets(verdict)}</div>
+         </div>
+      )}
+      {levels && (
+         <div className="modal-proof-card levels-card">
+           <div className="modal-proof-header"><Activity size={14} className="proof-icon" /> <span className="proof-header-title">Trade Levels (Targets & Stops)</span></div>
+           <div className="modal-proof-text">{cleanTextToBullets(levels)}</div>
+         </div>
+      )}
+      {reasoning && (
+         <div className="modal-proof-card reasoning-card">
+           <div className="modal-proof-header"><Lightbulb size={14} className="proof-icon" /> <span className="proof-header-title">Simple Reasoning</span></div>
+           <div className="modal-proof-text">{cleanTextToBullets(reasoning)}</div>
+         </div>
+      )}
+    </div>
+  );
+};
 
 export default function PerformanceDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('signals'); // 'signals' | 'pending' | 'active' | 'closed' | 'prompts'
+  const [selectedMetricView, setSelectedMetricView] = useState('AI Signals Verification');
+  const [isMetricDropdownOpen, setIsMetricDropdownOpen] = useState(false);
+  const [selectedProof, setSelectedProof] = useState(null);
   const allPaperTrades = useGhostStore((state) => state.activePaperTrades) || [];
   const activePaperTrades = allPaperTrades.filter(t => t.status === 'OPEN');
   const pendingPaperTrades = allPaperTrades.filter(t => t.status === 'PENDING_CONFIRMATION');
@@ -119,86 +218,122 @@ export default function PerformanceDashboard() {
     <div className="audit-page-container">
       <div className="audit-header">
         <button className="audit-back-btn" onClick={() => navigate('/terminal')}>
-          <ArrowLeft size={16} /> Back to Terminal
+          <ArrowLeft size={16} /> Back
         </button>
         <h2 className="audit-title">
           <Activity size={18} color="#38bdf8" /> 
-          Institutional Performance & Audit Ledger
+          Performance Dashboard
         </h2>
       </div>
 
-      <div style={{ marginBottom: '16px', fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>Realized PnL Performance (Closed Trades)</div>
-      <div className="metrics-grid" style={{ marginBottom: '24px' }}>
-        <div className="metric-box">
-          <span className="metric-box-label">Total Closed Trades</span>
-          <span className="metric-box-value">{systemPerformance.totalTrades}</span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">System Win Rate</span>
-          <span className="metric-box-value">{systemPerformance.winRate}%</span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Average Win</span>
-          <span className="metric-box-value" style={{ color: '#34d399' }}>+{systemPerformance.averageWinPercent}%</span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Average Loss</span>
-          <span className="metric-box-value" style={{ color: '#f87171' }}>-{systemPerformance.averageLossPercent}%</span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">System EV / Trade</span>
-          <span className="metric-box-value" style={{ color: systemPerformance.systemEV >= 0 ? '#34d399' : '#f87171' }}>
-            {systemPerformance.systemEV >= 0 ? '+' : ''}{systemPerformance.systemEV}%
-          </span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Total Net PnL</span>
-          <span className="metric-box-value" style={{ color: systemPerformance.netPnlPercent >= 0 ? '#34d399' : '#f87171' }}>
-            {systemPerformance.netPnlPercent >= 0 ? '+' : ''}{systemPerformance.netPnlPercent}%
-          </span>
-        </div>
+      <div className="metric-selector-container" onClick={() => setIsMetricDropdownOpen(true)}>
+        <div className="metric-dropdown-value">{selectedMetricView}</div>
+        <ChevronDown size={14} className="metric-dropdown-icon" />
       </div>
 
-      <div style={{ marginBottom: '16px', fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>AI Signals Verification (Predicted vs Actual)</div>
-      <div className="metrics-grid">
-        <div className="metric-box">
-          <span className="metric-box-label">Verified Predictions</span>
-          <span className="metric-box-value">{totalPredictions}</span>
+      {isMetricDropdownOpen && (
+        <div className="proof-modal-overlay" onClick={() => setIsMetricDropdownOpen(false)}>
+          <div className="proof-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="proof-modal-header">
+              <h3 style={{ fontSize: '14px', margin: 0, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+                <Activity size={16} color="#38bdf8" /> Select Dashboard View
+              </h3>
+              <button className="proof-modal-close" onClick={() => setIsMetricDropdownOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="proof-modal-body" style={{ padding: '0', gap: '0' }}>
+              <div 
+                className={`metric-menu-item ${selectedMetricView === 'AI Signals Verification' ? 'active' : ''}`}
+                onClick={() => { setSelectedMetricView('AI Signals Verification'); setIsMetricDropdownOpen(false); }}
+                style={{ borderBottom: '1px solid #1E293B', padding: '16px 24px', cursor: 'pointer' }}
+              >
+                AI Signals Verification
+              </div>
+              <div 
+                className={`metric-menu-item ${selectedMetricView === 'Realized PnL Performance' ? 'active' : ''}`}
+                onClick={() => { setSelectedMetricView('Realized PnL Performance'); setIsMetricDropdownOpen(false); }}
+                style={{ padding: '16px 24px', cursor: 'pointer' }}
+              >
+                Realized PnL Performance
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="metric-box">
-          <span className="metric-box-label">AI Win Rate</span>
-          <span className="metric-box-value">
-            {winRate}%
-          </span>
+      )}
+
+      {selectedMetricView === 'Realized PnL Performance' ? (
+        <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+          <div className="metric-box">
+            <span className="metric-box-label">Total Trades</span>
+            <span className="metric-box-value">{systemPerformance.totalTrades}</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Win Rate</span>
+            <span className="metric-box-value">{systemPerformance.winRate}%</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Avg Win</span>
+            <span className="metric-box-value" style={{ color: '#34d399' }}>+{systemPerformance.averageWinPercent}%</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Avg Loss</span>
+            <span className="metric-box-value" style={{ color: '#f87171' }}>-{systemPerformance.averageLossPercent}%</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">EV / Trade</span>
+            <span className="metric-box-value" style={{ color: systemPerformance.systemEV >= 0 ? '#34d399' : '#f87171' }}>
+              {systemPerformance.systemEV >= 0 ? '+' : ''}{systemPerformance.systemEV}%
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Net PnL</span>
+            <span className="metric-box-value" style={{ color: systemPerformance.netPnlPercent >= 0 ? '#34d399' : '#f87171' }}>
+              {systemPerformance.netPnlPercent >= 0 ? '+' : ''}{systemPerformance.netPnlPercent}%
+            </span>
+          </div>
         </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Wins (Correct)</span>
-          <span className="metric-box-value" style={{ color: '#34d399' }}>
-            {wins}
-          </span>
+      ) : (
+        <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+          <div className="metric-box">
+            <span className="metric-box-label">Verified</span>
+            <span className="metric-box-value">{totalPredictions}</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Win Rate</span>
+            <span className="metric-box-value">
+              {winRate}%
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Wins</span>
+            <span className="metric-box-value" style={{ color: '#34d399' }}>
+              {wins}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Losses</span>
+            <span className="metric-box-value" style={{ color: '#f87171' }}>
+              {losses}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Pending</span>
+            <span className="metric-box-value" style={{ color: '#60A5FA' }}>
+              {pendingCount}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Edge</span>
+            <span className="metric-box-value" style={{ color: (() => {
+              if (totalPredictions < 5) return '#94A3B8';
+              return edgeExpectancy > 0 ? '#34d399' : edgeExpectancy < 0 ? '#f87171' : '#94A3B8';
+            })() }}>
+              {totalPredictions < 5 ? 'N/A' : `${edgeExpectancy >= 0 ? '+' : ''}${edgeExpectancy.toFixed(2)}R`}
+            </span>
+          </div>
         </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Losses (Incorrect)</span>
-          <span className="metric-box-value" style={{ color: '#f87171' }}>
-            {losses}
-          </span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Pending Verification</span>
-          <span className="metric-box-value" style={{ color: '#60A5FA' }}>
-            {pendingCount}
-          </span>
-        </div>
-        <div className="metric-box">
-          <span className="metric-box-label">Edge Expectancy</span>
-          <span className="metric-box-value" style={{ color: (() => {
-            if (totalPredictions < 5) return '#94A3B8';
-            return edgeExpectancy > 0 ? '#34d399' : edgeExpectancy < 0 ? '#f87171' : '#94A3B8';
-          })() }}>
-            {totalPredictions < 5 ? 'N/A' : `${edgeExpectancy >= 0 ? '+' : ''}${edgeExpectancy.toFixed(2)}R`}
-          </span>
-        </div>
-      </div>
+      )}
 
       <div className="audit-tabs">
         <div className="audit-tabs-group">
@@ -239,11 +374,22 @@ export default function PerformanceDashboard() {
           >
             Trade Audit Ledger ({closedPaperTrades.length})
           </button>
+          
+          <button 
+            className="audit-tab-btn" 
+            onClick={handleCopyData} 
+            style={{ 
+              color: '#94a3b8', 
+              borderLeft: '1px solid #1E293B',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            {copySuccess ? <Check size={14} color="#34d399" /> : <Copy size={14} />}
+            {copySuccess ? 'Copied' : 'Copy Data'}
+          </button>
         </div>
-        <button className="audit-copy-btn" onClick={handleCopyData}>
-          {copySuccess ? <Check size={14} color="#34d399" /> : <Copy size={14} />}
-          {copySuccess ? 'Copied' : 'Copy Data'}
-        </button>
       </div>
 
       <div className="audit-content">
@@ -385,7 +531,7 @@ export default function PerformanceDashboard() {
                 <th>Timestamp</th>
                 <th>Interaction Type</th>
                 <th>User Prompt</th>
-                <th>AI Reasoning</th>
+                <th style={{ textAlign: 'center' }}>AI Proof</th>
                 <th>Market Verification</th>
                 <th>Status</th>
               </tr>
@@ -400,7 +546,6 @@ export default function PerformanceDashboard() {
                 let icon = log.resultType === 'TRADE_CARD' ? <Activity size={12} /> : <Check size={12} />;
 
                 const userPromptText = log.prompt || 'Image Analysis / General Chat';
-                const aiResponseText = log.aiOutput || 'No response recorded.';
                 const resolvedGrade = log.resolvedOutcome;
                 const resolvedReason = log.resolvedReason;
 
@@ -411,14 +556,16 @@ export default function PerformanceDashboard() {
                     <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94A3B8' }} title={userPromptText}>
                       "{userPromptText}"
                     </td>
-                    <td style={{ maxWidth: '250px', fontSize: '11px', color: '#CBD5E1', lineHeight: '1.4' }}>
-                      {aiResponseText}
+                    <td style={{ textAlign: 'center' }}>
+                       <button className="proof-toggle-btn" onClick={() => setSelectedProof(log)}>
+                          View
+                       </button>
                     </td>
-                    <td style={{ maxWidth: '200px', fontSize: '11px' }}>
+                    <td style={{ maxWidth: '200px', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {resolvedGrade ? (
                         <div style={{ color: resolvedGrade === 'CORRECT' ? '#34D399' : resolvedGrade === 'INCORRECT' ? '#F87171' : '#FBBF24' }}>
                           <strong>{resolvedGrade === 'CORRECT' ? 'Accurate' : resolvedGrade === 'INCORRECT' ? 'Failed' : 'Neutral'}</strong>
-                          <div style={{ marginTop: '2px', color: '#94a3b8' }}>{resolvedReason}</div>
+                          {resolvedReason && <div style={{ marginTop: '2px', color: '#94a3b8' }}>{resolvedReason.length > 35 ? resolvedReason.substring(0, 35) + '...' : resolvedReason}</div>}
                         </div>
                       ) : (
                         <span style={{ color: '#64748B' }}>Pending Verification</span>
@@ -448,6 +595,7 @@ export default function PerformanceDashboard() {
                 <th style={{ textAlign: 'center' }}>Targets</th>
                 <th style={{ textAlign: 'center' }}>AI Correct?</th>
                 <th>Verification Outcome</th>
+                <th style={{ textAlign: 'center' }}>AI Proof</th>
                 <th>Time</th>
               </tr>
             </thead>
@@ -550,30 +698,26 @@ export default function PerformanceDashboard() {
                           <span style={{ color: '#60A5FA' }}>PENDING</span>
                         )}
                       </td>
-                      <td style={{ maxWidth: '250px', fontSize: '11px', lineHeight: '1.4' }}>
+                      <td style={{ maxWidth: '180px', fontSize: '11px', lineHeight: '1.4' }}>
                         {isPending ? (
                           <span style={{ color: '#64748B' }}>
-                            {isBlocked ? sig.blockedReason + ' (Awaiting verification...)' : 'Awaiting resolution...'}
+                            {isBlocked ? 'Blocked (Tracking)' : 'Awaiting resolution...'}
                           </span>
                         ) : (
-                          <span style={{ color: isWin ? '#34D399' : isLoss ? '#F87171' : '#CBD5E1' }}>
-                            {sig.resolvedReason || 'Verified'}
-                          </span>
+                          <div style={{ color: isWin ? '#34D399' : isLoss ? '#F87171' : '#CBD5E1' }}>
+                            <strong>{isWin ? 'Accurate' : isLoss ? 'Failed' : 'Neutral'}</strong>
+                            {sig.resolvedReason && <div style={{ marginTop: '2px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sig.resolvedReason.length > 35 ? sig.resolvedReason.substring(0, 35) + '...' : sig.resolvedReason}</div>}
+                          </div>
                         )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                         <button className="proof-toggle-btn" onClick={() => setSelectedProof(sig)}>
+                            View
+                         </button>
                       </td>
                       <td style={{ fontSize: '10px', color: '#CBD5E1', whiteSpace: 'nowrap' }}>
                         <div>Gen: {formatDate(sig.timestamp)}</div>
                         {!isPending && sig.resolvedAt && <div>Ver: {formatDate(sig.resolvedAt)}</div>}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan="8" style={{ padding: '8px 16px', background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
-                        <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>
-                          <strong>Prompt:</strong> "{sig.userPrompt || 'Chart Analysis'}"
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#CBD5E1', maxHeight: '45px', overflowY: 'auto', paddingRight: '8px', lineHeight: '1.4' }}>
-                          <strong>AI Proof:</strong> {sig.predictionSummary || 'No textual proof recorded for this signal.'}
-                        </div>
                       </td>
                     </tr>
                   </React.Fragment>
@@ -594,6 +738,7 @@ export default function PerformanceDashboard() {
                 <th style={{ textAlign: 'center' }}>Targets</th>
                 <th style={{ textAlign: 'center' }}>Current State</th>
                 <th>Verification Outcome</th>
+                <th style={{ textAlign: 'center' }}>AI Proof</th>
                 <th>Time</th>
               </tr>
             </thead>
@@ -666,30 +811,26 @@ export default function PerformanceDashboard() {
                            <span style={{ color: '#60A5FA' }}>PENDING</span>
                         )}
                       </td>
-                      <td style={{ maxWidth: '250px', fontSize: '11px', lineHeight: '1.4' }}>
+                      <td style={{ maxWidth: '180px', fontSize: '11px', lineHeight: '1.4' }}>
                         {isPending ? (
                           <span style={{ color: '#64748B' }}>
-                            {isBlocked ? sig.blockedReason + ' (Awaiting verification...)' : 'Awaiting resolution...'}
+                            {isBlocked ? 'Blocked (Tracking)' : 'Awaiting resolution...'}
                           </span>
                         ) : (
-                          <span style={{ color: '#FBBF24' }}>
-                            {sig.resolvedReason || 'Inconclusive or Flat Market'}
-                          </span>
+                          <div style={{ color: '#FBBF24' }}>
+                            <strong>Neutral</strong>
+                            {sig.resolvedReason && <div style={{ marginTop: '2px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sig.resolvedReason.length > 35 ? sig.resolvedReason.substring(0, 35) + '...' : sig.resolvedReason}</div>}
+                          </div>
                         )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                         <button className="proof-toggle-btn" onClick={() => setSelectedProof(sig)}>
+                            View
+                         </button>
                       </td>
                       <td style={{ fontSize: '10px', color: '#CBD5E1', whiteSpace: 'nowrap' }}>
                         <div>Gen: {formatDate(sig.timestamp)}</div>
                         {!isPending && sig.resolvedAt && <div>Ver: {formatDate(sig.resolvedAt)}</div>}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan="8" style={{ padding: '8px 16px', background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
-                        <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>
-                          <strong>Prompt:</strong> "{sig.userPrompt || 'Chart Analysis'}"
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#CBD5E1', maxHeight: '45px', overflowY: 'auto', paddingRight: '8px', lineHeight: '1.4' }}>
-                          <strong>AI Proof:</strong> {sig.predictionSummary || 'No textual proof recorded for this signal.'}
-                        </div>
                       </td>
                     </tr>
                   </React.Fragment>
@@ -699,6 +840,40 @@ export default function PerformanceDashboard() {
           </table>
         )}
       </div>
+
+      {selectedProof && (
+        <div className="proof-modal-overlay" onClick={() => setSelectedProof(null)}>
+          <div className="proof-modal-content" onClick={e => e.stopPropagation()}>
+            <div className="proof-modal-header">
+              <h3>AI Analysis Proof</h3>
+              <button className="proof-modal-close" onClick={() => setSelectedProof(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="proof-modal-body">
+              <div className="proof-modal-prompt">
+                <strong>User Prompt:</strong> "{selectedProof.userPrompt || selectedProof.prompt || 'Chart Analysis'}"
+              </div>
+              {formatAIProof(selectedProof.predictionSummary || selectedProof.aiOutput)}
+              
+              {selectedProof.resolvedReason && (
+                 <div className="modal-proof-card verification-card" style={{ marginTop: '8px' }}>
+                   <div className="modal-proof-header">
+                     <Activity size={14} className="proof-icon" style={{color: selectedProof.resolvedOutcome === 'CORRECT' ? '#34D399' : selectedProof.resolvedOutcome === 'INCORRECT' ? '#F87171' : '#FBBF24'}} /> 
+                     <span className="proof-header-title">Market Verification</span>
+                   </div>
+                   <div className="modal-proof-text">
+                     <strong style={{ color: selectedProof.resolvedOutcome === 'CORRECT' ? '#34D399' : selectedProof.resolvedOutcome === 'INCORRECT' ? '#F87171' : '#FBBF24' }}>
+                       {selectedProof.resolvedOutcome === 'CORRECT' ? 'Accurate: ' : selectedProof.resolvedOutcome === 'INCORRECT' ? 'Failed: ' : 'Neutral: '}
+                     </strong>
+                     {selectedProof.resolvedReason}
+                   </div>
+                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

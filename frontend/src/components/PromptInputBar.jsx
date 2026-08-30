@@ -169,7 +169,7 @@ export default function PromptInputBar({ onSend, disabled }) {
                    key={ticker}
                    type="button"
                    className={chipClass} 
-                   onClick={() => onSend({ text: ticker.split('-')[0].split('.')[0], imageBase64: null, market, language })}
+                   onClick={() => onSend({ text: ticker, imageBase64: null, market, language })}
                    disabled={disabled}
                    title={title}
                  >

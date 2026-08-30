@@ -89,37 +89,40 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     // [PHASE 4] Quantitative Scanner Rewire (Institutional Pattern + Regime gating)
     // detectPatterns() computes VWAP and volume analysis internally from candles
     const pattern = detectPatterns(tf15m);
-    if (!pattern) return { ticker, status: 'skipped', reason: 'No geometric pattern footprint' };
 
-    const setup_id = constructSetupId(pattern, regime15m.regime, closes15m);
+    const setup_id = pattern ? constructSetupId(pattern, regime15m.regime, closes15m) : null;
     
     let dbKellyResult = { action: 'SHIELD_MODE', reason: 'No setup found', kellyF: 0, halfKelly: 0 };
     let sl = null, tp = null, finalSize = 0;
     
     const db = await getDb();
-    const stats = await db.collection('setup_stats').findOne({
-        setup_id,
-        logic_version: CURRENT_LOGIC_VERSION
-    });
-
-    if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA') {
-        dbKellyResult = computeKelly({ 
-           mean_return: stats.mean_return, 
-           variance: stats.variance,
-           regime: regime15m.regime
+    if (setup_id) {
+        const stats = await db.collection('setup_stats').findOne({
+            setup_id,
+            logic_version: CURRENT_LOGIC_VERSION
         });
-        if (dbKellyResult.action !== 'SHIELD_MODE') {
-             finalSize = dbKellyResult.halfKelly;
+
+        if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA') {
+            dbKellyResult = computeKelly({ 
+               mean_return: stats.mean_return, 
+               variance: stats.variance,
+               regime: regime15m.regime
+            });
+            if (dbKellyResult.action !== 'SHIELD_MODE') {
+                 finalSize = dbKellyResult.halfKelly;
+            }
+        } else {
+            dbKellyResult.reason = stats ? 'INSUFFICIENT_DATA flag blocks execution' : `Setup ${setup_id} not found in verified backtest database`;
         }
     } else {
-        dbKellyResult.reason = stats ? 'INSUFFICIENT_DATA flag blocks execution' : `Setup ${setup_id} not found in verified backtest database`;
+        dbKellyResult.reason = 'No geometric pattern footprint detected';
     }
 
     // Force SHIELD MODE if system constraints are hit
     if (shieldTriggered || liquidityTrap || !regime1d.isActionable) finalSize = 0;
 
     // Calculate pure ATR exits using candles array (same as backtester)
-    const tradeSide = (setup_id.includes('bull')) ? 'LONG' : 'SHORT';
+    const tradeSide = (setup_id && setup_id.includes('bull')) ? 'LONG' : (setup_id && setup_id.includes('bear')) ? 'SHORT' : 'LONG';
     const exits = computeStopLossTakeProfit(tf15m, tradeSide);
     if (exits) { sl = exits.stopLoss; tp = exits.takeProfit; }
 
