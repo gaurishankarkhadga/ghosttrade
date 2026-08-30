@@ -236,6 +236,57 @@ export async function handleGeminiConnection(clientWs, options = {}) {
               source: 'GLOBAL_CACHE'
             }
           }));
+
+          // Log the cached signal to the DB for the Audit Dashboard
+          try {
+            const s = cachedAsset.signalData;
+            const auditDue = new Date(Date.now() + 4 * 3600000); // 4 hours for crypto by default
+            const logData = {
+              ticker: extractedTicker,
+              direction: s.direction,
+              rawConfidence: s.score || 0,
+              calibratedConfidence: s.score || 0,
+              auditDue,
+              hurstMean: s.hurst?.meanH ?? null,
+              hurstRS: s.hurst?.rsH ?? null,
+              hurstDFA: s.hurst?.dfaH ?? null,
+              hurstCI: s.hurst?.ci95 ?? null,
+              hurstStable: s.hurst?.isStable ?? null,
+              regime: s.regime?.regime ?? null,
+              regimeHeuristicScore: s.regime?.heuristicScore ?? null,
+              regimeActionable: s.regime?.isActionable ?? null,
+              primaryTarget: s.takeProfit,
+              extendedTarget: s.takeProfit2 || null,
+              invalidationLevel: s.stopLoss,
+              currentPrice: s.currentPrice || cachedAsset.currentPrice,
+              evGross: null, evNet: null, evPer100: null,
+              kellyF: s.kelly?.kellyF || 0,
+              halfKelly: s.kelly?.halfKelly || 0,
+              estimatedFee: null,
+              signalBlocked: false,
+              blockedReason: null,
+              tradeTimeframe: 'DAY',
+              predictiveHorizon: cachedAsset.tradeCard?.predictiveHorizon || null,
+              educationalLesson: cachedAsset.tradeCard?.educationalLesson || null,
+              engineScore: s.score || null,
+              engineScoreBreakdown: s.scoreBreakdown || null,
+              predictionSummary: analysisText.substring(0, 2000),
+              userPrompt: prompt
+            };
+            
+            // Check cooldown — prevent duplicate signals for the same ticker within 15 min
+            const tickerKey = extractedTicker.toUpperCase();
+            const lastTime = lastSignalTime.get(tickerKey);
+            const now = Date.now();
+            if (lastTime && (now - lastTime < SIGNAL_COOLDOWN_MS)) {
+              console.log(`[SIGNAL] ${tickerKey} cooldown active — skipping duplicate cached signal log`);
+            } else {
+              await logSignal(logData);
+              lastSignalTime.set(tickerKey, now);
+            }
+          } catch (e) {
+            console.error('[GLOBAL CACHE] Failed to log signal:', e.message);
+          }
         }
         
         clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: cachedAsset.currentPrice || null }));
