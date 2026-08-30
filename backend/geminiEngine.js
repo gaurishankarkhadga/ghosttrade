@@ -41,12 +41,7 @@ const SIGNAL_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 const lastSignalTime = new Map();
 
 const MODELS = [
-  'models/gemini-3.7-flash',
-  'models/gemini-3.6-flash',
-  'models/gemini-3.5-flash',
-  'models/gemini-3.1-pro-preview',
-  'models/gemini-flash-latest',
-  'models/gemini-pro-latest'
+  'models/gemini-2.5-flash'
 ];
 
 function getApiKeys() {
