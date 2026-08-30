@@ -856,29 +856,125 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
  * Fallback: REST SSE streaming with Phase 3 integration
  */
 async function streamViaRestSSE(clientWs, apiKeys, systemPrompt, p3Context = {}) {
-  const { isImageMode, imageBase64, userPrompt } = p3Context;
-
-  // Build content parts based on analysis mode
-  let userParts;
-  if (isImageMode && imageBase64) {
-    userParts = [
-      { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-      { text: USER_PROMPT }
-    ];
+  const { isImageMode, imageBase64 } = p3Context;
+  
+  if (!isImageMode || !imageBase64) {
+    // TEXT-ONLY MODE -> Route to Groq API
+    console.log('[ROUTER] Text-only request detected. Routing to Groq API (High Speed).');
+    await streamViaGroqRestSSE(clientWs, systemPrompt, p3Context);
   } else {
-    // Text-only mode: combine user question with execution protocol
-    const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"
-
-${USER_PROMPT}
-
-IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full institutional rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
-    userParts = [{ text: textPrompt }];
+    // IMAGE MODE -> Route to Gemini API
+    console.log('[ROUTER] Image upload detected. Routing to Gemini API (Vision).');
+    await streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context);
   }
+}
+
+/**
+ * GROQ IMPLEMENTATION (Text-Only, High Speed, OpenAI SSE Format)
+ */
+async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
+  const { userPrompt } = p3Context;
+  const apiKey = process.env.GROQ_API_KEY;
+  
+  if (!apiKey) {
+    clientWs.send(JSON.stringify({ status: 'error', message: 'Groq API Key is missing.', rawError: 'Missing GROQ_API_KEY' }));
+    return;
+  }
+
+  const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full institutional rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
+
+  const payload = {
+    model: "groq/compound-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: textPrompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 8192,
+    top_p: 0.85,
+    stream: true
+  };
+
+  let fullText = '';
+  let rawFullText = '';
+  
+  try {
+    console.log(`[GROQ] Attempting REST SSE with groq/compound-mini`);
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(`Groq failed: ${response.status} - ${errData.error?.message || 'Unknown'}`);
+    }
+
+    const streamReader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await streamReader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.trim().slice(6);
+          if (dataStr === '[DONE]' || !dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+            const content = data.choices?.[0]?.delta?.content;
+            if (content) {
+              rawFullText += content;
+              const sanitized = sanitizeChunk(content);
+              fullText += sanitized;
+              clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
+            }
+          } catch (e) {
+            console.error('[GROQ-SSE] Parse error on chunk:', e.message);
+          }
+        }
+      }
+    }
+
+    console.log('[GROQ] Stream complete, executing Phase 3 Intercept...');
+    try {
+      await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
+    } catch (p3Err) {
+      console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
+    }
+    clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
+
+  } catch (error) {
+    console.error('[GROQ-SSE] Stream connection error:', error);
+    clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the AI. Retrying...', rawError: error.message }));
+  }
+}
+
+/**
+ * GEMINI IMPLEMENTATION (Image Mode, Vision Parsing, Gemini SSE Format)
+ */
+async function streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context) {
+  const { imageBase64 } = p3Context;
+  
+  const userParts = [
+    { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
+    { text: USER_PROMPT }
+  ];
 
   const payload = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: { temperature: 0.3, maxOutputTokens: 8192, topP: 0.85, topK: 40 },
-    tools: [{ googleSearch: {} }],
     contents: [{ role: 'user', parts: userParts }]
   };
 
@@ -889,11 +985,8 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
     let streamReader = null;
     let successfulModel = null;
 
-    // OUTER LOOP: Iterate over all available API keys
     keyLoop: for (const apiKey of apiKeys) {
       const maskedKey = apiKey.substring(0, 6) + '...';
-      
-      // INNER LOOP: Iterate over all models for the current key
       for (const model of MODELS) {
         console.log(`[GEMINI] Attempting REST SSE with ${model} on Key ${maskedKey}`);
         try {
@@ -905,14 +998,14 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
 
           if (!response.ok) {
             console.warn(`[GEMINI] ${model} failed with status: ${response.status}. Switching...`);
-            continue; // Move to next model
+            continue;
           }
 
           console.log(`[GEMINI] Connected successfully to ${model} via Key ${maskedKey}`);
           success = true;
           successfulModel = model;
           streamReader = response.body.getReader();
-          break keyLoop; // Break out of ALL loops, we have a successful connection
+          break keyLoop;
         } catch (err) {
           console.warn(`[GEMINI] Network error on ${model}: ${err.message}. Switching...`);
           continue;
@@ -921,8 +1014,8 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
     }
 
     if (!success || !streamReader) {
-      console.error('[GEMINI] ALL Keys and ALL Models failed (Rate Limit or Outage).');
-      clientWs.send(JSON.stringify({ status: 'error', message: 'All AI models are currently overwhelmed or rate-limited. Please wait a few seconds and try again.', rawError: 'Total cascade failure' }));
+      console.error('[GEMINI] ALL Keys and ALL Models failed.');
+      clientWs.send(JSON.stringify({ status: 'error', message: 'All Vision AI models are currently overwhelmed or rate-limited. Please wait a few seconds and try again.', rawError: 'Total cascade failure' }));
       return;
     }
 
@@ -935,54 +1028,49 @@ IMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD,
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete line in buffer
+      buffer = lines.pop();
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.trim().slice(6);
-            if (dataStr === '[DONE]' || !dataStr) continue;
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.trim().slice(6);
+          if (dataStr === '[DONE]' || !dataStr) continue;
 
-            try {
-              const data = JSON.parse(dataStr);
-              if (data.candidates?.[0]?.content?.parts) {
-                for (const part of data.candidates[0].content.parts) {
-                  if (part.text) {
-                    let text = part.text;
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.candidates?.[0]?.content?.parts) {
+              for (const part of data.candidates[0].content.parts) {
+                if (part.text) {
+                  let text = part.text;
+                  const leakIndex = text.indexOf('"}],"role":"model"');
+                  if (leakIndex !== -1) text = text.substring(0, leakIndex);
+                  const usageIndex = text.indexOf('"usageMetadata"');
+                  if (usageIndex !== -1) text = text.substring(0, usageIndex);
 
-                    // Google API Bug Fix: The experimental 2.5 API occasionally escapes its own 
-                    // trailing JSON metadata and injects it into the final text chunk. 
-                    // We must strip it out before it hits the UI.
-                    const leakIndex = text.indexOf('"}],"role":"model"');
-                    if (leakIndex !== -1) text = text.substring(0, leakIndex);
-
-                    const usageIndex = text.indexOf('"usageMetadata"');
-                    if (usageIndex !== -1) text = text.substring(0, usageIndex);
-
-                    rawFullText += text;
-                    const sanitized = sanitizeChunk(text);
-                    fullText += sanitized;
-                    clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
-                  }
+                  rawFullText += text;
+                  const sanitized = sanitizeChunk(text);
+                  fullText += sanitized;
+                  clientWs.send(JSON.stringify({ status: 'update', text: sanitized }));
                 }
               }
-            } catch (e) {
-              console.error('[REST-SSE] Parse error on chunk:', e.message);
             }
+          } catch (e) {
+            console.error('[GEMINI-SSE] Parse error on chunk:', e.message);
           }
         }
       }
+    }
 
-      console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
-      try {
-        await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
-      } catch (p3Err) {
-        console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
-      }
-      clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
+    console.log('[GEMINI] Stream complete, executing Phase 3 Intercept...');
+    try {
+      await executePhase3Intercept(fullText, rawFullText, p3Context, clientWs);
+    } catch (p3Err) {
+      console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
+    }
+    clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
 
   } catch (error) {
-    console.error('[REST-SSE] Stream connection error:', error);
-    clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the AI. Retrying...', rawError: error.message }));
+    console.error('[GEMINI-SSE] Stream connection error:', error);
+    clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the Vision AI. Retrying...', rawError: error.message }));
   }
 }
 
