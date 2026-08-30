@@ -247,7 +247,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // === PHASE 4: DEEP SCAN INTERCEPTOR (Now reads from global cache) ===
-  if (prompt.includes('Execute Deep Scan')) {
+  if (prompt.includes('Execute Deep Scan on the') && prompt.includes('market')) {
     const marketMatch = prompt.match(/Market Region = ([^\]]+)/);
     const market = marketMatch ? marketMatch[1] : 'Global';
 
@@ -291,14 +291,17 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     }
 
     const topSetups = relevantAssets
-      .filter(r => r.status === 'success' && r.score >= 50)
+      .filter(r => r.status === 'success')
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, 5);
 
     if (topSetups.length === 0) {
-      clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but all assets are currently flat, highly volatile, or fighting the macro trend. Capital preservation mode is active. Check back later.\n` }));
+      clientWs.send(JSON.stringify({ status: 'update', text: `❌ **NO TRADES FOUND**\nThe scanner checked the ${market} market, but no valid data was returned. Please try again later.\n` }));
     } else {
       let report = `**SCAN COMPLETE: TOP ${topSetups.length} TRADES FOUND**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      if (topSetups[0].score < 50) {
+          report += `⚠️ **WARNING: CAPITAL PRESERVATION MODE**\nAll assets in this market are currently scoring below the 50/100 threshold. Market may be flat, highly volatile, or fighting the macro trend. Exercise extreme caution.\n\n`;
+      }
       topSetups.forEach((s, idx) => {
         const dirIcon = s.signalData?.direction === 'BULLISH' ? '🟢' : s.signalData?.direction === 'BEARISH' ? '🔴' : '⚪';
         report += `**#${idx + 1}. ${dirIcon} ${s.ticker}** (Score: ${s.score}/100)\n`;

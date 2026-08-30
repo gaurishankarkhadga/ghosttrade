@@ -95,6 +95,12 @@ export function startAuditWorker() {
   
   auditWorker = new Worker(path.join(__dirname, 'workers', 'auditWorker.js'));
 
+  auditWorker.on('message', (message) => {
+    if (message.type === 'AUDIT_UPDATE') {
+      workerEvents.emit('AUDIT_UPDATE');
+    }
+  });
+
   auditWorker.on('error', (err) => {
     console.error('[WORKER POOL] Audit Worker Error:', err);
   });

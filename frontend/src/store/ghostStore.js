@@ -318,6 +318,9 @@ const useGhostStore = create(
               });
               
               console.log(`[GHOST BRAIN] Global cache update: ${Object.keys(newAssets).length} assets | ${withSignals} with signals`);
+            } else if (data.type === 'AUDIT_UPDATE') {
+              console.log('[GHOST BRAIN] Audit update received. Refreshing audit data...');
+              get().initAuditData();
             }
           } catch (e) {
             console.error('WS Parse Error', e);

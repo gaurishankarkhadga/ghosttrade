@@ -898,6 +898,15 @@ async function broadcast(payload) {
 // Listen for updates from the Scanner Worker Thread
 workerEvents.on('GHOST_BRAIN_UPDATE', broadcast);
 
+workerEvents.on('AUDIT_UPDATE', () => {
+  const message = JSON.stringify({ type: 'AUDIT_UPDATE' });
+  for (const client of connectedClients) {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  }
+});
+
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
   // Add a dedicated HEAD route to instantly answer Render's health checks

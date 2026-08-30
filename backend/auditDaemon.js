@@ -11,6 +11,7 @@
 
 import { getDb } from './mongoConfig.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { parentPort } from 'worker_threads';
 
 // Initialize Gemini for Prompt Auditing
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
@@ -241,6 +242,9 @@ async function resolveSignal(signalHash, outcome, reason, actualPrice) {
     );
 
     console.log(`[AUDIT] Signal ${signalHash} resolved: ${outcome}`);
+    if (parentPort) {
+      parentPort.postMessage({ type: 'AUDIT_UPDATE' });
+    }
   } catch (error) {
     console.error(`[AUDIT] Failed to resolve signal ${signalHash}:`, error.message);
   }
@@ -662,6 +666,9 @@ async function verifyPaperTrades() {
           { $set: { status: newStatus, closedAt: new Date().toISOString(), closePrice: actualPrice, closeReason: reason } }
         );
         console.log(`[AUDIT DAEMON] Paper Trade ${trade.id} (${trade.asset}) closed with status ${newStatus}`);
+        if (parentPort) {
+          parentPort.postMessage({ type: 'AUDIT_UPDATE' });
+        }
       }
       
       await new Promise(r => setTimeout(r, 1500));
