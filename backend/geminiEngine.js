@@ -883,10 +883,20 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
 
   const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full institutional rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
 
+  // Strip out image-specific instructions so Groq doesn't get confused and abort
+  let groqSystemPrompt = systemPrompt.replace(
+    /If the image is NOT a trading chart, respond ONLY with: "INVALID INPUT — This is not a trading chart."/g,
+    ''
+  );
+  groqSystemPrompt = groqSystemPrompt.replace(
+    /If it IS a trading chart, output exactly this structure:/g,
+    'Based on the provided data, output exactly this structure:'
+  );
+
   const payload = {
     model: "groq/compound-mini",
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: groqSystemPrompt },
       { role: "user", content: textPrompt }
     ],
     temperature: 0.3,
