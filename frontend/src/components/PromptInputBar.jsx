@@ -64,13 +64,13 @@ export default function PromptInputBar({ onSend, disabled }) {
     activeTickers = activeTickers.filter(t => !t.includes('.') && !t.includes('-') && !t.includes('='));
   }
 
-  // Show ALL assets, sorted by score (ascending: lowest score first)
+  // Show ALL assets, sorted by score (descending: highest score first)
   let displayTickers = activeTickers.sort((a, b) => {
     const scoreA = assets[a]?.score || 0;
     const scoreB = assets[b]?.score || 0;
-    // Sort lowest score first (ascending), fallback to alphabetical
+    // Sort highest score first (descending), fallback to alphabetical
     if (scoreB !== scoreA) {
-      return scoreA - scoreB;
+      return scoreB - scoreA;
     }
     return a.localeCompare(b);
   });

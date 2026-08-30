@@ -293,7 +293,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // === PHASE 4: DEEP SCAN INTERCEPTOR (Now reads from global cache) ===
-  if (prompt.includes('Execute Deep Scan on the') && prompt.includes('market')) {
+  if (prompt.includes('Execute Deep Scan')) {
     const marketMatch = prompt.match(/Market Region = ([^\]]+)/);
     const market = marketMatch ? marketMatch[1] : 'Global';
 
