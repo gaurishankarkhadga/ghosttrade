@@ -136,9 +136,9 @@ export function bollingerBands(closes, period = 20, multiplier = 2) {
 
   const upper = middle + multiplier * stdDev;
   const lower = middle - multiplier * stdDev;
-  const bandwidth = ((upper - lower) / middle) * 100;
+  const bandwidth = middle !== 0 ? ((upper - lower) / middle) * 100 : 0;
   const currentPrice = closes[closes.length - 1];
-  const percentB = (currentPrice - lower) / (upper - lower);
+  const percentB = stdDev === 0 ? 0.5 : (currentPrice - lower) / (upper - lower);
 
   // Squeeze detection: bandwidth < 4% suggests compression
   const squeeze = bandwidth < 4;

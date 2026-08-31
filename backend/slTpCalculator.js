@@ -11,13 +11,13 @@ export function computeStopLossTakeProfit(candles, side, livePrice, atrMultiplie
   const currentCandle = candles[candles.length - 1];
   const currentPrice = livePrice || currentCandle.close;
 
-  // Find the structural swing low/high over the last 3 candles for safer placement
-  const recentCandles = candles.slice(-3);
+  // Find the structural swing low/high over the last 15 candles (approx 3.75 hours on 15m) for safer placement
+  const recentCandles = candles.slice(-15);
   const localLow = Math.min(...recentCandles.map(c => c.low));
   const localHigh = Math.max(...recentCandles.map(c => c.high));
 
   // Enforce a minimum safety buffer so the stop loss is never placed immediately next to the entry price
-  const minBuffer = currentPrice * 0.005; // 0.5% minimum distance
+  const minBuffer = currentPrice * 0.01; // 1.0% minimum distance (increased from 0.5% to prevent premature stop outs)
   const slDistance = Math.max(currentAtr * atrMultiplier, minBuffer);
 
   const normalizedSide = (side || '').toUpperCase() === 'BUY' ? 'LONG' : (side || '').toUpperCase() === 'SELL' ? 'SHORT' : (side || '').toUpperCase();

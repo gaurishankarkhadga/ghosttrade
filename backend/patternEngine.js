@@ -103,9 +103,10 @@ export function detectPatterns(candles) {
   
   const volAnal = volumeAnalysis(candles, 20);
   const currentVwap = vwap(candles);
+  const vwapVal = currentVwap ? currentVwap.vwap : null;
   
-  const hasInstitutionalFootprintB = volAnal.isSpike || (curr.low <= currentVwap && curr.close > currentVwap);
-  const hasInstitutionalFootprintS = volAnal.isSpike || (curr.high >= currentVwap && curr.close < currentVwap);
+  const hasInstitutionalFootprintB = volAnal.isSpike || (vwapVal !== null && curr.low <= vwapVal && curr.close > vwapVal);
+  const hasInstitutionalFootprintS = volAnal.isSpike || (vwapVal !== null && curr.high >= vwapVal && curr.close < vwapVal);
   const hasVolumeConfirmation = volAnal.relativeVolume > 1.2; // Above-average volume for multi-candle patterns
 
   // Single-candle patterns (require institutional footprint)

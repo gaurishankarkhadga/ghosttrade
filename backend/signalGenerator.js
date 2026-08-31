@@ -435,7 +435,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   // Use voting-timeframe candles for SL/TP (1h ATR matches 4h prediction window)
   // ─────────────────────────────────────────────────────
   const tradeSide = direction === 'BULLISH' ? 'LONG' : 'SHORT';
-  const slTpResult = computeStopLossTakeProfit(votingCandles, tradeSide, currentPrice, 1.5, 2.0);
+  const slTpResult = computeStopLossTakeProfit(votingCandles, tradeSide, currentPrice, 2.5, 2.0);
 
   if (!slTpResult) {
     return {

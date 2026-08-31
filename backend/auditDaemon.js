@@ -14,7 +14,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { parentPort } from 'worker_threads';
 
 // Initialize Gemini for Prompt Auditing
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const rawKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.split(',')[0].trim() : null;
+const genAI = rawKey ? new GoogleGenerativeAI(rawKey) : null;
 import { writeErrorVector } from './memoryLedger.js';
 import { resolveYahooSymbol } from './dataFetcher.js';
 import YahooFinance from 'yahoo-finance2';

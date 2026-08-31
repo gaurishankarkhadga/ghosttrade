@@ -564,21 +564,21 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
   let translationRule = '';
   if (language && language !== 'English') {
-    translationRule = `\n\n=== TRANSLATION REQUIREMENT ===\nYou MUST output your entire reasoning, analysis, explanation, and educational modules in the following language: ${language}.\nCRITICAL: Do NOT translate the exact text labels in Module 1 (e.g., "BASE CASE:", "Primary Target:", "Current Price:", "Risk-to-Reward Ratio:"). Keep those labels exactly as requested in English so the backend parser does not break.`;
+    translationRule = `\n\n[!!! CRITICAL OVERRIDE DIRECTIVE !!!]\nYOU MUST TRANSLATE YOUR ENTIRE REASONING, ANALYSIS, EXPLANATION, AND EDUCATIONAL OUTPUT TO ${language.toUpperCase()}.\nDO NOT OUTPUT IN ENGLISH except for the exact structural labels (e.g., "BASE CASE:", "Primary Target:") so the backend parser doesn't break.\nIf you fail to output the body text in ${language.toUpperCase()}, the system will crash.\n\n`;
   }
 
   // Build final system prompt — adapt IMAGE GATE for text-only mode
   const basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
   let finalSystemPrompt;
   if (isImageMode) {
-    finalSystemPrompt = basePromptTemplate + phase3Context + memoryBlock + translationRule;
+    finalSystemPrompt = translationRule + basePromptTemplate + phase3Context + memoryBlock + translationRule;
   } else {
     // Text-only: replace IMAGE GATE with data analysis instructions
     const textAdapted = basePromptTemplate.replace(
       /=== IMAGE GATE ===[\s\S]*?→ STOP\. Do not continue\./,
       `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full institutional rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
     );
-    finalSystemPrompt = textAdapted + phase3Context + memoryBlock + translationRule;
+    finalSystemPrompt = translationRule + textAdapted + phase3Context + memoryBlock + translationRule;
   }
 
   // Stream via REST SSE with Phase 3 integration

@@ -132,8 +132,8 @@ export function validateWsOrigin(req, allowedOrigins) {
   // Allow connections with no Origin header (server-to-server, mobile apps, CLI tools, CloudFront stripped)
   if (!origin) return true;
 
-  // Strict enforcement for Netlify
-  return origin === 'https://ghosttradeai-test.netlify.app';
+  // Strict enforcement for Netlify and allowed origins
+  return allowedOrigins.includes(origin) || origin === 'https://ghosttradeai-test.netlify.app';
 }
 
 /**
