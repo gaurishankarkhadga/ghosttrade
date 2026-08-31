@@ -275,9 +275,17 @@ fastify.get('/api/audit', async (request, reply) => {
       return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [], systemPerformance: null });
     }
     const db = await getDb();
-    const activePaperTrades = await db.collection('paper_trades').find({ status: { $in: ['OPEN', 'PENDING_CONFIRMATION'] } }).sort({ executedAt: -1 }).toArray();
-    const closedPaperTrades = await db.collection('paper_trades').find({ status: { $in: ['WIN', 'LOSS', 'CANCELLED'] } }).sort({ closedAt: -1 }).limit(100).toArray();
-    const promptLogs = await db.collection('prompt_logs').find({}).sort({ timestamp: -1 }).limit(200).toArray();
+    const activePaperTrades = await db.collection('paper_trades').find({ 
+      status: { $in: ['OPEN', 'PENDING_CONFIRMATION'] },
+      userId: request.user.email 
+    }).sort({ executedAt: -1 }).toArray();
+    
+    const closedPaperTrades = await db.collection('paper_trades').find({ 
+      status: { $in: ['WIN', 'LOSS', 'CANCELLED'] },
+      userId: request.user.email 
+    }).sort({ closedAt: -1 }).limit(100).toArray();
+    
+    const promptLogs = await db.collection('prompt_logs').find({ userId: request.user.email }).sort({ timestamp: -1 }).limit(200).toArray();
     const aiSignals = await db.collection('signals').find({}).sort({ timestamp: -1 }).limit(200).toArray();
     const systemPerformance = await getSystemPerformance();
 
@@ -296,9 +304,11 @@ fastify.post('/api/audit/trade', async (request, reply) => {
     }
     if (dbReady) {
       const db = await getDb();
+      // Ensure the trade is strictly bound to the requesting user
+      const securedTrade = { ...trade, userId: request.user.email };
       await db.collection('paper_trades').updateOne(
-        { id: trade.id },
-        { $set: trade },
+        { id: trade.id, userId: request.user.email },
+        { $set: securedTrade },
         { upsert: true }
       );
     }
@@ -316,7 +326,7 @@ fastify.put('/api/audit/trade/:id', async (request, reply) => {
     if (dbReady) {
       const db = await getDb();
       await db.collection('paper_trades').updateOne(
-        { id },
+        { id, userId: request.user.email },
         { $set: updates }
       );
     }
@@ -336,6 +346,7 @@ fastify.post('/api/audit/prompt', async (request, reply) => {
       const auditDueTime = new Date(Date.now() + 4 * 60 * 60 * 1000); 
       await db.collection('prompt_logs').insertOne({
         ...promptLog,
+        userId: request.user.email, // Force ownership
         timestamp: promptLog.timestamp || new Date().toISOString(),
         auditDue: auditDueTime,
         resolvedOutcome: null, // Will be CORRECT / INCORRECT / INCONCLUSIVE
@@ -354,7 +365,11 @@ fastify.get('/api/audit/prompts', async (request, reply) => {
   try {
     if (dbReady) {
       const db = await getDb();
-      const audits = await db.collection('prompt_logs').find({}).sort({ timestamp: -1 }).limit(100).toArray();
+      const audits = await db.collection('prompt_logs')
+        .find({ userId: request.user.email })
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .toArray();
       return reply.send(audits);
     }
     return reply.send([]);
