@@ -731,6 +731,8 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .report-card {
@@ -740,6 +742,10 @@
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
   animation: slideDownFade 0.3s ease-out forwards;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .report-card-header {
@@ -881,6 +887,8 @@
   padding: 12px 16px;
   margin: 0;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .number-text {
@@ -909,12 +917,26 @@
 /* Expand AI Output Width on Mobile */
 @media (max-width: 767px) {
   .message-wrapper.ai.full-width {
-    width: calc(100% + 1.5rem);
-    max-width: calc(100% + 1.5rem);
+    width: 100%;
+    max-width: 100%;
   }
   
   .message-wrapper.ai:not(.full-width) {
-    max-width: calc(90% + 1.5rem);
+    max-width: 100%;
+  }
+
+  .terminal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .trade-header-info {
+    flex-wrap: wrap;
+  }
+
+  .visual-trading-grid {
+    grid-template-columns: 1fr;
   }
 }
 

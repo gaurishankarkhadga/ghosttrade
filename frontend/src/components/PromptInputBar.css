@@ -309,7 +309,19 @@
 }
 
 /* Mobile-Native Adjustments */
+.mobile-market-text {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  .desktop-market-text {
+    display: none;
+  }
+  
+  .mobile-market-text {
+    display: inline;
+  }
+
   .bolt-prompt-container {
     padding: 0.5rem;
   }

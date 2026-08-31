@@ -83,6 +83,7 @@ export function PricingModal() {
   const forceLock = role === 'trader' && promptsUsed >= 3;
 
   const selectedPlanRef = useRef(null);
+  const paddleRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -95,12 +96,23 @@ export function PricingModal() {
           console.log('[PADDLE EVENT]', event.name, event.data);
           if (event.name === 'checkout.completed') {
             syncSubscription(selectedPlanRef.current);
+            
+            // Programmatically close the overlay to prevent full page reload
+            if (paddleRef.current && paddleRef.current.Checkout) {
+              paddleRef.current.Checkout.close();
+            } else if (typeof window !== 'undefined' && window.Paddle) {
+              window.Paddle.Checkout.close();
+            }
+            
             navigate('/terminal');
           }
         }
       })
         .then((p) => {
-          if (isMounted && p) setPaddle(p);
+          if (isMounted && p) {
+            setPaddle(p);
+            paddleRef.current = p;
+          }
         })
         .catch((err) => {
           console.error('[PADDLE INIT ERROR]', err);

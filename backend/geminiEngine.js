@@ -215,7 +215,13 @@ export async function handleGeminiConnection(clientWs, options = {}) {
         console.log(`[GLOBAL CACHE HIT] ${extractedTicker} — serving pre-computed analysis (0ms recalculation)`);
         
         // Stream the cached analysis as formatted chat text
-        const analysisText = formatCachedAnalysisAsChat(cachedAsset);
+        let analysisText = formatCachedAnalysisAsChat(cachedAsset);
+        
+        if (language && language !== 'English') {
+          clientWs.send(JSON.stringify({ status: 'update', text: `_Translating analysis to ${language}..._\n\n` }));
+          analysisText = await translateTextWithGroq(analysisText, language);
+        }
+
         const lines = analysisText.split('\n');
         for (const line of lines) {
           clientWs.send(JSON.stringify({ status: 'update', text: line + '\n' }));
@@ -362,6 +368,11 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
       const cacheInfo = await getCacheInfo();
       report += `_Data freshness: ${cacheInfo.ageMs ? Math.round(cacheInfo.ageMs / 1000) : '?'}s ago | Scan cycle #${cacheInfo.scanCycleCount}_\n`;
+
+      if (language && language !== 'English') {
+        clientWs.send(JSON.stringify({ status: 'update', text: `_Translating Deep Scan to ${language}..._\n\n` }));
+        report = await translateTextWithGroq(report, language);
+      }
 
       const parts = report.split('\n');
       for (const p of parts) {
@@ -866,6 +877,37 @@ async function streamViaRestSSE(clientWs, apiKeys, systemPrompt, p3Context = {})
     // IMAGE MODE -> Route to Gemini API
     console.log('[ROUTER] Image upload detected. Routing to Gemini API (Vision).');
     await streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context);
+  }
+}
+
+/**
+ * On-the-fly translation for Global Cache and Deep Scan strings
+ */
+async function translateTextWithGroq(text, targetLanguage) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return text;
+  
+  const payload = {
+    model: "llama-3.1-8b-instant", // fast and reliable for translation
+    messages: [
+      { role: "system", content: `You are a professional financial translator. Translate the following trading analysis into ${targetLanguage}. Maintain all markdown formatting, bullet points, emojis, and numerical values exactly as they are.` },
+      { role: "user", content: text }
+    ],
+    temperature: 0.1
+  };
+  
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) return text;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || text;
+  } catch (e) {
+    console.error("[TRANSLATION] Failed:", e.message);
+    return text;
   }
 }
 

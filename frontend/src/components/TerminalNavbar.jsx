@@ -153,11 +153,6 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
                   </button>
                 )}
 
-                <button className="dropdown-item" onClick={() => { navigate('/settings'); setIsDropdownOpen(false); }}>
-                  <Activity size={16} />
-                  <span>Global Markets</span>
-                </button>
-
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
                 <button className="dropdown-item danger" onClick={() => { onLockTerminal(); setIsDropdownOpen(false); }}>
                   <LogOut size={16} />

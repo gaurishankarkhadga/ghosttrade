@@ -19,6 +19,22 @@ export default function PromptInputBar({ onSend, disabled }) {
   const MARKETS = ['Crypto', 'United States', 'India', 'United Kingdom', 'Japan', 'Europe', 'Australia', 'Hong Kong', 'South Korea', 'Canada', 'Brazil', 'Singapore', 'Forex'];
   const LANGUAGES = ['English', 'Hindi', 'Japanese', 'Spanish', 'Portuguese', 'Arabic', 'Korean', 'French', 'German'];
 
+  const MARKET_SHORT_NAMES = {
+    'Crypto': 'Crypto',
+    'United States': 'US',
+    'India': 'IN',
+    'United Kingdom': 'UK',
+    'Japan': 'JP',
+    'Europe': 'EU',
+    'Australia': 'AU',
+    'Hong Kong': 'HK',
+    'South Korea': 'KR',
+    'Canada': 'CA',
+    'Brazil': 'BR',
+    'Singapore': 'SG',
+    'Forex': 'Forex'
+  };
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -64,10 +80,22 @@ export default function PromptInputBar({ onSend, disabled }) {
     activeTickers = activeTickers.filter(t => !t.includes('.') && !t.includes('-') && !t.includes('='));
   }
 
-  // Show ALL assets, sorted by score (descending: highest score first)
+  // Show ALL assets, sorted by profitability (TRADE signals first), then by score (descending)
   let displayTickers = activeTickers.sort((a, b) => {
-    const scoreA = assets[a]?.score || 0;
-    const scoreB = assets[b]?.score || 0;
+    const assetA = assets[a]?.signalData;
+    const assetB = assets[b]?.signalData;
+    
+    const isTradeA = assetA?.action === 'TRADE' ? 1 : 0;
+    const isTradeB = assetB?.action === 'TRADE' ? 1 : 0;
+
+    // Sort by profitable TRADE signals first
+    if (isTradeA !== isTradeB) {
+      return isTradeB - isTradeA;
+    }
+
+    const scoreA = assetA?.score || 0;
+    const scoreB = assetB?.score || 0;
+    
     // Sort highest score first (descending), fallback to alphabetical
     if (scoreB !== scoreA) {
       return scoreB - scoreA;
@@ -225,7 +253,9 @@ export default function PromptInputBar({ onSend, disabled }) {
             <div className="market-dropdown-container" ref={dropdownRef}>
               <div className="bolt-model-selector" onClick={() => { setIsMarketDropdownOpen(!isMarketDropdownOpen); setIsLangDropdownOpen(false); }}>
                 <Globe size={14} fill="none" stroke="currentColor" strokeWidth={2} /> 
-                {market} <ChevronDown size={14} />
+                <span className="desktop-market-text">{market}</span>
+                <span className="mobile-market-text">{MARKET_SHORT_NAMES[market] || market}</span>
+                <ChevronDown size={14} />
               </div>
               <AnimatePresence>
                 {isMarketDropdownOpen && (

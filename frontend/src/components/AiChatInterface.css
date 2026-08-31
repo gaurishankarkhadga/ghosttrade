@@ -236,6 +236,7 @@
     /* Reduced padding so Flexbox naturally centers the entire block */
     -ms-overflow-style: none;
     scrollbar-width: none;
+    overflow-x: hidden;
   }
 
   .chat-scroll-container::-webkit-scrollbar {

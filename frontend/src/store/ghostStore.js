@@ -13,6 +13,8 @@ const useGhostStore = create(
       wsStatus: 'DISCONNECTED',
       
       syncSubscription: async (planId) => {
+        // Optimistically update the role instantly to prevent route race conditions
+        set({ role: planId });
         const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         try {
           const res = await fetch(`${baseUrl}/api/auth/paddle-sync`, {
