@@ -32,6 +32,8 @@ import { getWatchlistForRegions, listAvailableRegions } from './globalWatchlists
 import { generateSignal } from './signalGenerator.js';
 import { runBulkScanPhase4 } from './scannerEngine.js';
 import { getGlobalAssetAnalysis, getAllCachedAssets, formatCachedAnalysisAsChat, getCacheInfo } from './globalAnalysisCache.js';
+import { handleConversation } from './conversationEngine.js';
+import { classifyIntentWithGroq } from './intentClassifier.js';
 
 // =====================================================
 // SIGNAL COOLDOWN — Prevents duplicate signal spam
@@ -196,9 +198,12 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   const imageBase64Raw = options.imageBase64 || null;
   const isImageRequest = !!imageBase64Raw;
   
+  let requestIntent = 'FULL_ANALYSIS';
+  let cleanPrompt = prompt;
+
   if (!isImageRequest && !prompt.includes('Execute Deep Scan')) {
     // Extract ticker from the prompt text
-    const cleanPrompt = prompt.replace(/\[Context: Market Region = [^\]]+\]\n?/, '').trim();
+    cleanPrompt = prompt.replace(/\[Context: Market Region = [^\]]+\]\n?/, '').trim();
     const extractedTicker = extractTickerFromText(cleanPrompt);
     
     // Check if this is a simple ticker lookup (not a complex question)
@@ -295,6 +300,27 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       }
       // If no cache hit, fall through to the full pipeline (first-time analysis)
       console.log(`[GLOBAL CACHE MISS] ${extractedTicker} — falling through to full analysis pipeline`);
+    }
+
+    // === ADVANCED INTENT ROUTING (4-TIER) ===
+    // If it's not a simple lookup (e.g. they asked a full sentence question), classify the intent before doing anything heavy.
+    if (!isSimpleLookup) {
+      console.log(`[INTENT ROUTER] Classifying prompt: "${cleanPrompt.substring(0, 50)}..."`);
+      requestIntent = await classifyIntentWithGroq(cleanPrompt);
+      console.log(`[INTENT ROUTER] Classification result: ${requestIntent}`);
+
+      if (requestIntent === 'CLARIFICATION_NEEDED') {
+        clientWs.send(JSON.stringify({ status: 'update', text: `Did you mean you want me to run a complete institutional analysis on a specific asset? Please provide the exact ticker symbol (e.g., AAPL, BTC, TSLA).` }));
+        clientWs.send(JSON.stringify({ status: 'end' }));
+        return;
+      }
+
+      if (requestIntent === 'PURE_CONVERSATION') {
+        return await handleConversation(clientWs, cleanPrompt, language);
+      }
+
+      // If DATA_BACKED_CONVERSATION or FULL_ANALYSIS, allow it to fall through to the Phase 2-4 data fetching pipeline.
+      // DATA_BACKED_CONVERSATION will fetch real data to prove its conversational answer.
     }
   }
 
@@ -568,13 +594,25 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // Build final system prompt — adapt IMAGE GATE for text-only mode
-  const basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  let basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
+  if (requestIntent === 'DATA_BACKED_CONVERSATION') {
+    basePromptTemplate = `You are Ghost, an elite quantitative institutional trader. 
+You are answering a specific, conversational question about an asset from the user. 
+Do NOT output the standard BASE CASE or TRADE LEVELS format. Instead, answer the user's question directly, mathematically, and strictly using the real-time order flow and technical indicator data injected below.
+If the data shows weakness, state it aggressively. If it shows strength, state it. 
+No AI fluff. Answer like a seasoned portfolio manager.
+USER'S QUESTION: "${prompt}"`;
+  }
+
   let finalSystemPrompt;
-  if (isImageMode) {
+  if (isImageMode && requestIntent !== 'DATA_BACKED_CONVERSATION') {
     finalSystemPrompt = translationRule + basePromptTemplate + phase3Context + memoryBlock + translationRule;
   } else {
     // Text-only: replace IMAGE GATE with data analysis instructions
-    const textAdapted = basePromptTemplate.replace(
+    const textAdapted = requestIntent === 'DATA_BACKED_CONVERSATION'
+      ? basePromptTemplate
+      : basePromptTemplate.replace(
       /=== IMAGE GATE ===[\s\S]*?→ STOP\. Do not continue\./,
       `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full institutional rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
     );
@@ -595,7 +633,8 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     candles1d: tf1dRef,
     currentPrice: currentPriceRef,
     promptsUsed: promptsUsed,
-    isSimpleMode: isSimpleMode
+    isSimpleMode: isSimpleMode,
+    requestIntent: requestIntent
   });
 }
 
@@ -606,6 +645,11 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
 async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs) {
   try {
+    if (p3Context.requestIntent === 'DATA_BACKED_CONVERSATION') {
+      console.log('[PHASE 3] Bypassing intercept for DATA_BACKED_CONVERSATION.');
+      return;
+    }
+
     if (fullText.includes('INVALID INPUT')) {
       console.log('[PHASE 3] Invalid input detected (not a chart). Aborting intercept.');
       return;
