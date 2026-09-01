@@ -286,7 +286,7 @@ fastify.get('/api/audit', async (request, reply) => {
     }).sort({ closedAt: -1 }).limit(100).toArray();
     
     const promptLogs = await db.collection('prompt_logs').find({ userId: request.user.email }).sort({ timestamp: -1 }).limit(200).toArray();
-    const aiSignals = await db.collection('signals').find({}).sort({ timestamp: -1 }).limit(200).toArray();
+    const aiSignals = await db.collection('signals').find({ userId: request.user.email }).sort({ timestamp: -1 }).limit(200).toArray();
     const systemPerformance = await getSystemPerformance();
 
     return reply.send({ activePaperTrades, closedPaperTrades, promptLogs, aiSignals, systemPerformance });
@@ -874,7 +874,8 @@ fastify.register(async function chatRoutes(fastify) {
             imageBase64: message.image || null,
             language: sanitizeString(message.language, 30) || 'English',
             isSimpleMode: !!message.isSimpleMode,
-            promptsUsed: promptsUsed
+            promptsUsed: promptsUsed,
+            userId: decoded.email
           });
         } catch (err) {
           console.error('[CHAT WS] Processing error:', err.message);

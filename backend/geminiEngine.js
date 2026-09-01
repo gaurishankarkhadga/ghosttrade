@@ -277,7 +277,8 @@ export async function handleGeminiConnection(clientWs, options = {}) {
               engineScore: s.score || null,
               engineScoreBreakdown: s.scoreBreakdown || null,
               predictionSummary: analysisText.substring(0, 2000),
-              userPrompt: prompt
+              userPrompt: prompt,
+              userId: options.userId || null
             };
             
             // Check cooldown — prevent duplicate signals for the same ticker within 15 min
@@ -634,7 +635,8 @@ USER'S QUESTION: "${prompt}"`;
     currentPrice: currentPriceRef,
     promptsUsed: promptsUsed,
     isSimpleMode: isSimpleMode,
-    requestIntent: requestIntent
+    requestIntent: requestIntent,
+    userId: options.userId || null
   });
 }
 
@@ -655,7 +657,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       return;
     }
 
-    const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt } = p3Context;
+    const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt, userId } = p3Context;
 
     // ═══════════════════════════════════════════════════════
     // DETERMINISTIC SIGNAL GENERATOR — Engine decides, not AI
@@ -844,7 +846,8 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       engineScore: signal?.score ?? null,
       engineScoreBreakdown: signal?.scoreBreakdown ?? null,
       predictionSummary: fullText.substring(0, 2000),
-      userPrompt: p3Context.userPrompt || "Chart Analysis"
+      userPrompt: userPrompt || "Chart Analysis",
+      userId: userId
     };
 
     // ═══════════════════════════════════════════════════════

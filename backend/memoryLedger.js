@@ -183,6 +183,7 @@ export async function logSignal(data) {
       blockedReason:        data.blockedReason        ?? null,
       tradeTimeframe:       data.tradeTimeframe       ?? 'INTRADAY',
       predictionSummary:    data.predictionSummary    || '',
+      userId:               data.userId               || null,
       resolvedOutcome:      null,
       resolvedAt:           null,
       actualPrice:          null,
