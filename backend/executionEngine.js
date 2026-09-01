@@ -143,7 +143,7 @@ class UnifiedExecutionEngine {
         console.log(`\n⚡ [EXECUTION] Processing ${side} setup on ${asset} @ $${entryPrice} [Mode: ${activeMode}]`);
 
         // 1. Portfolio Risk Check (includes Black Swan circuit breaker for crypto via live depth data)
-        const riskCheck = await canOpenNewTrade(asset, side);
+        const riskCheck = await canOpenNewTrade(asset, side, userId);
         if (!riskCheck.allowed) {
             console.warn(`❌ [EXECUTION BLOCKED] Risk control denied trade: ${riskCheck.reason}`);
             return { success: false, reason: riskCheck.reason };

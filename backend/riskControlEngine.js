@@ -115,8 +115,12 @@ function computeBlackSwanMetrics(ticker) {
  * Checks portfolio-level risk constraints before allowing a new trade.
  * @returns { allowed: boolean, reason?: string, ... }
  */
-export async function canOpenNewTrade(newTradeAsset, newTradeSide) {
+export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
   try {
+    if (!userId) {
+      return { allowed: false, reason: "MISSING_USER_ID", detail: "Tenant isolation failed" };
+    }
+
     const db = await getDb();
     const tradesColl = db.collection('paper_trades');
 
@@ -138,8 +142,8 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide) {
       }
     }
 
-    // CHECK 1 — Max Concurrent Trades Limit
-    const openTrades = await tradesColl.find({ status: 'OPEN' }).toArray();
+    // CHECK 1 — Max Concurrent Trades Limit (Per User)
+    const openTrades = await tradesColl.find({ status: 'OPEN', userId }).toArray();
     if (openTrades.length >= RISK_CONFIG.max_concurrent_trades) {
       return { 
         allowed: false, 
@@ -155,7 +159,8 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide) {
 
     const closedTradesToday = await tradesColl.find({ 
       status: { $in: ['CLOSED_TP', 'CLOSED_SL', 'WIN', 'LOSS'] },
-      closedAt: { $gte: todayISO } 
+      closedAt: { $gte: todayISO },
+      userId
     }).toArray();
 
     // Calculate PNL impact in raw decimals (e.g. 0.05 = 5%)

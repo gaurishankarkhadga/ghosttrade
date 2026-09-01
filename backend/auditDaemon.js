@@ -211,8 +211,8 @@ async function getActiveSignals() {
       .find({
         resolvedOutcome: null,
       })
-      .sort({ timestamp: 1 }) // Older signals evaluated first
-      .limit(50) // Process max 50 per cycle
+      .sort({ timestamp: -1 }) // Newest signals evaluated first to prevent starvation
+      .limit(500) // Process max 500 per cycle
       .toArray();
 
     return signals;
@@ -315,7 +315,9 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
   const ctx = extractAnalyticalContext(predictionSummary);
   
   const now = new Date();
-  const isExpired = auditDue ? now >= new Date(auditDue) : false;
+  // Fallback due date: 48 hours after creation if auditDue is missing
+  const fallbackDue = new Date(new Date(signal.timestamp || Date.now()).getTime() + 48 * 60 * 60 * 1000);
+  const isExpired = signal.auditDue ? now >= new Date(signal.auditDue) : now >= fallbackDue;
 
   function buildErrorContext(baseReason) {
     const contextParts = [baseReason];
@@ -503,62 +505,76 @@ async function runAuditCycle() {
     
     console.log(`[AUDIT DAEMON] Evaluating ${activeSignals.length} active signal(s) continuously...`);
 
+    // Group signals by ticker to drastically reduce API calls and eliminate O(N) waiting
+    const signalsByTicker = {};
     for (const signal of activeSignals) {
+      const t = signal.ticker || 'UNKNOWN';
+      if (!signalsByTicker[t]) signalsByTicker[t] = [];
+      signalsByTicker[t].push(signal);
+    }
+
+    for (const ticker of Object.keys(signalsByTicker)) {
       try {
-        // Fetch real-time price
-        const actualPrice = await fetchCurrentPrice(signal.ticker);
+        const tickerSignals = signalsByTicker[ticker];
+        // Fetch real-time price ONCE per ticker
+        const actualPrice = await fetchCurrentPrice(ticker);
         
-        if (actualPrice === null) {
-          // If price fetch fails, check if the signal has already expired
-          const isExpired = signal.auditDue ? new Date() >= new Date(signal.auditDue) : false;
-          if (isExpired) {
-            await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available at expiration', null);
+        for (const signal of tickerSignals) {
+          try {
+            if (actualPrice === null) {
+              // If price fetch fails, check if the signal has already expired
+              const fallbackDue = new Date(new Date(signal.timestamp || Date.now()).getTime() + 48 * 60 * 60 * 1000);
+              const isExpired = signal.auditDue ? new Date() >= new Date(signal.auditDue) : new Date() >= fallbackDue;
+              if (isExpired) {
+                await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available at expiration', null);
+              }
+              continue; // Skip evaluation this cycle, try again next time
+            }
+
+            // CONTINUOUS HIGH-WATER MARK TRACKING
+            const currentMax = signal.maxObservedPrice || signal.currentPrice || actualPrice;
+            const currentMin = signal.minObservedPrice || signal.currentPrice || actualPrice;
+            const newMax = Math.max(currentMax, actualPrice);
+            const newMin = Math.min(currentMin, actualPrice);
+
+            // Update DB so marks persist across daemon restarts
+            const db = await getDb();
+            await db.collection('signals').updateOne(
+              { _id: signal._id },
+              { $set: { maxObservedPrice: newMax, minObservedPrice: newMin } }
+            );
+
+            // Evaluate signal accuracy using the high-water marks
+            const evaluation = evaluateSignal(signal, actualPrice, newMax, newMin);
+
+            if (evaluation.correct === 'PENDING') {
+              // Keep the signal active, do not resolve it yet
+              continue; 
+            }
+
+            if (evaluation.correct === false) {
+              // === ERROR VECTOR COMPILATION ===
+              await writeErrorVector(
+                signal.ticker,
+                evaluation.reason,
+                signal._id
+              );
+              await resolveSignal(signal._id, 'INCORRECT', evaluation.reason, actualPrice);
+            } else if (evaluation.correct === true) {
+              await resolveSignal(signal._id, 'CORRECT', evaluation.reason, actualPrice);
+            } else {
+              await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);
+            }
+          } catch (error) {
+            console.error(`[AUDIT DAEMON] Error processing signal ${signal._id}:`, error.message);
           }
-          continue; // Skip evaluation this cycle, try again next time
-        }
+        } // end for signal of tickerSignals
 
-        // CONTINUOUS HIGH-WATER MARK TRACKING
-        const currentMax = signal.maxObservedPrice || signal.currentPrice || actualPrice;
-        const currentMin = signal.minObservedPrice || signal.currentPrice || actualPrice;
-        const newMax = Math.max(currentMax, actualPrice);
-        const newMin = Math.min(currentMin, actualPrice);
-
-        // Update DB so marks persist across daemon restarts
-        const db = await getDb();
-        await db.collection('signals').updateOne(
-          { _id: signal._id },
-          { $set: { maxObservedPrice: newMax, minObservedPrice: newMin } }
-        );
-
-        // Evaluate signal accuracy using the high-water marks
-        const evaluation = evaluateSignal(signal, actualPrice, newMax, newMin);
-
-        if (evaluation.correct === 'PENDING') {
-          // Keep the signal active, do not resolve it yet
-          // Rate limit: wait 1.5s between API calls to prevent IP ban
-          await new Promise(r => setTimeout(r, 1500));
-          continue; 
-        }
-
-        if (evaluation.correct === false) {
-          // === ERROR VECTOR COMPILATION ===
-          await writeErrorVector(
-            signal.ticker,
-            evaluation.reason,
-            signal._id
-          );
-          await resolveSignal(signal._id, 'INCORRECT', evaluation.reason, actualPrice);
-        } else if (evaluation.correct === true) {
-          await resolveSignal(signal._id, 'CORRECT', evaluation.reason, actualPrice);
-        } else {
-          await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);
-        }
-
-        // Rate limit: wait 1.5s between price API calls
+        // Rate limit: wait 1.5s between unique ticker price API calls
         await new Promise(r => setTimeout(r, 1500));
 
       } catch (error) {
-        console.error(`[AUDIT DAEMON] Error processing signal ${signal._id}:`, error.message);
+        console.error(`[AUDIT DAEMON] Error processing ticker ${ticker}:`, error.message);
       }
     }
     
