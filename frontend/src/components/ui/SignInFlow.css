@@ -133,6 +133,9 @@ body::-webkit-scrollbar {
 .success-icon-wrapper { margin: 0 auto; width: 4rem; height: 4rem; border-radius: 50%; background: linear-gradient(to bottom right, #fff, rgba(255,255,255,0.7)); display: flex; align-items: center; justify-content: center; }
 .success-icon { width: 2rem; height: 2rem; color: #000; }
 
+.mobile-only-auth-flow { display: flex; flex-direction: column; width: 100%; }
+@media (min-width: 640px) { .mobile-only-auth-flow { display: none !important; } }
+
 /* Mobile specific fixes to prevent horizontal overflow */
 @media (max-width: 768px) {
   html, body, .signin-wrapper, .main-area {
@@ -140,4 +143,12 @@ body::-webkit-scrollbar {
     max-width: 100vw;
   }
 }
+.signup-wrapper-adjust {
+  margin-top: 60px;
+}
 
+@media (max-width: 768px) {
+  .signup-wrapper-adjust {
+    margin-top: 40px;
+  }
+}

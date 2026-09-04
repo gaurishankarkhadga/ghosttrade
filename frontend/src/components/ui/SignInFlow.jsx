@@ -132,8 +132,8 @@ export function MiniNavbar({ onModeSwitch }) {
         </div>
         <nav className="desktop-nav">
           <AnimatedNavLink href="/about">About</AnimatedNavLink>
-          <AnimatedNavLink href="#">Features</AnimatedNavLink>
-          <AnimatedNavLink href="#">Pricing</AnimatedNavLink>
+          <AnimatedNavLink href="/why-us">Why Us</AnimatedNavLink>
+          <AnimatedNavLink href="/pricing">Pricing</AnimatedNavLink>
         </nav>
         <div className="auth-buttons">
           <button className="login-btn" onClick={() => handleAction('login')}>Sign In</button>
@@ -154,8 +154,8 @@ export function MiniNavbar({ onModeSwitch }) {
       <div className={`mobile-menu ${isOpen ? 'open' : 'closed'}`}>
         <nav className="mobile-nav-links">
           <Link to="/about"><Terminal size={18} /><span>About</span></Link>
-          <a href="#"><Activity size={18} /><span>Features</span></a>
-          <a href="#"><BrainCircuit size={18} /><span>Pricing</span></a>
+          <Link to="/why-us"><Activity size={18} /><span>Why Us</span></Link>
+          <Link to="/pricing"><BrainCircuit size={18} /><span>Pricing</span></Link>
         </nav>
         <div className="mobile-auth-buttons">
           <button className="login-btn mobile-action-btn" onClick={() => { setIsOpen(false); handleAction('login'); }}>
@@ -322,9 +322,25 @@ export const SignInPage = ({ onLoginSuccess }) => {
                         {isLoading ? 'Authenticating...' : 'Sign In to Terminal'}
                       </button>
                     </form>
+
+                    <div className="mobile-only-auth-flow">
+                      <div className="divider" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+                        <div className="divider-line"></div>
+                        <span className="divider-text">NEW TRADER?</span>
+                        <div className="divider-line"></div>
+                      </div>
+
+                      <button 
+                        type="button"
+                        onClick={() => { setStep('signup'); setErrorMsg(''); }}
+                        className="google-btn justify-center outline-btn"
+                      >
+                        Create Quant Account
+                      </button>
+                    </div>
                   </motion.div>
                 ) : step === "signup" ? (
-                  <motion.div key="signup" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper">
+                  <motion.div key="signup" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper signup-wrapper-adjust">
                     <div>
                       <h1 className="hero-title">Create Account</h1>
                     </div>
@@ -350,6 +366,16 @@ export const SignInPage = ({ onLoginSuccess }) => {
                         {isLoading ? 'Creating Account...' : 'Create Quant Account'}
                       </button>
                     </form>
+
+                    <div className="auth-options-row mobile-only-auth-flow" style={{ justifyContent: 'center', marginTop: '1.5rem', flexDirection: 'row' }}>
+                      <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Already have an account?{' '}
+                        <span className="auth-link" style={{ color: '#fff', fontWeight: '500' }} onClick={() => { setStep('login'); setErrorMsg(''); }}>
+                          Sign In
+                        </span>
+                      </span>
+                    </div>
+
                     <p className="legal-text">
                       By creating an account, you agree to the <Link to="#">MSA</Link>, <Link to="#">Product Terms</Link>, <Link to="#">Policies</Link>.
                     </p>

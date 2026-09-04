@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { initializePaddle } from '@paddle/paddle-js';
 import useGhostStore from '../store/ghostStore';
+import { PublicLayout } from './ui/SignInFlow';
 import './PricingModal.css';
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: (custom) => ({
+    opacity: 1, 
+    y: 0,
+    transition: { delay: custom * 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }
+  })
+};
 
 const PADDLE_CLIENT_TOKEN = import.meta.env.VITE_PADDLE_CLIENT_TOKEN || import.meta.env.PADDLE_CLIENT_SIDE_TOKEN;
 const PADDLE_ENV = import.meta.env.VITE_PADDLE_ENV || 'sandbox';
@@ -79,8 +90,8 @@ export function PricingModal() {
   const [loadingPriceId, setLoadingPriceId] = useState(null);
   const [initError, setInitError] = useState(null);
 
-  const { role, email: userEmail, promptsUsed, syncSubscription } = useGhostStore();
-  const forceLock = role === 'trader' && promptsUsed >= 3;
+  const { role, email: userEmail, promptsUsed, syncSubscription, isAuthenticated } = useGhostStore();
+  const forceLock = isAuthenticated && role === 'trader' && promptsUsed >= 3;
 
   const selectedPlanRef = useRef(null);
   const paddleRef = useRef(null);
@@ -126,6 +137,11 @@ export function PricingModal() {
   }, [navigate, syncSubscription]);
 
   const handleSubscribe = (plan) => {
+    if (!isAuthenticated) {
+      navigate('/connect', { state: { mode: 'signup' } });
+      return;
+    }
+
     selectedPlanRef.current = plan.id;
     const priceId = billingCycle === 'monthly' ? plan.monthlyPriceId : plan.yearlyPriceId;
     setLoadingPriceId(priceId);
@@ -158,16 +174,31 @@ export function PricingModal() {
   };
 
   return (
-    <div className="pricing-modal-overlay">
-      <div className="pricing-modal-container">
-        {!forceLock && <button className="pricing-modal-close" onClick={() => navigate('/terminal')}>&times;</button>}
+    <PublicLayout onModeSwitch={(mode) => navigate('/connect', { state: { mode } })}>
+      <div className="pricing-page-wrapper">
+        <div className="pricing-modal-container">
+          <div className="pricing-header">
+            <motion.h2 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.5 }}
+            >
+              Select Your Operational Edge
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+            >
+              Institutional-grade AI quantitative signals, automated risk management, and multi-broker routing.
+            </motion.p>
 
-        <div className="pricing-header">
-          <div className="pricing-title-badge">⚡ GHOSTTRADE INTELLIGENCE SUITE</div>
-          <h2>Select Your Operational Edge</h2>
-          <p>Institutional-grade AI quantitative signals, automated risk management, and multi-broker routing.</p>
-
-          <div className="billing-toggle-container">
+          <motion.div 
+            className="billing-toggle-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+          >
             <span className={billingCycle === 'monthly' ? 'active' : ''}>Monthly Billing</span>
             <button
               className={`billing-toggle-btn ${billingCycle === 'yearly' ? 'yearly' : ''}`}
@@ -176,15 +207,15 @@ export function PricingModal() {
               <div className="billing-toggle-thumb" />
             </button>
             <span className={billingCycle === 'yearly' ? 'active' : ''}>
-              Annual Billing <span className="discount-pill">SAVE 17%</span>
+              Annual Billing <span className="discount-pill font-mono">SAVE 17%</span>
             </span>
-          </div>
+          </motion.div>
         </div>
 
         {initError && <div className="pricing-error-banner">{initError}</div>}
 
         <div className="pricing-grid">
-          {PLANS.map((plan) => {
+          {PLANS.map((plan, index) => {
             const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
             const priceId = billingCycle === 'monthly' ? plan.monthlyPriceId : plan.yearlyPriceId;
             const isSelectedLoading = loadingPriceId === priceId;
@@ -200,19 +231,24 @@ export function PricingModal() {
             else if (isDowngrade) buttonText = 'Included in Current Plan';
 
             return (
-              <div
+              <motion.div
                 key={plan.id}
+                custom={index}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: "-50px" }}
+                variants={cardVariants}
                 className={`pricing-card ${plan.popular ? 'popular' : ''}`}
               >
-                {plan.popular && <div className="popular-tag">MOST POPULAR</div>}
-                <div className="plan-badge">{plan.badge}</div>
+                {plan.popular && <div className="popular-tag font-mono">MOST POPULAR</div>}
+                <div className="plan-badge font-mono">{plan.badge}</div>
                 <h3 className="plan-title">{plan.name}</h3>
                 <p className="plan-description">{plan.description}</p>
 
                 <div className="plan-price-box">
-                  <span className="currency">$</span>
-                  <span className="price-number">{price}</span>
-                  <span className="period">/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                  <span className="currency font-mono">$</span>
+                  <span className="price-number font-mono">{price}</span>
+                  <span className="period font-mono">/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                 </div>
 
                 <ul className="plan-features">
@@ -231,15 +267,22 @@ export function PricingModal() {
                 >
                   {buttonText}
                 </button>
-              </div>
+              </motion.div>
             );
           })}
         </div>
 
-        <div className="pricing-footer-note">
+        <motion.div 
+          className="pricing-footer-note font-mono"
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.5, duration: 0.5 }}
+        >
           🔒 Payments secured by Paddle (Merchant of Record). Cancel anytime during trial with 0 charge.
-        </div>
+        </motion.div>
       </div>
-    </div>
+      </div>
+    </PublicLayout>
   );
 }

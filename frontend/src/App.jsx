@@ -12,6 +12,7 @@ import OAuthCallback from './components/OAuthCallback';
 
 import { PricingModal } from './components/PricingModal';
 import GhostAbout from './components/GhostAbout';
+import { WhyGhostTrade } from './components/WhyGhostTrade';
 
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
@@ -69,7 +70,11 @@ export default function App() {
       />
       
       {/* Public About Route */}
+      <Route path="/" element={<GhostAbout />} />
       <Route path="/about" element={<GhostAbout />} />
+      
+      {/* Public Why Us Route */}
+      <Route path="/why-us" element={<WhyGhostTrade />} />
 
       {/* Protected Terminal Workspace Route */}
       <Route 
@@ -107,12 +112,10 @@ export default function App() {
         element={<OAuthCallback />} 
       />
 
-      {/* Protected Pricing Route (No Sidebar) */}
+      {/* Pricing Route */}
       <Route 
         path="/pricing" 
-        element={
-          isAuthenticated ? <PricingModal /> : <Navigate to="/connect" replace />
-        } 
+        element={<PricingModal />} 
       />
 
       {/* Default Redirection */}

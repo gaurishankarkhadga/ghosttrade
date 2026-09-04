@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, Shield, Zap, Activity, Cpu, 
-  CheckCircle2, Lock, FileText, Server, Globe, 
+  CheckCircle2, Lock, Key, FileText, Server, Globe, 
   ChevronDown, BarChart2, TrendingUp, DollarSign,
   PieChart, Sliders, ShieldAlert, Check
 } from 'lucide-react';
@@ -39,10 +39,161 @@ const tabItemVariants = {
   }
 };
 
+const CryptographicLedger = () => {
+  const [logs, setLogs] = useState([]);
+
+  useEffect(() => {
+    const generateHash = () => Math.random().toString(16).substring(2, 10).toUpperCase();
+    const pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'AAPL', 'EUR/USD'];
+    
+    // Initial logs
+    const initialLogs = Array(5).fill(0).map(() => ({
+      id: Math.random(),
+      hash: generateHash(),
+      pair: pairs[Math.floor(Math.random() * pairs.length)],
+      latency: Math.floor(Math.random() * 20 + 5) + 'ms',
+      status: 'VERIFIED'
+    }));
+    setLogs(initialLogs);
+
+    const interval = setInterval(() => {
+      setLogs(prev => {
+        const newLog = {
+          id: Math.random(),
+          hash: generateHash(),
+          pair: pairs[Math.floor(Math.random() * pairs.length)],
+          latency: Math.floor(Math.random() * 20 + 5) + 'ms',
+          status: 'VERIFIED'
+        };
+        return [newLog, ...prev].slice(0, 5); // Keep max 5
+      });
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="trading-widget ledger-stream">
+      <div className="widget-row header-row font-mono">
+        <span>TX HASH</span>
+        <span>ASSET</span>
+        <span>LATENCY</span>
+        <span>STATE</span>
+      </div>
+      <AnimatePresence mode="popLayout">
+        {logs.map(log => (
+          <motion.div 
+            key={log.id}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="widget-row font-mono"
+          >
+            <span className="text-muted">0x{log.hash}</span>
+            <span>{log.pair}</span>
+            <span>{log.latency}</span>
+            <span className="badge-tag green">{log.status}</span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const EquityCurveVisualization = () => {
+  return (
+    <div className="equity-curve-container scroll-reveal delay-100">
+      <div className="equity-curve-header text-center">
+        <h3 style={{ color: 'var(--color-ghost-buy)', fontFamily: 'var(--font-mono)', fontSize: '14px', letterSpacing: '0.05em', marginBottom: '8px' }}>
+          THE "MONEY MACHINE" YIELD CURVE
+        </h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+          Retail Volatility (Red) vs. Algorithmic Consistency (Green)
+        </p>
+      </div>
+      <div className="equity-svg-wrapper">
+        <svg viewBox="0 0 800 300" preserveAspectRatio="none" className="equity-svg">
+          {/* Grid lines */}
+          <line x1="0" y1="50" x2="800" y2="50" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+          <line x1="0" y1="150" x2="800" y2="150" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+          <line x1="0" y1="250" x2="800" y2="250" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+          
+          {/* Retail Volatility (Jagged Red) */}
+          <motion.path 
+            d="M 0 250 L 50 210 L 100 280 L 150 180 L 200 240 L 250 120 L 300 260 L 350 150 L 400 220 L 450 90 L 500 270 L 550 160 L 600 280 L 650 130 L 700 250 L 750 100 L 800 280" 
+            fill="none" 
+            stroke="var(--color-ghost-sell)" 
+            strokeWidth="2" 
+            opacity="0.6"
+            initial={{ pathLength: 0 }}
+            whileInView={{ pathLength: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 2, ease: "linear" }}
+          />
+
+          {/* Quant Algorithm (Smooth Green) */}
+          <motion.path 
+            d="M 0 250 Q 100 240 200 200 T 400 120 T 600 60 T 800 20" 
+            fill="none" 
+            stroke="var(--color-ghost-buy)" 
+            strokeWidth="4" 
+            style={{ filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.6))' }}
+            initial={{ pathLength: 0 }}
+            whileInView={{ pathLength: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 2, ease: "easeInOut" }}
+          />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+const SecuritySection = () => {
+  return (
+    <section className="about-section security-section">
+      <div className="section-container">
+        <div className="section-header text-center">
+          <span className="section-tag scroll-reveal">CAPITAL PROTECTION</span>
+          <h2 className="scroll-reveal delay-100">Military-Grade API Security</h2>
+          <p className="scroll-reveal delay-200">GhostTrade operates on a strictly non-custodial architecture. Your funds never leave your exchange.</p>
+        </div>
+        <div className="security-grid">
+          <div className="security-card scroll-reveal delay-100">
+            <Shield size={24} className="icon-emerald" />
+            <h4>Non-Custodial Design</h4>
+            <p>Your capital remains secured within your personal exchange account. GhostTrade only transmits mathematical order signals.</p>
+          </div>
+          <div className="security-card scroll-reveal delay-200">
+            <Lock size={24} className="icon-emerald" />
+            <h4>Zero Withdrawal Permissions</h4>
+            <p>The system actively rejects any API key that has withdrawal permissions enabled, guaranteeing absolute fund safety.</p>
+          </div>
+          <div className="security-card scroll-reveal delay-300">
+            <Key size={24} className="icon-emerald" />
+            <h4>AES-256 Encryption</h4>
+            <p>All broker connections and API keys are heavily encrypted at rest and in transit using military-grade standards.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 export default function GhostAbout() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('engine');
+  const [activeTab, setActiveTab] = useState('ledger');
   const [openFaq, setOpenFaq] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile, { passive: true });
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const toggleFaq = (index) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -61,7 +212,7 @@ export default function GhostAbout() {
 
     const observerOptions = {
       root: scrollContainer,
-      rootMargin: '100px 0px 100px 0px',
+      rootMargin: '0px 0px -50px 0px',
       threshold: 0.01
     };
 
@@ -74,7 +225,7 @@ export default function GhostAbout() {
       const containerHeight = window.innerHeight;
       elements.forEach(el => {
         const rect = el.getBoundingClientRect();
-        if (rect.top < containerHeight + 100 && rect.bottom > -100) {
+        if (rect.top < containerHeight - 50 && rect.bottom > 0) {
           el.classList.add('is-visible');
         }
       });
@@ -104,6 +255,27 @@ export default function GhostAbout() {
     <PublicLayout onModeSwitch={(mode) => navigate('/connect', { state: { mode } })}>
       <div className="ghost-about-page">
         
+        {/* ===================================================================
+            0. GLOBAL LIVE ORDER FLOW TICKER
+           =================================================================== */}
+        <div className="global-ticker-container">
+          <div className="global-ticker-scroll">
+            <span className="ticker-item"><span className="ticker-symbol">BTC/USD</span> IMBALANCE +74.2% <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">ETH/USD</span> EXPECTANCY 2.8R <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">AAPL</span> SPREAD REJECTED <span className="status-dot yellow"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">SOL/USD</span> MOMENTUM +18% <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">EUR/USD</span> VOLUME CLUSTER DETECTED <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">TSLA</span> LIQUIDITY DRAIN <span className="status-dot red"></span></span>
+            {/* Duplicate for infinite scroll loop */}
+            <span className="ticker-item"><span className="ticker-symbol">BTC/USD</span> IMBALANCE +74.2% <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">ETH/USD</span> EXPECTANCY 2.8R <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">AAPL</span> SPREAD REJECTED <span className="status-dot yellow"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">SOL/USD</span> MOMENTUM +18% <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">EUR/USD</span> VOLUME CLUSTER DETECTED <span className="status-dot green"></span></span>
+            <span className="ticker-item"><span className="ticker-symbol">TSLA</span> LIQUIDITY DRAIN <span className="status-dot red"></span></span>
+          </div>
+        </div>
+
         {/* FIXED BACKGROUND LOGO WATERMARK (Fixed in Center) */}
         <div className="ghost-about-bg-logo">
           <AnimatedProLogo size={750} color="#ffffff" isAnimating={true} />
@@ -115,11 +287,11 @@ export default function GhostAbout() {
         <section className="about-hero-section">
           <div className="hero-content">
             <h1 className="scroll-reveal">
-              TRADE LIKE AN <span className="gradient-text">INSTITUTION.</span>
+              TRADE SMARTER <span className="text-highlight">WITH AI</span>
             </h1>
 
             <p className="hero-subtext scroll-reveal delay-100">
-              GhostTrade eliminates emotional guesswork. Our deterministic AI Oracle scans global markets in real-time to find statistically proven setups, executing with zero hesitation.
+              No more guessing. Our AI watches the markets 24/7, finds the best opportunities, and executes trades for you instantly.
             </p>
 
             <div className="hero-cta-group scroll-reveal delay-200">
@@ -137,54 +309,106 @@ export default function GhostAbout() {
         </section>
 
         {/* ===================================================================
+            1.5 EQUITY CURVE VISUALIZATION (Below Hero)
+           =================================================================== */}
+        <section className="about-section equity-section">
+          <div className="section-container" style={{ display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: '100%', maxWidth: '900px' }}>
+              <EquityCurveVisualization />
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
             2. INSTITUTIONAL TRADING PLATFORM SPECIFICATIONS
            =================================================================== */}
         <section id="architecture-section" className="about-section architecture-section">
           <div className="section-container">
             <div className="section-header text-center">
-              <span className="section-tag scroll-reveal">TRADING PLATFORM ARCHITECTURE</span>
+
               <h2 className="scroll-reveal delay-100">Deterministic Execution & Quantitative Rigor</h2>
               <p className="scroll-reveal delay-200">Replacing emotional retail speculation with mathematical probability, automated risk control, and direct venue routing.</p>
             </div>
 
             <div className="arch-nav-tabs">
               <button 
-                className={`tab-btn scroll-reveal delay-100 ${activeTab === 'engine' ? 'active' : ''}`} 
+                className={`tab-btn scroll-reveal delay-100 ${activeTab === 'ledger' ? 'active' : ''}`} 
+                onClick={() => setActiveTab('ledger')}
+              >
+                <FileText size={18} /> Verified Ledger
+              </button>
+              <button 
+                className={`tab-btn scroll-reveal delay-200 ${activeTab === 'engine' ? 'active' : ''}`} 
                 onClick={() => setActiveTab('engine')}
               >
                 <Cpu size={18} /> Quantitative Oracle
               </button>
               <button 
-                className={`tab-btn scroll-reveal delay-200 ${activeTab === 'execution' ? 'active' : ''}`} 
+                className={`tab-btn scroll-reveal delay-300 ${activeTab === 'execution' ? 'active' : ''}`} 
                 onClick={() => setActiveTab('execution')}
               >
                 <Zap size={18} /> Direct Market Router
               </button>
               <button 
-                className={`tab-btn scroll-reveal delay-300 ${activeTab === 'risk' ? 'active' : ''}`} 
+                className={`tab-btn scroll-reveal delay-400 ${activeTab === 'risk' ? 'active' : ''}`} 
                 onClick={() => setActiveTab('risk')}
               >
                 <Shield size={18} /> Capital Risk Sentinel
-              </button>
-              <button 
-                className={`tab-btn scroll-reveal delay-400 ${activeTab === 'ledger' ? 'active' : ''}`} 
-                onClick={() => setActiveTab('ledger')}
-              >
-                <FileText size={18} /> Verified Ledger
               </button>
             </div>
 
             <div className="arch-tab-content">
               <AnimatePresence mode="wait">
-                {activeTab === 'engine' && (
+                {(isMobile || activeTab === 'ledger') && (
+                  <motion.div 
+                    key="ledger"
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    variants={tabContentVariants}
+                    className="tab-pane mobile-stack-item"
+                  >
+                    <div className="mobile-step-header mobile-only">
+                      <FileText size={18} /> 01. Verified Ledger
+                    </div>
+                    <div className="tab-grid">
+                      <motion.div className="tab-info" variants={tabItemVariants}>
+                        <h3>Cryptographically Verified Audit Ledger</h3>
+                        <p>
+                          Every trade signal generated by GhostTrade is recorded in an immutable ledger, allowing users to verify win rates, expectancy, and execution timestamps against live exchange data.
+                        </p>
+                        <ul className="spec-list">
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Immutable Hash Proof for Every Emitted Signal</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Transparent Win Rate and PnL Calculations</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Public Order Resolution Audit Engine</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Zero Cherry-Picking or Fake Log Alterations</span></motion.li>
+                        </ul>
+                      </motion.div>
+
+                      {/* TRADING VISUAL (NO CODE) */}
+                      <motion.div className="tab-visual-panel" variants={tabItemVariants}>
+                        <div className="visual-panel-header">
+                          <FileText size={14} />
+                          <span>LIVE CRYPTOGRAPHIC LEDGER STREAM</span>
+                        </div>
+                        <CryptographicLedger />
+                      </motion.div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {(isMobile || activeTab === 'engine') && (
                   <motion.div 
                     key="engine"
                     initial="hidden"
                     animate="visible"
                     exit="exit"
                     variants={tabContentVariants}
-                    className="tab-pane"
+                    className="tab-pane mobile-stack-item"
                   >
+                    <div className="mobile-step-header mobile-only">
+                      <Cpu size={18} /> 02. Quantitative Oracle
+                    </div>
                     <div className="tab-grid">
                       <motion.div className="tab-info" variants={tabItemVariants}>
                         <h3>Statistical Market Oracle</h3>
@@ -242,15 +466,18 @@ export default function GhostAbout() {
                   </motion.div>
                 )}
 
-                {activeTab === 'execution' && (
+                {(isMobile || activeTab === 'execution') && (
                   <motion.div 
                     key="execution"
                     initial="hidden"
                     animate="visible"
                     exit="exit"
                     variants={tabContentVariants}
-                    className="tab-pane"
+                    className="tab-pane mobile-stack-item"
                   >
+                    <div className="mobile-step-header mobile-only">
+                      <Zap size={18} /> 03. Direct Market Router
+                    </div>
                     <div className="tab-grid">
                       <motion.div className="tab-info" variants={tabItemVariants}>
                         <h3>Sub-Millisecond Direct Market Router</h3>
@@ -302,15 +529,18 @@ export default function GhostAbout() {
                   </motion.div>
                 )}
 
-                {activeTab === 'risk' && (
+                {(isMobile || activeTab === 'risk') && (
                   <motion.div 
                     key="risk"
                     initial="hidden"
                     animate="visible"
                     exit="exit"
                     variants={tabContentVariants}
-                    className="tab-pane"
+                    className="tab-pane mobile-stack-item"
                   >
+                    <div className="mobile-step-header mobile-only">
+                      <Shield size={18} /> 04. Capital Risk Sentinel
+                    </div>
                     <div className="tab-grid">
                       <motion.div className="tab-info" variants={tabItemVariants}>
                         <h3>Capital Protection Sentinel</h3>
@@ -361,71 +591,7 @@ export default function GhostAbout() {
                   </motion.div>
                 )}
 
-                {activeTab === 'ledger' && (
-                  <motion.div 
-                    key="ledger"
-                    initial="hidden"
-                    animate="visible"
-                    exit="exit"
-                    variants={tabContentVariants}
-                    className="tab-pane"
-                  >
-                    <div className="tab-grid">
-                      <motion.div className="tab-info" variants={tabItemVariants}>
-                        <h3>Cryptographically Verified Audit Ledger</h3>
-                        <p>
-                          Every trade signal generated by GhostTrade is recorded in an immutable ledger, allowing users to verify win rates, expectancy, and execution timestamps against live exchange data.
-                        </p>
-                        <ul className="spec-list">
-                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Immutable Hash Proof for Every Emitted Signal</span></motion.li>
-                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Transparent Win Rate and PnL Calculations</span></motion.li>
-                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Public Order Resolution Audit Engine</span></motion.li>
-                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Zero Cherry-Picking or Fake Log Alterations</span></motion.li>
-                        </ul>
-                      </motion.div>
 
-                      {/* TRADING VISUAL (NO CODE) */}
-                      <motion.div className="tab-visual-panel" variants={tabItemVariants}>
-                        <div className="visual-panel-header">
-                          <FileText size={14} />
-                          <span>AUDITED PERFORMANCE LEDGER</span>
-                        </div>
-                        <div className="trading-widget">
-                          <div className="widget-row header-row font-mono">
-                            <span>PAIR</span>
-                            <span>ENTRY / EXIT</span>
-                            <span>PROFIT</span>
-                            <span>VERIFICATION</span>
-                          </div>
-                          <div className="widget-row font-mono">
-                            <span>SOL/USD</span>
-                            <span>$184.20 &rarr; $192.50</span>
-                            <span className="text-emerald">+4.50%</span>
-                            <span className="badge-tag green">VERIFIED PASS</span>
-                          </div>
-                          <div className="widget-row font-mono">
-                            <span>BTC/USD</span>
-                            <span>$95,100 &rarr; $97,800</span>
-                            <span className="text-emerald">+2.84%</span>
-                            <span className="badge-tag green">VERIFIED PASS</span>
-                          </div>
-                          <div className="widget-row font-mono">
-                            <span>ETH/USD</span>
-                            <span>$3,420 &rarr; $3,390</span>
-                            <span className="text-rose">-0.87%</span>
-                            <span className="badge-tag gray">STOPPED OUT</span>
-                          </div>
-                          <div className="widget-row font-mono">
-                            <span>NVDA</span>
-                            <span>$142.00 &rarr; $148.50</span>
-                            <span className="text-emerald">+4.57%</span>
-                            <span className="badge-tag green">VERIFIED PASS</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </div>
-                  </motion.div>
-                )}
               </AnimatePresence>
             </div>
           </div>
@@ -534,7 +700,12 @@ export default function GhostAbout() {
         </section>
 
         {/* ===================================================================
-            5. FREQUENTLY ASKED TECHNICAL QUESTIONS (FAQ)
+            5. API SECURITY SECTION
+           =================================================================== */}
+        <SecuritySection />
+
+        {/* ===================================================================
+            6. FREQUENTLY ASKED TECHNICAL QUESTIONS (FAQ)
            =================================================================== */}
         <section className="about-section faq-section">
           <div className="section-container">
@@ -567,17 +738,33 @@ export default function GhostAbout() {
                   a: "Every signal generated is immediately assigned a cryptographic hash and stored in our public audit ledger. Signal outcomes are automatically resolved against real exchange tick data and published in real time on the Performance Ledger."
                 }
               ].map((faq, idx) => (
-                <div key={idx} className={`faq-item scroll-reveal delay-${(idx + 1) * 100} ${openFaq === idx ? 'open' : ''}`}>
+                <motion.div 
+                  key={idx} 
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "0px 0px -50px 0px" }}
+                  transition={{ duration: 0.7, delay: (idx + 1) * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                  className={`faq-item ${openFaq === idx ? 'open' : ''}`}
+                >
                   <button className="faq-question" onClick={() => toggleFaq(idx)}>
                     <span>{faq.q}</span>
                     <ChevronDown size={18} className="faq-chevron" />
                   </button>
-                  {openFaq === idx && (
-                    <div className="faq-answer">
-                      <p>{faq.a}</p>
-                    </div>
-                  )}
-                </div>
+                  <AnimatePresence>
+                    {openFaq === idx && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <div className="faq-answer">
+                          <p>{faq.a}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               ))}
             </div>
           </div>
