@@ -337,11 +337,8 @@ const TradeExecutionCard = ({
   const smoothedBeginner = useControlledTypewriter(beginnerText, step === 5, step > 5, !isNewMessage, onBeginnerComplete);
   const smoothedPro = useControlledTypewriter(proText, step === 8, step > 8, !isNewMessage, onProComplete);
 
-  const executeTrade = useGhostStore((state) => state.executeTrade);
   const currentMode = useGhostStore((state) => state.executionMode) || 'PAPER';
   const isLiveMode = currentMode !== 'PAPER';
-  const isAutoExecuteEnabled = useGhostStore((state) => state.isAutoExecuteEnabled);
-  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
 
   const [tradeResult, setTradeResult] = useState(null);
 
@@ -360,17 +357,8 @@ const TradeExecutionCard = ({
       pattern: pattern || 'AUTO_DETECTED',
       regime: regime || 'DYNAMIC_REGIME',
       source: source || 'AI_AGENT'
-    });
     setTradeResult(result);
   };
-
-  // Trigger auto-execution when step 9 is reached and feature is enabled
-  useEffect(() => {
-    if (step >= 9 && isAutoExecuteEnabled && !isShield && !hasAutoExecuted && !isExecuted) {
-      setHasAutoExecuted(true);
-      handleExecute();
-    }
-  }, [step, isAutoExecuteEnabled, isShield, hasAutoExecuted, isExecuted]);
 
   if (isExecuted) {
     // Still waiting for backend response
@@ -408,7 +396,7 @@ const TradeExecutionCard = ({
         <div className="trade-header">
           <span className="trade-asset">⚡ {asset} ACTIVE</span>
           <span className="trade-status-badge" style={{ background: isLiveMode ? 'rgba(239,68,68,0.2)' : 'rgba(148,163,184,0.2)', color: isLiveMode ? '#ef4444' : '#94a3b8' }}>
-            {hasAutoExecuted ? '⚡ AUTO-EXECUTED' : (isLiveMode ? '🔴 LIVE' : '📝 PAPER')}
+            {isLiveMode ? '🔴 LIVE (DUAL)' : '📝 PAPER'}
           </span>
         </div>
         <p className="trade-success-msg">
@@ -565,7 +553,7 @@ const TradeExecutionCard = ({
                 {isShield 
                   ? <><ShieldAlert size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</>
                   : isLiveMode
-                    ? <><Zap size={16} className="btn-icon"/> Execute LIVE via {currentMode.replace('LIVE_', '')} Broker</>
+                    ? <><Zap size={16} className="btn-icon"/> Confirm & Execute Trade (Dual-Verification)</>
                     : <><CheckCircle size={16} className="btn-icon"/> Log Signal to Audit Dashboard</>
                 }
                </button>

@@ -201,6 +201,24 @@ class UnifiedExecutionEngine {
             const brokerName = MODE_TO_BROKER[activeMode] || getBrokerForTicker(asset);
             console.log(`🔴 [LIVE TRADING] Routing ${asset} via ${brokerName} adapter`);
 
+            // 4.1 SHADOW PAPER LOGGING (Dual-Verification)
+            const shadowTradeId = `${tradeId}_PAPER`;
+            console.log(`📝 [DUAL-VERIFICATION] Logging shadow paper trade for ${asset} as ${shadowTradeId}`);
+            await this.logTradeToDb({
+                id: shadowTradeId,
+                asset,
+                side,
+                entryPrice,
+                stopLoss,
+                takeProfit,
+                quantity,
+                kellySize: kellyResult.halfKelly,
+                status: 'OPEN',
+                mode: 'PAPER',
+                shadowFor: tradeId,
+                executedAt: new Date().toISOString()
+            }, userId);
+
             try {
                 // Get or create adapter
                 let adapter = this._adapterCache.get(brokerName);

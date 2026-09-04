@@ -10,7 +10,6 @@ const useGhostStore = create(
       role: 'trader',
       promptsUsed: 0,
       isSimpleMode: false,
-      isAutoExecuteEnabled: false,
       wsStatus: 'DISCONNECTED',
       
       syncSubscription: async (planId) => {
@@ -116,10 +115,7 @@ const useGhostStore = create(
         } catch (e) {
           return null;
         }
-      },
-
       toggleSimpleMode: () => set((state) => ({ isSimpleMode: !state.isSimpleMode })),
-      toggleAutoExecute: () => set((state) => ({ isAutoExecuteEnabled: !state.isAutoExecuteEnabled })),
 
       // --- Paper Trading State ---
       activePaperTrades: [],
@@ -478,8 +474,7 @@ const useGhostStore = create(
         email: state.email,
         role: state.role,
         promptsUsed: state.promptsUsed,
-        isSimpleMode: state.isSimpleMode,
-        isAutoExecuteEnabled: state.isAutoExecuteEnabled
+        isSimpleMode: state.isSimpleMode
       }),
     }
   )
