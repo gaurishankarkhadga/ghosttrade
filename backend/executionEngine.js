@@ -207,15 +207,14 @@ class UnifiedExecutionEngine {
                 if (!adapter || !adapter.isAuthenticated) {
                     const credentials = await getBrokerKeys(userId, brokerName);
                     if (!credentials) {
-                        // SAFETY FALLBACK: No credentials → fall back to paper
-                        console.warn(`[EXECUTION ENGINE] No ${brokerName} keys. Falling back to PAPER.`);
-                        return this._executePaperFallback(tradeId, asset, side, entryPrice, stopLoss, takeProfit, quantity, kellyResult, userId);
+                        console.error(`[EXECUTION ENGINE] STRICT LIVE FAILURE: No ${brokerName} keys found.`);
+                        return { success: false, tradeId, mode: activeMode, reason: `No ${brokerName} keys found. Live execution strictly aborted.` };
                     }
                     adapter = createAdapter(brokerName, credentials);
                     const auth = await adapter.authenticate();
                     if (!auth.success) {
-                        console.warn(`[EXECUTION ENGINE] ${brokerName} auth failed. Falling back to PAPER.`);
-                        return this._executePaperFallback(tradeId, asset, side, entryPrice, stopLoss, takeProfit, quantity, kellyResult, userId);
+                        console.error(`[EXECUTION ENGINE] STRICT LIVE FAILURE: ${brokerName} auth failed.`);
+                        return { success: false, tradeId, mode: activeMode, reason: `${brokerName} authentication failed. Live execution strictly aborted.` };
                     }
                     this._adapterCache.set(brokerName, adapter);
                 }
@@ -265,15 +264,14 @@ class UnifiedExecutionEngine {
                     return { success: false, tradeId, mode: activeMode, reason: orderResult.message };
                 }
             } catch (err) {
-                console.error(`[EXECUTION ENGINE] Live execution error:`, err.message);
-                // SAFETY: Fall back to paper on any live execution error
-                return this._executePaperFallback(tradeId, asset, side, entryPrice, stopLoss, takeProfit, quantity, kellyResult, userId);
+                console.error(`[EXECUTION ENGINE] STRICT LIVE FAILURE: Live execution error:`, err.message);
+                return { success: false, tradeId, mode: activeMode, reason: `Live execution error: ${err.message}` };
             }
         }
 
         // Unknown mode fallback
-        console.warn(`[EXECUTION ENGINE] Unknown mode "${activeMode}". Executing as PAPER.`);
-        return this._executePaperFallback(tradeId, asset, side, entryPrice, stopLoss, takeProfit, quantity, kellyResult, userId);
+        console.error(`[EXECUTION ENGINE] STRICT FAILURE: Unknown mode "${activeMode}".`);
+        return { success: false, tradeId, mode: activeMode, reason: `Unknown execution mode: ${activeMode}` };
     }
 
     /**

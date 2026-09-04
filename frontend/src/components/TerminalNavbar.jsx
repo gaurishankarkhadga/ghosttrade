@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { User, Settings, LogOut, Activity, BarChart2, Terminal, Zap, ShieldCheck, Globe } from 'lucide-react';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { User, Settings, LogOut, Activity, BarChart2, Terminal, Zap, ShieldCheck, Globe, GripHorizontal } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import AnimatedProLogo from './AnimatedProLogo';
 import './TerminalNavbar.css';
@@ -17,6 +17,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const { email, role, executionMode, syncSubscription } = useGhostStore();
+  const dragControls = useDragControls();
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,7 +40,23 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
   return (
     <>
       {/* DESKTOP VIEW: Bottom Left Dock */}
-      <aside className="terminal-bottom-controls desktop-only">
+      <motion.aside 
+        drag 
+        dragControls={dragControls}
+        dragListener={false}
+        dragMomentum={false} 
+        dragElastic={0}
+        className="terminal-bottom-controls desktop-only"
+        style={{ touchAction: 'none' }}
+      >
+        <div 
+          className="dock-drag-handle"
+          onPointerDown={(e) => dragControls.start(e)}
+          style={{ cursor: 'grab', width: '100%', display: 'flex', justifyContent: 'center', opacity: 0.5, padding: '4px 0', marginBottom: '4px' }}
+        >
+          <GripHorizontal size={18} />
+        </div>
+
         <button onClick={() => navigate('/pricing')} className="icon-action-btn" style={{ color: '#00e699' }}>
           <ShieldCheck size={16} />
           <span className="dock-tooltip">Subscription</span>
@@ -87,7 +104,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
           <LogOut size={16} />
           <span className="dock-tooltip">Lock Terminal</span>
         </button>
-      </aside>
+      </motion.aside>
 
       {/* MOBILE VIEW: New Top Frosted Navbar */}
       <header className={`terminal-top-navbar mobile-only ${isAuditPage ? 'audit-mobile-hidden' : ''}`}>

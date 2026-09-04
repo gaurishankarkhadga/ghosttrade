@@ -222,6 +222,56 @@ export default function BrokerSettingsPage() {
           </div>
         </div>
 
+        {/* Automation Settings */}
+        <div className="execution-mode-section" style={{ marginTop: '24px' }}>
+          <h3>Automation Settings</h3>
+          <div className="automation-card" style={{ 
+            background: 'rgba(255, 255, 255, 0.03)', 
+            border: `1px solid ${useGhostStore(state => state.isAutoExecuteEnabled) ? '#ef4444' : '#334155'}`,
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            transition: 'all 0.3s ease'
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Zap size={16} color={useGhostStore(state => state.isAutoExecuteEnabled) ? '#ef4444' : '#94a3b8'} />
+                <h4 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600 }}>Auto-Execute AI Signals</h4>
+              </div>
+              <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', maxWidth: '300px', lineHeight: 1.4 }}>
+                When enabled, GhostTrade will instantly route approved signals to your broker without requiring manual confirmation. Ensure Risk Controls are active.
+              </p>
+            </div>
+            <button 
+              onClick={() => useGhostStore.getState().toggleAutoExecute()}
+              style={{
+                width: '48px',
+                height: '24px',
+                borderRadius: '12px',
+                background: useGhostStore(state => state.isAutoExecuteEnabled) ? '#ef4444' : '#334155',
+                border: 'none',
+                position: 'relative',
+                cursor: 'pointer',
+                transition: 'background 0.3s ease'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '2px',
+                left: useGhostStore(state => state.isAutoExecuteEnabled) ? '26px' : '2px',
+                width: '20px',
+                height: '20px',
+                borderRadius: '50%',
+                background: '#fff',
+                transition: 'left 0.3s ease',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }} />
+            </button>
+          </div>
+        </div>
+
         {/* Broker Connections */}
         <div className="broker-connections-section">
           <h3>Broker Connections</h3>

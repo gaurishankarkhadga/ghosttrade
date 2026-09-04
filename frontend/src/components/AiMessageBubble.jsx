@@ -340,6 +340,8 @@ const TradeExecutionCard = ({
   const executeTrade = useGhostStore((state) => state.executeTrade);
   const currentMode = useGhostStore((state) => state.executionMode) || 'PAPER';
   const isLiveMode = currentMode !== 'PAPER';
+  const isAutoExecuteEnabled = useGhostStore((state) => state.isAutoExecuteEnabled);
+  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
 
   const [tradeResult, setTradeResult] = useState(null);
 
@@ -361,6 +363,14 @@ const TradeExecutionCard = ({
     });
     setTradeResult(result);
   };
+
+  // Trigger auto-execution when step 9 is reached and feature is enabled
+  useEffect(() => {
+    if (step >= 9 && isAutoExecuteEnabled && !isShield && !hasAutoExecuted && !isExecuted) {
+      setHasAutoExecuted(true);
+      handleExecute();
+    }
+  }, [step, isAutoExecuteEnabled, isShield, hasAutoExecuted, isExecuted]);
 
   if (isExecuted) {
     // Still waiting for backend response
@@ -398,7 +408,7 @@ const TradeExecutionCard = ({
         <div className="trade-header">
           <span className="trade-asset">⚡ {asset} ACTIVE</span>
           <span className="trade-status-badge" style={{ background: isLiveMode ? 'rgba(239,68,68,0.2)' : 'rgba(148,163,184,0.2)', color: isLiveMode ? '#ef4444' : '#94a3b8' }}>
-            {isLiveMode ? '🔴 LIVE' : '📝 PAPER'}
+            {hasAutoExecuted ? '⚡ AUTO-EXECUTED' : (isLiveMode ? '🔴 LIVE' : '📝 PAPER')}
           </span>
         </div>
         <p className="trade-success-msg">

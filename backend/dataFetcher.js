@@ -15,34 +15,7 @@ const ohlcvCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Map of known crypto ticker aliases to Yahoo Finance symbols
-const CRYPTO_ALIAS_MAP = {
-  'BTC': 'BTC-USD',
-  'BTCUSD': 'BTC-USD',
-  'BTCUSDT': 'BTC-USD',
-  'ETH': 'ETH-USD',
-  'ETHUSD': 'ETH-USD',
-  'ETHUSDT': 'ETH-USD',
-  'SOL': 'SOL-USD',
-  'SOLUSD': 'SOL-USD',
-  'XRP': 'XRP-USD',
-  'XRPUSD': 'XRP-USD',
-  'BNB': 'BNB-USD',
-  'DOGE': 'DOGE-USD',
-  'ADA': 'ADA-USD',
-  'AVAX': 'AVAX-USD',
-  'LINK': 'LINK-USD',
-  'MATIC': 'POL-USD',
-  'LTC': 'LTC-USD',
-  'DOT': 'DOT-USD',
-  'UNI': 'UNI7083-USD',
-  'ATOM': 'ATOM-USD',
-  'NEAR': 'NEAR-USD',
-  'APT': 'APT21794-USD',
-  'ARB': 'ARB-USD',
-  'OP': 'OP-USD',
-  'SUI': 'SUI-USD',
-  'PEPE': 'PEPE24478-USD',
-};
+// CRYPTO_ALIAS_MAP removed for 100% dynamic Binance API
 
 /**
  * Resolves a ticker from the AI's output to a Yahoo Finance symbol.
@@ -76,8 +49,6 @@ export function resolveYahooSymbol(rawTicker) {
   if (upper.endsWith('=X')) return upper;
 
   const clean = upper.replace(/[^A-Z0-9/-]/g, '');
-  // Check crypto alias map first
-  if (CRYPTO_ALIAS_MAP[clean]) return CRYPTO_ALIAS_MAP[clean];
   // Already has Yahoo-style suffix (e.g., "BTC-USD")
   if (clean.includes('-')) return clean;
   // Assume it's a standard stock ticker
@@ -92,6 +63,35 @@ export function resolveYahooSymbol(rawTicker) {
  * @param {number} bars   - Number of bars to fetch (default 300)
  * @returns {{ symbol, bars: Array<{date,open,high,low,close,volume}> } | { error }}
  */
+
+/**
+ * Helper: Try fetching OHLCV from Binance API first.
+ */
+async function fetchBinanceOHLCV(ticker, interval, limit) {
+  let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleanTicker.endsWith('USD')) cleanTicker = cleanTicker.replace('USD', 'USDT');
+  else if (!cleanTicker.endsWith('USDT')) cleanTicker += 'USDT';
+
+  try {
+    const url = `https://api.binance.com/api/v3/klines?symbol=${cleanTicker}&interval=${interval}&limit=${limit}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    
+    return data.map(k => ({
+      date: new Date(k[0]),
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4]),
+      volume: parseFloat(k[5])
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
   const symbol = resolveYahooSymbol(ticker);
 
@@ -108,7 +108,38 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
   }
 
   try {
+    // 1. Try Binance API First (for crypto)
+    const binanceData = await fetchBinanceOHLCV(ticker, '1d', bars);
+    if (binanceData && binanceData.length > 0) {
+      if (binanceData.length < 200) {
+        return { error: 'INSUFFICIENT_DATA', message: `Only ${binanceData.length} bars available on Binance.`, count: binanceData.length };
+      }
+      const finalData = { symbol: ticker, bars: binanceData };
+      ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+      console.log(`[DATA] Fetched ${binanceData.length} bars for ${ticker} from Binance API`);
+      return finalData;
+    }
+
+    // 2. Fallback to Yahoo Finance
     // Calculate date range — fetch extra days to account for weekends/holidays
+    // 1. Try Binance API First
+    const [binance15m, binance1h, binance1d] = await Promise.all([
+      fetchBinanceOHLCV(ticker, '15m', bars),
+      fetchBinanceOHLCV(ticker, '1h', bars),
+      fetchBinanceOHLCV(ticker, '1d', bars)
+    ]);
+    
+    if (binance15m && binance1h && binance1d && binance1d.length >= 200) {
+      const finalData = {
+        symbol: ticker,
+        timeframes: { '15m': binance15m, '1h': binance1h, '1d': binance1d }
+      };
+      ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+      console.log(`[DATA] Multi-TF Fetched from Binance for ${ticker}`);
+      return finalData;
+    }
+
+    // 2. Fallback to Yahoo Finance
     const endDate = new Date();
     const startDate = new Date();
     // Add 40% buffer to ensure we get at least `bars` trading days
@@ -264,6 +295,18 @@ export function getLogReturns(ohlcv) {
  */
 export async function fetchLivePrice(ticker) {
   try {
+    // 1. Try Binance First
+    let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleanTicker.endsWith('USD')) cleanTicker = cleanTicker.replace('USD', 'USDT');
+    else if (!cleanTicker.endsWith('USDT')) cleanTicker += 'USDT';
+    
+    const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanTicker}`).catch(()=>null);
+    if (binanceRes && binanceRes.ok) {
+      const bData = await binanceRes.json();
+      if (bData && bData.price) return parseFloat(bData.price);
+    }
+    
+    // 2. Fallback to Yahoo
     const symbol = resolveYahooSymbol(ticker);
     if (!symbol) return null;
     const quote = await yahooFinance.quote(symbol);

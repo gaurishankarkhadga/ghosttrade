@@ -33,53 +33,7 @@ const CACHE_TTL_MS = 60000; // 60 seconds
 // =====================================================
 // TICKER → COINGECKO ID MAPPING (Crypto)
 // =====================================================
-const TICKER_TO_COINGECKO = {
-  'BTC': 'bitcoin',
-  'BTCUSD': 'bitcoin',
-  'BTCUSDT': 'bitcoin',
-  'BTC/USD': 'bitcoin',
-  'BTC/USDT': 'bitcoin',
-  'BTC-USD': 'bitcoin',
-  'ETH': 'ethereum',
-  'ETHUSD': 'ethereum',
-  'ETHUSDT': 'ethereum',
-  'ETH/USD': 'ethereum',
-  'ETH/USDT': 'ethereum',
-  'ETH-USD': 'ethereum',
-  'SOL': 'solana',
-  'SOLUSD': 'solana',
-  'SOL/USD': 'solana',
-  'SOL/USDT': 'solana',
-  'SOL-USD': 'solana',
-  'XRP': 'ripple',
-  'XRPUSD': 'ripple',
-  'XRP-USD': 'ripple',
-  'DOGE': 'dogecoin',
-  'DOGE-USD': 'dogecoin',
-  'ADA': 'cardano',
-  'ADA-USD': 'cardano',
-  'AVAX': 'avalanche-2',
-  'AVAX-USD': 'avalanche-2',
-  'DOT': 'polkadot',
-  'DOT-USD': 'polkadot',
-  'LINK': 'chainlink',
-  'LINK-USD': 'chainlink',
-  'MATIC': 'matic-network',
-  'MATIC-USD': 'matic-network',
-  'BNB': 'binancecoin',
-  'BNB-USD': 'binancecoin',
-  'LTC': 'litecoin',
-  'LTC-USD': 'litecoin',
-  'ATOM': 'cosmos',
-  'UNI': 'uniswap',
-  'NEAR': 'near',
-  'APT': 'aptos',
-  'ARB': 'arbitrum',
-  'OP': 'optimism',
-  'SUI': 'sui',
-  'PEPE': 'pepe',
-  'WIF': 'dogwifcoin',
-};
+// TICKER_TO_COINGECKO removed for 100% dynamic Binance API
 
 // =====================================================
 // TIMEFRAME-AWARE AUDIT WINDOW
@@ -98,39 +52,34 @@ function getAuditWindowMs(tradeTimeframe) {
 // PRICE FETCHING — Crypto via CoinGecko, Stocks via Yahoo
 // =====================================================
 
-/**
- * Determines if a ticker is a crypto asset.
- */
-function isCryptoTicker(ticker) {
-  const normalized = ticker.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
-  return !!TICKER_TO_COINGECKO[normalized];
-}
+
 
 /**
- * Fetches current price from CoinGecko (crypto only).
+ * Fetches current price directly from Binance API (100% dynamic, zero hardcoded mapping).
  */
-async function fetchCryptoPrice(ticker) {
-  const normalizedTicker = ticker.toUpperCase().replace(/[^A-Z0-9/]/g, '');
-  const coinId = TICKER_TO_COINGECKO[normalizedTicker];
-  
-  if (!coinId) return null;
+async function fetchBinancePrice(ticker) {
+  let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleanTicker.endsWith('USD')) {
+    cleanTicker = cleanTicker.replace('USD', 'USDT');
+  } else if (!cleanTicker.endsWith('USDT')) {
+    cleanTicker += 'USDT';
+  }
 
   try {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-
+    const url = `https://api.binance.com/api/v3/ticker/price?symbol=${cleanTicker}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    
     if (!response.ok) {
-      console.warn(`[AUDIT] CoinGecko API error ${response.status} for ${coinId}`);
       return null;
     }
 
     const data = await response.json();
-    return data[coinId]?.usd || null;
+    if (data && data.price) {
+      return parseFloat(data.price);
+    }
+    return null;
   } catch (error) {
-    console.error(`[AUDIT] CoinGecko price fetch failed for ${ticker}:`, error.message);
+    console.warn(`[AUDIT] Binance fetch failed for ${cleanTicker}:`, error.message);
     return null;
   }
 }
@@ -171,9 +120,8 @@ async function fetchCurrentPrice(ticker) {
 
   let price = null;
   try {
-    if (isCryptoTicker(ticker)) {
-      price = await fetchCryptoPrice(ticker);
-    }
+    // 1. Always try Binance API first (fast, covers all crypto)
+    price = await fetchBinancePrice(ticker);
     
     // Dynamic Fallback 1: If it's a crypto we missed in mapping, or just a stock
     if (price === null) {
