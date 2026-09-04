@@ -173,9 +173,10 @@ function extractTickerFromText(promptText) {
   for (const t of CRYPTO) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
   for (const t of NSE) { if (new RegExp(`\\b${t}\\b`).test(text)) return `${t}.NS`; }
   for (const t of US) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
+  for (const t of ['NIFTY', 'BANKNIFTY', 'NIFTY50']) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
 
-  // Last resort: find any 2-6 letter uppercase word that looks like a ticker
-  const genericMatch = text.match(/\b([A-Z]{2,6})\b/);
+  // Last resort: find any 2-10 letter uppercase word that looks like a ticker
+  const genericMatch = text.match(/\b([A-Z]{2,10})\b/);
   if (genericMatch && !['THE', 'AND', 'FOR', 'NOT', 'ARE', 'BUT', 'HOW', 'CAN', 'WHAT', 'WILL', 'THIS', 'THAT', 'WITH', 'FROM', 'ABOUT', 'ANALYZE', 'ANALYSIS', 'TRADE', 'SCAN', 'DEEP', 'ALL'].includes(genericMatch[1])) {
     return genericMatch[1];
   }

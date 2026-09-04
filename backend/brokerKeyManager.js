@@ -171,6 +171,16 @@ export async function storeBrokerKeys(userId, broker, credentials) {
 export async function getBrokerKeys(userId, broker) {
   if (!userId || !broker) return null;
 
+  // HACK: For Angel One, use .env credentials if configured, overriding DB.
+  if (broker === 'ANGEL_ONE' && process.env.ANGEL_API_KEY) {
+    return {
+      apiKey: process.env.ANGEL_API_KEY,
+      clientCode: process.env.ANGEL_CLIENT_CODE,
+      password: process.env.ANGEL_PASSWORD,
+      totpSecret: process.env.ANGEL_TOTP_SECRET
+    };
+  }
+
   const db = await getDb();
   const doc = await db.collection('broker_credentials').findOne({ userId, broker });
 

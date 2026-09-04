@@ -33,11 +33,12 @@ async function ensureAdaptersLoaded() {
     await _adaptersReady;
 }
 
-const VALID_LIVE_MODES = ['LIVE_CRYPTO', 'LIVE_US', 'LIVE_GLOBAL'];
+const VALID_LIVE_MODES = ['LIVE_CRYPTO', 'LIVE_US', 'LIVE_GLOBAL', 'LIVE_FNO'];
 const MODE_TO_BROKER = {
     'LIVE_CRYPTO': 'BINANCE',
     'LIVE_US':     'ALPACA',
     'LIVE_GLOBAL': 'IBKR',
+    'LIVE_FNO':    'ANGEL_ONE',
 };
 
 class UnifiedExecutionEngine {
@@ -237,12 +238,38 @@ class UnifiedExecutionEngine {
                     this._adapterCache.set(brokerName, adapter);
                 }
 
+                // --- F&O Dynamic Strike Mapping (Indian Market) ---
+                let finalAsset = asset;
+                let finalQuantity = quantity;
+                let finalSide = side.toUpperCase();
+
+                if (activeMode === 'LIVE_FNO') {
+                    const isBankNifty = asset.toUpperCase().includes('BANKNIFTY');
+                    const isNifty = asset.toUpperCase() === 'NIFTY' || asset.toUpperCase() === 'NIFTY50';
+                    
+                    if (isBankNifty || isNifty) {
+                        const step = isBankNifty ? 100 : 50;
+                        const currentPriceFloat = parseFloat(entryPrice);
+                        const atmStrike = Math.round(currentPriceFloat / step) * step;
+                        
+                        const optionType = finalSide === 'BUY' ? 'CE' : 'PE';
+                        finalSide = 'BUY'; // Always buy the option contract
+                        
+                        finalAsset = `${isBankNifty ? 'BANKNIFTY' : 'NIFTY'}26SEP24${atmStrike}${optionType}`;
+                        finalQuantity = isBankNifty ? 15 : 25; // Standard Lot sizes
+                        
+                        console.log(`[EXECUTION ENGINE] 🇮🇳 F&O Strike Mapping: ${asset} @ ${entryPrice} -> ${finalAsset} (ATM) | Qty: ${finalQuantity}`);
+                    }
+                }
+
                 // Place order through broker
                 const orderResult = await adapter.placeOrder({
-                    symbol: asset,
-                    side: side.toUpperCase(),
+                    symbol: finalAsset,
+                    asset: finalAsset, // passing both for compatibility
+                    side: finalSide,
                     type: 'MARKET',
-                    quantity,
+                    orderType: 'MARKET',
+                    quantity: finalQuantity,
                     price: entryPrice,
                     stopLoss,
                     takeProfit,

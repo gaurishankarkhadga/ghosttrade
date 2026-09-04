@@ -302,7 +302,7 @@
 
 .tab-grid {
   display: grid;
-  grid-template-columns: 1fr 1.1fr;
+  grid-template-columns: 1fr;
   gap: 48px;
   align-items: center;
 }

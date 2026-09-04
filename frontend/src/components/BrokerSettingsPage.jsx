@@ -27,13 +27,21 @@ const BROKER_INFO = {
     mode: 'LIVE_GLOBAL',
     guide: 'Secure, 1-Click OAuth connection to Interactive Brokers.',
   },
+  ANGEL_ONE: {
+    name: 'Angel One',
+    description: 'Indian F&O — Nifty/BankNifty',
+    color: '#ff7b00',
+    mode: 'LIVE_FNO',
+    guide: 'Native SmartAPI connection for F&O execution.',
+  }
 };
 
-function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
   const info = BROKER_INFO[brokerKey];
   const [isEditing, setIsEditing] = useState(false);
+  
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const token = useGhostStore(state => state.token);
   const fetchBrokerStatus = useGhostStore(state => state.fetchBrokerStatus);
@@ -117,31 +125,41 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
             className="broker-manual-connect-form"
             style={{ overflow: 'hidden' }}
           >
-            <form onSubmit={handleConnectSubmit} style={{ padding: '16px 20px', borderTop: '1px solid #1e293b' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>API Key</label>
-                <input 
-                  type="text" 
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste your API key here"
-                  style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-                />
+            <form className="broker-form" onSubmit={handleConnectSubmit}>
+              <div className="broker-guide">
+                <Shield size={14} /> {info.guide}
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>API Secret</label>
-                <input 
-                  type="password" 
-                  value={apiSecret}
-                  onChange={(e) => setApiSecret(e.target.value)}
-                  placeholder="Paste your API secret here"
-                  style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '13px' }}
-                />
+              
+              <div className="broker-field">
+                <label>{brokerKey === 'ANGEL_ONE' ? 'Client ID / API Key' : 'API Key'}</label>
+                <div className="broker-input-wrapper">
+                  <input 
+                    type="text" 
+                    value={apiKey} 
+                    onChange={(e) => setApiKey(e.target.value)} 
+                    placeholder="Paste your API key here" 
+                    required 
+                  />
+                </div>
               </div>
+              <div className="broker-field">
+                <label>API Secret</label>
+                <div className="broker-input-wrapper">
+                  <input 
+                    type="password" 
+                    value={apiSecret} 
+                    onChange={(e) => setApiSecret(e.target.value)} 
+                    placeholder="Paste your API secret here" 
+                    required 
+                  />
+                </div>
+              </div>
+
               <button 
                 type="submit" 
                 disabled={isSubmitting}
-                style={{ width: '100%', padding: '10px', background: info.color, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: isSubmitting ? 'wait' : 'pointer' }}
+                className="broker-submit-btn"
+                style={{ background: info.color }}
               >
                 {isSubmitting ? 'Connecting...' : `Connect ${info.name}`}
               </button>
@@ -175,10 +193,9 @@ export default function BrokerSettingsPage() {
   (connectedBrokers || []).forEach(b => { connectedMap[b.broker] = b; });
 
   const modes = [
-    { key: 'PAPER', label: 'Paper Trading', desc: 'Simulation mode — no real money', icon: <Shield size={15} />, color: '#94a3b8' },
-    { key: 'LIVE_CRYPTO', label: 'Live Crypto', desc: 'Execute via Binance', icon: <Zap size={15} />, color: '#f0b90b', requires: 'BINANCE' },
-    { key: 'LIVE_US', label: 'Live US Stocks', desc: 'Execute via Alpaca', icon: <Zap size={15} />, color: '#ffdc00', requires: 'ALPACA' },
-    { key: 'LIVE_GLOBAL', label: 'Live Global', desc: '170+ markets via IBKR', icon: <Globe size={15} />, color: '#d92b2b', requires: 'IBKR' },
+    { key: 'PAPER', label: 'Paper Trading', desc: 'Simulation mode — no real money at risk', icon: <Shield size={18} />, color: '#94a3b8' },
+    { key: 'LIVE_CRYPTO', label: 'Live Crypto', desc: 'Execute via Binance API', icon: <Zap size={18} />, color: '#f0b90b', requires: 'BINANCE' },
+    { key: 'LIVE_FNO', label: 'Live F&O', desc: 'Execute via Angel One SmartAPI', icon: <Globe size={18} />, color: '#ff7b00', requires: 'ANGEL_ONE' },
   ];
 
   const openMarkets = globalMarkets?.openNow || [];
@@ -200,7 +217,7 @@ export default function BrokerSettingsPage() {
 
         {/* Execution Mode Selector */}
         <div className="execution-mode-section">
-          <h3>Execution Mode</h3>
+          <h3>EXECUTION ROUTING MODE</h3>
           <div className="mode-grid">
             {modes.map(m => {
               const isActive = executionMode === m.key;
@@ -209,13 +226,17 @@ export default function BrokerSettingsPage() {
                 <button
                   key={m.key}
                   className={`mode-btn ${isActive ? 'active' : ''} ${!hasBroker && m.requires ? 'disabled' : ''}`}
-                  onClick={() => hasBroker && setExecutionMode(m.key)}
-                  disabled={!hasBroker && !!m.requires}
-                  style={isActive ? { borderColor: m.color, boxShadow: `0 0 12px ${m.color}33` } : {}}
+                  onClick={() => {
+                    if (hasBroker) setExecutionMode(m.key);
+                    else alert(`Please connect ${m.requires} below to enable ${m.label}.`);
+                  }}
+                  style={isActive ? { borderColor: m.color, boxShadow: `0 0 20px ${m.color}22`, background: `${m.color}0a` } : {}}
                 >
-                  <span className="mode-icon" style={{ color: m.color }}>{m.icon}</span>
-                  <span className="mode-label">{m.label}</span>
-                  <span className="mode-desc">{!hasBroker && m.requires ? 'Connect broker first' : m.desc}</span>
+                  <div className="mode-icon" style={{ color: isActive ? m.color : 'var(--text-muted)' }}>{m.icon}</div>
+                  <div className="mode-content">
+                    <span className="mode-label" style={{ color: isActive ? m.color : 'var(--text-primary)' }}>{m.label}</span>
+                    <span className="mode-desc">{!hasBroker && m.requires ? 'Requires API Connection' : m.desc}</span>
+                  </div>
                 </button>
               );
             })}

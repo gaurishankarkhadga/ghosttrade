@@ -33,6 +33,10 @@ export function resolveYahooSymbol(rawTicker) {
   if (!rawTicker) return null;
   const upper = rawTicker.trim().toUpperCase();
 
+  // Handle Indian Indices Fallbacks to Yahoo format
+  if (upper === 'BANKNIFTY' || upper === 'NSEBANK') return '^NSEBANK';
+  if (upper === 'NIFTY' || upper === 'NIFTY50') return '^NSEI';
+
   // Handle Indian NSE tickers directly
   if (upper.endsWith('.NS') || upper.endsWith('.BO') || upper.startsWith('^') || upper.startsWith('NSE:')) {
     return upper.replace('NSE:', '');
@@ -92,6 +96,96 @@ async function fetchBinanceOHLCV(ticker, interval, limit) {
   }
 }
 
+let _angelAdapterInstance = null;
+
+/**
+ * Helper: Try fetching OHLCV from Angel One API for Indian Markets.
+ */
+async function fetchAngelOneOHLCV(ticker, bars, interval = 'ONE_DAY') {
+  const upper = ticker.toUpperCase().replace(/\s+/g, '');
+  
+  const tokenMap = {
+    'NIFTY': '26000',
+    'BANKNIFTY': '26009',
+    'NIFTY50': '26000',
+    'NSEBANK': '26009',
+    '^NSEBANK': '26009',
+    '^NSEI': '26000'
+  };
+
+  const symbolToken = tokenMap[upper];
+  if (!symbolToken) return null;
+
+  try {
+    if (!_angelAdapterInstance) {
+        const { AngelOneAdapter } = await import('./adapters/angelOneAdapter.js');
+        _angelAdapterInstance = new AngelOneAdapter({
+            apiKey: process.env.ANGEL_API_KEY,
+            clientCode: process.env.ANGEL_CLIENT_CODE,
+            password: process.env.ANGEL_PASSWORD,
+            totpSecret: process.env.ANGEL_TOTP_SECRET
+        });
+    }
+
+    const adapter = _angelAdapterInstance;
+    const authSuccess = await adapter.authenticate();
+    if (!authSuccess) {
+        console.error('[DATA] Angel One Authentication failed for F&O Data fetch.');
+        return null;
+    }
+
+    const toDate = new Date();
+    const fromDate = new Date();
+    
+    // Adjust days backwards based on interval
+    if (interval === 'ONE_DAY') {
+        fromDate.setDate(toDate.getDate() - Math.ceil(bars * 1.5));
+    } else if (interval === 'ONE_HOUR') {
+        fromDate.setDate(toDate.getDate() - Math.ceil(bars / 6)); // ~6 trading hours in a day
+    } else if (interval === 'FIFTEEN_MINUTE') {
+        fromDate.setDate(toDate.getDate() - Math.ceil(bars / 25)); // ~25 15m candles in a day
+    }
+
+    const formatDate = (date) => {
+      return date.getFullYear() + '-' + 
+             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+             String(date.getDate()).padStart(2, '0') + ' 09:15';
+    };
+
+    const payload = {
+        exchange: "NSE",
+        symboltoken: symbolToken,
+        interval: interval,
+        fromdate: formatDate(fromDate),
+        todate: formatDate(toDate)
+    };
+
+    const res = await adapter.smartApi.getCandleData(payload);
+    
+    if (res && res.status && Array.isArray(res.data) && res.data.length > 0) {
+        console.log(`[DATA] Successfully fetched ${res.data.length} Native Angel One bars (${interval}) for ${upper}`);
+        return res.data.map(k => ({
+            date: new Date(k[0]),
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            volume: parseFloat(k[5])
+        }));
+    }
+    
+    // If Angel One returns empty array for Spot Index, fail gracefully
+    // We intentionally DO NOT fallback to Yahoo for Indian indices anymore per user directive
+    console.warn(`[DATA] Angel One returned 0 bars for ${upper}. No fallback allowed.`);
+    return null;
+    
+    return null;
+  } catch (err) {
+    console.error(`[DATA] Angel One Data Fetch Error for ${ticker}:`, err.message);
+    return null;
+  }
+}
+
 export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
   const symbol = resolveYahooSymbol(ticker);
 
@@ -108,7 +202,18 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
   }
 
   try {
-    // 1. Try Binance API First (for crypto)
+    // 0. Try Angel One API First (for Indian Indices)
+    const angelData = await fetchAngelOneOHLCV(ticker, bars);
+    if (angelData && angelData.length > 0) {
+      if (angelData.length < 200) {
+        return { error: 'INSUFFICIENT_DATA', message: `Only ${angelData.length} bars available on Angel One.`, count: angelData.length };
+      }
+      const finalData = { symbol: ticker, bars: angelData };
+      ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+      return finalData;
+    }
+
+    // 1. Try Binance API Next (for crypto)
     const binanceData = await fetchBinanceOHLCV(ticker, '1d', bars);
     if (binanceData && binanceData.length > 0) {
       if (binanceData.length < 200) {
@@ -120,26 +225,15 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
       return finalData;
     }
 
-    // 2. Fallback to Yahoo Finance
-    // Calculate date range — fetch extra days to account for weekends/holidays
-    // 1. Try Binance API First
-    const [binance15m, binance1h, binance1d] = await Promise.all([
-      fetchBinanceOHLCV(ticker, '15m', bars),
-      fetchBinanceOHLCV(ticker, '1h', bars),
-      fetchBinanceOHLCV(ticker, '1d', bars)
-    ]);
+    // 2. Fallback to Yahoo Finance (ONLY for US/Global Stocks)
+    const isCrypto = ticker.toUpperCase().includes('USD') || ticker.toUpperCase().includes('USDT');
+    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
     
-    if (binance15m && binance1h && binance1d && binance1d.length >= 200) {
-      const finalData = {
-        symbol: ticker,
-        timeframes: { '15m': binance15m, '1h': binance1h, '1d': binance1d }
-      };
-      ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
-      console.log(`[DATA] Multi-TF Fetched from Binance for ${ticker}`);
-      return finalData;
+    if (isCrypto || isIndian) {
+      // User Directive: Remove Yahoo Finance fallback for Crypto and AngelOne completely
+      return { error: 'NO_DATA', message: `No valid native API data found for ${ticker}. Yahoo fallback disabled for this asset class.` };
     }
 
-    // 2. Fallback to Yahoo Finance
     const endDate = new Date();
     const startDate = new Date();
     // Add 40% buffer to ensure we get at least `bars` trading days
@@ -182,7 +276,7 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     return finalData;
 
   } catch (err) {
-    console.error(`[DATA] Yahoo Finance fetch failed for ${symbol}:`, err.message);
+    console.error(`[DATA] Data fetch failed for ${symbol}:`, err.message);
     return { error: 'FETCH_FAILED', message: err.message };
   }
 }
@@ -203,19 +297,56 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
   }
 
   try {
-    const endDate = new Date();
+    // 0. Try Angel One (Indian Indices)
+    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
+    if (isIndian) {
+       const [angel15m, angel1h, angel1d] = await Promise.all([
+          fetchAngelOneOHLCV(ticker, bars, 'FIFTEEN_MINUTE').catch(() => null),
+          fetchAngelOneOHLCV(ticker, bars, 'ONE_HOUR').catch(() => null),
+          fetchAngelOneOHLCV(ticker, bars, 'ONE_DAY').catch(() => null)
+       ]);
 
-    // Dates for 1d (needs ~1.4x bars in days)
+       if (angel15m && angel1h && angel1d && angel1d.length >= 200) {
+          const finalData = { symbol: ticker, timeframes: { '15m': angel15m, '1h': angel1h, '1d': angel1d } };
+          ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+          console.log(`[DATA] Multi-TF Fetched natively from Angel One for ${ticker}`);
+          return finalData;
+       } else {
+          return { error: 'NO_DATA', message: `Angel One failed to return complete multi-TF data for ${ticker}. Yahoo fallback strictly disabled.` };
+       }
+    }
+
+    // 1. Try Binance (Crypto)
+    const [binance15m, binance1h, binance1d] = await Promise.all([
+      fetchBinanceOHLCV(ticker, '15m', bars),
+      fetchBinanceOHLCV(ticker, '1h', bars),
+      fetchBinanceOHLCV(ticker, '1d', bars)
+    ]);
+    
+    if (binance15m && binance1h && binance1d && binance1d.length >= 200) {
+      const finalData = {
+        symbol: ticker,
+        timeframes: { '15m': binance15m, '1h': binance1h, '1d': binance1d }
+      };
+      ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+      console.log(`[DATA] Multi-TF Fetched from Binance for ${ticker}`);
+      return finalData;
+    }
+
+    const isCrypto = ticker.toUpperCase().includes('USD') || ticker.toUpperCase().includes('USDT');
+    if (isCrypto) {
+      return { error: 'NO_DATA', message: `Binance failed to return data for ${ticker}. Yahoo fallback strictly disabled.` };
+    }
+
+    // 2. Fallback to Yahoo Finance (ONLY US/Global Stocks)
+    const endDate = new Date();
     const startDate1d = new Date();
     startDate1d.setDate(endDate.getDate() - Math.ceil(bars * 1.4));
 
-    // Dates for 1h (needs ~1.4x bars in hours -> / 24 days)
-    // Add extra buffer for weekends (crypto trades 24/7, stocks don't)
     const startDate1h = new Date();
     const days1h = Math.min(720, Math.ceil((bars * 1.4) / 24) + 2);
     startDate1h.setDate(endDate.getDate() - days1h);
 
-    // Dates for 15m (needs ~1.4x bars in 15m chunks -> / 96 days)
     const startDate15m = new Date();
     const days15m = Math.min(58, Math.ceil((bars * 1.4) / 96) + 2);
     startDate15m.setDate(endDate.getDate() - days15m);
@@ -250,7 +381,7 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
       return { error: 'INSUFFICIENT_DATA', message: `Only ${tf1d.length} 1d bars available. Minimum 200 required.` };
     }
 
-    console.log(`[DATA] Fetched Multi-TF for ${symbol} (15m: ${tf15m.length}, 1h: ${tf1h.length}, 1d: ${tf1d.length})`);
+    console.log(`[DATA] Fetched Multi-TF for ${symbol} via Yahoo (15m: ${tf15m.length}, 1h: ${tf1h.length}, 1d: ${tf1d.length})`);
 
     const finalData = {
       symbol,
@@ -261,7 +392,7 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
     return finalData;
 
   } catch (err) {
-    console.error(`[DATA] Yahoo Finance Multi-TF fetch failed for ${symbol}:`, err.message);
+    console.error(`[DATA] Multi-TF fetch failed for ${symbol}:`, err.message);
     return { error: 'FETCH_FAILED', message: err.message };
   }
 }

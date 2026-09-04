@@ -209,6 +209,7 @@ export async function loadAllAdapters() {
     './binanceExecutionAdapter.js',
     './alpacaExecutionAdapter.js',
     './ibkrExecutionAdapter.js',
+    './adapters/angelOneAdapter.js',
   ];
 
   for (const modulePath of adapterModules) {

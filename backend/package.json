@@ -23,8 +23,10 @@
     "fastify": "^5.10.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^6.12.0",
+    "node-fetch": "^3.3.2",
     "nodemon": "^3.1.14",
-    "smartapi-javascript": "^1.0.10",
+    "smartapi-javascript": "^1.0.27",
+    "speakeasy": "^2.0.0",
     "totp-generator": "^0.0.14",
     "ws": "^8.18.0",
     "yahoo-finance2": "^4.0.0"
