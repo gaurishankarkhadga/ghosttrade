@@ -36,11 +36,16 @@ const BROKER_INFO = {
   }
 };
 
+function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
   const info = BROKER_INFO[brokerKey];
   const [isEditing, setIsEditing] = useState(false);
   
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  
+  const [clientCode, setClientCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [totpSecret, setTotpSecret] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const token = useGhostStore(state => state.token);
@@ -53,21 +58,32 @@ const BROKER_INFO = {
 
   const handleConnectSubmit = async (e) => {
     e.preventDefault();
-    if (!apiKey || !apiSecret) {
-      alert('API Key and Secret are required.');
-      return;
+    if (brokerKey === 'ANGEL_ONE') {
+      if (!clientCode || !password || !totpSecret) {
+        alert('Client ID, Password, and TOTP Secret are required for Angel One.');
+        return;
+      }
+    } else {
+      if (!apiKey || !apiSecret) {
+        alert('API Key and Secret are required.');
+        return;
+      }
     }
     
     setIsSubmitting(true);
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const payload = brokerKey === 'ANGEL_ONE' 
+        ? { broker: brokerKey, clientCode, password, totpSecret }
+        : { broker: brokerKey, apiKey, apiSecret };
+
       const res = await fetch(`${baseUrl}/api/broker/keys`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
         },
-        body: JSON.stringify({ broker: brokerKey, apiKey, apiSecret })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       
@@ -130,30 +146,55 @@ const BROKER_INFO = {
                 <Shield size={14} /> {info.guide}
               </div>
               
-              <div className="broker-field">
-                <label>{brokerKey === 'ANGEL_ONE' ? 'Client ID / API Key' : 'API Key'}</label>
-                <div className="broker-input-wrapper">
-                  <input 
-                    type="text" 
-                    value={apiKey} 
-                    onChange={(e) => setApiKey(e.target.value)} 
-                    placeholder="Paste your API key here" 
-                    required 
-                  />
-                </div>
-              </div>
-              <div className="broker-field">
-                <label>API Secret</label>
-                <div className="broker-input-wrapper">
-                  <input 
-                    type="password" 
-                    value={apiSecret} 
-                    onChange={(e) => setApiSecret(e.target.value)} 
-                    placeholder="Paste your API secret here" 
-                    required 
-                  />
-                </div>
-              </div>
+              {brokerKey === 'ANGEL_ONE' ? (
+                <>
+                  <div className="broker-field">
+                    <label>Client ID</label>
+                    <div className="broker-input-wrapper">
+                      <input type="text" value={clientCode} onChange={(e) => setClientCode(e.target.value)} placeholder="Enter Angel One Client ID" required />
+                    </div>
+                  </div>
+                  <div className="broker-field">
+                    <label>Login PIN / Password</label>
+                    <div className="broker-input-wrapper">
+                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter login PIN or password" required />
+                    </div>
+                  </div>
+                  <div className="broker-field">
+                    <label>Authenticator TOTP Secret</label>
+                    <div className="broker-input-wrapper">
+                      <input type="password" value={totpSecret} onChange={(e) => setTotpSecret(e.target.value)} placeholder="Paste authenticator TOTP setup key" required />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="broker-field">
+                    <label>API Key</label>
+                    <div className="broker-input-wrapper">
+                      <input 
+                        type="text" 
+                        value={apiKey} 
+                        onChange={(e) => setApiKey(e.target.value)} 
+                        placeholder="Paste your API key here" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  <div className="broker-field">
+                    <label>API Secret</label>
+                    <div className="broker-input-wrapper">
+                      <input 
+                        type="password" 
+                        value={apiSecret} 
+                        onChange={(e) => setApiSecret(e.target.value)} 
+                        placeholder="Paste your API secret here" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <button 
                 type="submit" 

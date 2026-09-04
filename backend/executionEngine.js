@@ -20,6 +20,8 @@ import { getDb } from './mongoConfig.js';
 import { createAdapter, loadAllAdapters } from './brokerAdapter.js';
 import { getBrokerKeys } from './brokerKeyManager.js';
 import { getBrokerForTicker } from './marketHoursEngine.js';
+import { getNextActiveExpiry } from './adapters/fnoExpiryEngine.js';
+import { getScripInfo, getClosestExpiry } from './adapters/angelScripMaster.js';
 
 // Load all broker adapters on startup — store promise for awaiting
 const _adaptersReady = loadAllAdapters().catch(err => console.warn('[EXECUTION ENGINE] Adapter loading warning:', err.message));
@@ -242,6 +244,7 @@ class UnifiedExecutionEngine {
                 let finalAsset = asset;
                 let finalQuantity = quantity;
                 let finalSide = side.toUpperCase();
+                let symbolToken = null;
 
                 if (activeMode === 'LIVE_FNO') {
                     const isBankNifty = asset.toUpperCase().includes('BANKNIFTY');
@@ -255,10 +258,23 @@ class UnifiedExecutionEngine {
                         const optionType = finalSide === 'BUY' ? 'CE' : 'PE';
                         finalSide = 'BUY'; // Always buy the option contract
                         
-                        finalAsset = `${isBankNifty ? 'BANKNIFTY' : 'NIFTY'}26SEP24${atmStrike}${optionType}`;
-                        finalQuantity = isBankNifty ? 15 : 25; // Standard Lot sizes
+                        const baseSymbol = isBankNifty ? 'BANKNIFTY' : 'NIFTY';
                         
-                        console.log(`[EXECUTION ENGINE] 🇮🇳 F&O Strike Mapping: ${asset} @ ${entryPrice} -> ${finalAsset} (ATM) | Qty: ${finalQuantity}`);
+                        // 100% Robust Expiry Calculation: Pulls the closest exact expiry from the active Scrip Master
+                        const dynamicExpiry = await getClosestExpiry(baseSymbol) || getNextActiveExpiry(baseSymbol);
+                        
+                        finalAsset = `${baseSymbol}${dynamicExpiry}${atmStrike}${optionType}`;
+                        
+                        // Look up dynamic token and lot size from Scrip Master
+                        const scripInfo = await getScripInfo(finalAsset);
+                        if (scripInfo) {
+                            finalQuantity = parseInt(scripInfo.lotsize, 10);
+                            symbolToken = scripInfo.token;
+                            console.log(`[EXECUTION ENGINE] 🇮🇳 F&O Scrip Found: ${finalAsset} | Token: ${symbolToken} | Qty: ${finalQuantity}`);
+                        } else {
+                            console.warn(`[EXECUTION ENGINE] ⚠️ F&O Scrip Not Found in Master: ${finalAsset}. Using fallback qty.`);
+                            finalQuantity = isBankNifty ? 15 : 25; // Fallback only if master fails
+                        }
                     }
                 }
 
@@ -266,6 +282,7 @@ class UnifiedExecutionEngine {
                 const orderResult = await adapter.placeOrder({
                     symbol: finalAsset,
                     asset: finalAsset, // passing both for compatibility
+                    symbolToken: symbolToken,
                     side: finalSide,
                     type: 'MARKET',
                     orderType: 'MARKET',

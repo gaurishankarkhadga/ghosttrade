@@ -92,10 +92,17 @@ export class AngelOneAdapter extends BaseBrokerAdapter {
         // we map standard AI F&O signals into Angel One's required fields.
         // We assume 'asset' contains the trading symbol, e.g., 'BANKNIFTY15JUN2352000CE'
 
+        if (!params.symbolToken) {
+            return {
+                success: false,
+                reason: 'Missing strictly required symbolToken for Angel One F&O execution.'
+            };
+        }
+
         const orderParams = {
             variety: "NORMAL",
             tradingsymbol: asset,
-            symboltoken: params.symbolToken || "3045", // Will require token lookup in production F&O
+            symboltoken: params.symbolToken,
             transactiontype: side.toUpperCase() === 'BUY' ? 'BUY' : 'SELL',
             exchange: "NFO", // National F&O Exchange
             ordertype: orderType.toUpperCase(),

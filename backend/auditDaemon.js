@@ -472,11 +472,18 @@ async function runAuditCycle() {
             if (actualPrice === null) {
               // If price fetch fails, check if the signal has already expired
               const fallbackDue = new Date(new Date(signal.timestamp || Date.now()).getTime() + 48 * 60 * 60 * 1000);
-              const isExpired = signal.auditDue ? new Date() >= new Date(signal.auditDue) : new Date() >= fallbackDue;
-              if (isExpired) {
-                await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available at expiration', null);
+              const dueDate = signal.auditDue ? new Date(signal.auditDue) : fallbackDue;
+              const isExpired = new Date() >= dueDate;
+              
+              // Grace Period: Don't instantly ruin the signal on a 2-second network timeout.
+              // Allow the system up to 1 hour to reconnect to Binance/Yahoo after expiration.
+              const GRACE_PERIOD_MS = 60 * 60 * 1000;
+              const isDeeplyExpired = new Date() >= new Date(dueDate.getTime() + GRACE_PERIOD_MS);
+
+              if (isExpired && isDeeplyExpired) {
+                await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available (API network timeout)', null);
               }
-              continue; // Skip evaluation this cycle, try again next time
+              continue; // Skip evaluation this cycle, try again next time when network recovers
             }
 
             // CONTINUOUS HIGH-WATER MARK TRACKING

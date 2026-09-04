@@ -450,15 +450,29 @@ fastify.post('/api/execution/reset', async (request, reply) => {
 // =====================================================
 
 fastify.post('/api/broker/keys', async (request, reply) => {
-  const { broker, apiKey, apiSecret, accountId, isPaper } = request.body || {};
-  if (!broker || !apiKey) {
-    return reply.code(400).send({ error: 'broker and apiKey are required.' });
+  const { broker, apiKey, apiSecret, accountId, isPaper, clientCode, password, totpSecret } = request.body || {};
+  
+  if (!broker) {
+    return reply.code(400).send({ error: 'broker is required.' });
   }
+  
+  if (broker !== 'ANGEL_ONE' && !apiKey) {
+    return reply.code(400).send({ error: 'apiKey is required for this broker.' });
+  }
+
   if (!SUPPORTED_BROKERS.includes(broker)) {
     return reply.code(400).send({ error: `Unsupported broker. Supported: ${SUPPORTED_BROKERS.join(', ')}` });
   }
   try {
-    await storeBrokerKeys(request.user.email, broker, { apiKey, apiSecret, accountId, isPaper: String(isPaper !== false) });
+    await storeBrokerKeys(request.user.email, broker, { 
+      apiKey, 
+      apiSecret, 
+      accountId, 
+      isPaper: String(isPaper !== false),
+      clientCode,
+      password,
+      totpSecret
+    });
     return reply.send({ success: true, broker, message: `${broker} credentials stored securely (AES-256 encrypted).` });
   } catch (err) {
     return reply.code(500).send({ error: err.message });
