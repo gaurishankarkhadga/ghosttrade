@@ -357,6 +357,7 @@ const TradeExecutionCard = ({
       pattern: pattern || 'AUTO_DETECTED',
       regime: regime || 'DYNAMIC_REGIME',
       source: source || 'AI_AGENT'
+    });
     setTradeResult(result);
   };
 

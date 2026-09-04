@@ -115,6 +115,7 @@ const useGhostStore = create(
         } catch (e) {
           return null;
         }
+      },
       toggleSimpleMode: () => set((state) => ({ isSimpleMode: !state.isSimpleMode })),
 
       // --- Paper Trading State ---
