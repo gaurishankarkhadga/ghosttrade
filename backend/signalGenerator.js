@@ -30,7 +30,6 @@ const SCORE_WEIGHTS = {
   HISTORICAL_WIN_RATE:   0.15,  // Backtest win rate for this setup_id
 };
 
-// Minimum composite score to generate a trade signal (0-100)
 // HARDENED A++ INSTITUTIONAL GRADE: 65 requires definitive statistical edge and filters out 55-64% consolidation chop
 const MIN_SIGNAL_SCORE = 65;
 
