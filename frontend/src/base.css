@@ -19,6 +19,10 @@
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-medium: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --surface-glass: rgba(15, 23, 42, 0.72);
+  --surface-strong: rgba(15, 23, 42, 0.92);
+  --surface-soft: rgba(148, 163, 184, 0.08);
 
   /* Fonts */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -30,18 +34,24 @@
   --transition-smooth: all 200ms var(--ease-apple);
 }
 
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  background: var(--color-ghost-obsidian);
+}
+
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-ghost-obsidian);
+  background: linear-gradient(180deg, var(--color-ghost-obsidian) 0%, var(--surface-soft) 100%);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  transition: background 200ms ease, color 200ms ease;
 }
 
 /* Custom Scrollbars */

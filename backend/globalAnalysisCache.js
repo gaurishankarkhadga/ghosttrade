@@ -85,13 +85,21 @@ export async function updateGlobalCache(enrichedResults) {
 export async function getGlobalAssetAnalysis(ticker) {
   if (!ticker) return null;
   const keysToTry = [ticker, `${ticker}-USD`, `${ticker}.NS`];
+  const MAX_CACHE_AGE_MS = 5 * 60 * 1000; // 5 minutes max freshness
 
   if (redis) {
     try {
       // HGET returns the parsed JSON object automatically with @upstash/redis
       for (const key of keysToTry) {
         const data = await redis.hget('ghosttrade:assets', key);
-        if (data) return typeof data === 'string' ? JSON.parse(data) : data;
+        if (data) {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          if (parsed && parsed.cachedAt && (Date.now() - parsed.cachedAt > MAX_CACHE_AGE_MS)) {
+            console.log(`[UPSTASH CACHE] Stale entry for ${key} (${Math.round((Date.now() - parsed.cachedAt) / 1000)}s old). Discarding.`);
+            return null;
+          }
+          return parsed;
+        }
       }
       return null;
     } catch (e) {
@@ -101,7 +109,15 @@ export async function getGlobalAssetAnalysis(ticker) {
 
   // Local RAM Fallback
   for (const key of keysToTry) {
-    if (localCache[key]) return localCache[key];
+    if (localCache[key]) {
+      const asset = localCache[key];
+      if (asset && asset.cachedAt && (Date.now() - asset.cachedAt > MAX_CACHE_AGE_MS)) {
+        console.log(`[LOCAL CACHE] Stale entry for ${key} (${Math.round((Date.now() - asset.cachedAt) / 1000)}s old). Discarding.`);
+        delete localCache[key];
+        return null;
+      }
+      return asset;
+    }
   }
   return null;
 }
@@ -111,12 +127,17 @@ export async function getGlobalAssetAnalysis(ticker) {
  * @returns {Array} Array of all cached asset objects
  */
 export async function getAllCachedAssets() {
+  const MAX_CACHE_AGE_MS = 10 * 60 * 1000; // 10 minutes max for broad scans
+  const now = Date.now();
+
   if (redis) {
     try {
       // HGETALL returns an object like { "BTC-USD": {...}, "ETH-USD": {...} }
       const allData = await redis.hgetall('ghosttrade:assets');
       if (allData) {
-        return Object.values(allData).map(val => typeof val === 'string' ? JSON.parse(val) : val);
+        return Object.values(allData)
+          .map(val => typeof val === 'string' ? JSON.parse(val) : val)
+          .filter(a => a && a.cachedAt && (now - a.cachedAt <= MAX_CACHE_AGE_MS));
       }
       return [];
     } catch (e) {
@@ -125,7 +146,7 @@ export async function getAllCachedAssets() {
   }
   
   // Local RAM Fallback
-  return Object.values(localCache);
+  return Object.values(localCache).filter(a => a && a.cachedAt && (now - a.cachedAt <= MAX_CACHE_AGE_MS));
 }
 
 /**

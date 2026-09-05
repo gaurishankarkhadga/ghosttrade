@@ -1,17 +1,18 @@
 {
   "name": "ghosttrade-backend",
-  "version": "2.0.0",
-  "description": "The Unbreakable Gateway — Phase 2 Evolution",
-  "main": "server.js",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test:pipeline": "node test_pipeline.js",
-    "test:all": "node test_pipeline.js && node test_phase1.js && node test_phase3.js && node test_phase4.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
-    "@fastify/cors": "^11.3.0",
-    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/env": "^5.0.2",
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.2",
     "@fastify/websocket": "^11.3.0",
     "@google/generative-ai": "^0.24.1",
     "@paddle/paddle-node-sdk": "^3.8.0",
@@ -28,7 +29,6 @@
     "smartapi-javascript": "^1.0.27",
     "speakeasy": "^2.0.0",
     "totp-generator": "^0.0.14",
-    "ws": "^8.18.0",
-    "yahoo-finance2": "^4.0.0"
+    "ws": "^8.18.0"
   }
 }

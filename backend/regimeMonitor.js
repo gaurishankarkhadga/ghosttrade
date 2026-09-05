@@ -114,6 +114,7 @@ async function runRecheckCycle() {
   console.log(`[REGIME MONITOR] Recheck cycle — ${openSignals.size} open signal(s)`);
 
   // Group by ticker to avoid redundant Yahoo Finance calls
+  // Group by ticker to avoid redundant API calls
   const tickerMap = new Map();
   for (const [signalId, entry] of openSignals.entries()) {
     if (!tickerMap.has(entry.ticker)) {
@@ -159,6 +160,7 @@ async function runRecheckCycle() {
       }
 
       // Rate limit between Yahoo Finance calls
+      // Rate limit between API calls
       await new Promise(r => setTimeout(r, 1000));
 
     } catch (err) {

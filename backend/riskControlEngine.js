@@ -6,7 +6,8 @@
 
 import { getDb } from './mongoConfig.js';
 import { fetchOHLCV, getLogReturns } from './dataFetcher.js';
-import { toYahooSymbol } from './marketRouter.js';
+
+import { toStandardSymbol } from './marketRouter.js';
 import { getLiveDepthFromMemory } from './websocketEngine.js';
 
 const RISK_CONFIG = {
@@ -185,12 +186,12 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
 
     // CHECK 3 — Dynamic Covariance Matrix (Correlation Blocking)
     if (openTrades.length > 0) {
-      const newAssetData = await fetchOHLCV(toYahooSymbol(newTradeAsset), RISK_CONFIG.correlation_lookback_bars);
+      const newAssetData = await fetchOHLCV(toStandardSymbol(newTradeAsset), RISK_CONFIG.correlation_lookback_bars);
       if (!newAssetData.error && newAssetData.bars) {
          const newReturns = getLogReturns(newAssetData.bars);
          
          for (const openTrade of openTrades) {
-            const openAssetData = await fetchOHLCV(toYahooSymbol(openTrade.asset), RISK_CONFIG.correlation_lookback_bars);
+            const openAssetData = await fetchOHLCV(toStandardSymbol(openTrade.asset), RISK_CONFIG.correlation_lookback_bars);
             if (!openAssetData.error && openAssetData.bars) {
                const openReturns = getLogReturns(openAssetData.bars);
                

@@ -216,8 +216,9 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     
     if (isSimpleLookup) {
       const cachedAsset = await getGlobalAssetAnalysis(extractedTicker);
+      const isFresh = cachedAsset && cachedAsset.cachedAt && (Date.now() - cachedAsset.cachedAt <= 3 * 60 * 1000);
       
-      if (cachedAsset && cachedAsset.signalData) {
+      if (isFresh && cachedAsset.signalData) {
         console.log(`[GLOBAL CACHE HIT] ${extractedTicker} — serving pre-computed analysis (0ms recalculation)`);
         
         // Stream the cached analysis as formatted chat text

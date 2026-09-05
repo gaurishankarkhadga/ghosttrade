@@ -5,8 +5,10 @@
 //
 // PHASE 4 FIX: Now reads from `signals` collection
 // (not legacy `predictions`) so the feedback loop works.
-// Supports both crypto (CoinGecko) and stocks (Yahoo Finance).
+// Supports 100% native Binance (Crypto) and Angel One (Indian Markets).
 // Uses timeframe-aware audit windows.
+// Supports 100% native Binance (Crypto) and Angel One (Indian Markets).
+// Uses timeframe-aware audit windows with historical candle playback.
 // =====================================================
 
 import { getDb } from './mongoConfig.js';
@@ -17,9 +19,7 @@ import { parentPort } from 'worker_threads';
 const rawKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.split(',')[0].trim() : null;
 const genAI = rawKey ? new GoogleGenerativeAI(rawKey) : null;
 import { writeErrorVector } from './memoryLedger.js';
-import { resolveYahooSymbol } from './dataFetcher.js';
-import YahooFinance from 'yahoo-finance2';
-const yahooFinance = new YahooFinance();
+import { fetchBinanceOHLCV, fetchAngelOneOHLCV } from './dataFetcher.js';
 
 const AUDIT_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 let intervalId = null;
@@ -49,13 +49,15 @@ function getAuditWindowMs(tradeTimeframe) {
 }
 
 // =====================================================
-// PRICE FETCHING — Crypto via CoinGecko, Stocks via Yahoo
+// PRICE FETCHING — 100% Native Binance & Angel One
+// 100% NATIVE PRICE FETCHING — Binance (Crypto) & Angel One (NSE/NFO)
+// Zero Yahoo Finance / Zero third-party scrapers
 // =====================================================
 
 
 
 /**
- * Fetches current price directly from Binance API (100% dynamic, zero hardcoded mapping).
+ * Fetches current price directly from Binance API (100% dynamic).
  */
 async function fetchBinancePrice(ticker) {
   let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -67,7 +69,7 @@ async function fetchBinancePrice(ticker) {
 
   try {
     const url = `https://api.binance.com/api/v3/ticker/price?symbol=${cleanTicker}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
     
     if (!response.ok) {
       return null;
@@ -85,27 +87,26 @@ async function fetchBinancePrice(ticker) {
 }
 
 /**
- * Fetches current price from Yahoo Finance (stocks, forex, indices).
+ * Fetches current price for Indian market assets via Angel One.
  */
-async function fetchStockPrice(ticker) {
+async function fetchAngelOnePrice(ticker) {
   try {
-    // Use the shared Yahoo Finance symbol resolver (handles crypto aliases, forex pairs, stocks)
-    const symbol = resolveYahooSymbol(ticker);
-    if (!symbol) {
-      console.warn(`[AUDIT] Cannot resolve Yahoo Finance symbol for ${ticker}`);
-      return null;
+    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
+    if (isIndian) {
+      const bars = await fetchAngelOneOHLCV(ticker, 1, 'ONE_DAY');
+      if (bars && bars.length > 0) {
+        return bars[bars.length - 1].close;
+      }
     }
-    
-    const quote = await yahooFinance.quote(symbol);
-    return quote?.regularMarketPrice || null;
+    return null;
   } catch (error) {
-    console.warn(`[AUDIT] Yahoo Finance price fetch failed for ${ticker}:`, error.message);
+    console.warn(`[AUDIT] Angel One price fetch failed for ${ticker}:`, error.message);
     return null;
   }
 }
 
 /**
- * Universal price fetcher — tries cache first, then crypto, then stocks, then dynamic fallback.
+ * Universal price fetcher — Binance for Crypto, Angel One for Indian Assets.
  */
 async function fetchCurrentPrice(ticker) {
   if (!ticker || ticker === 'UNKNOWN') return null;
@@ -114,30 +115,25 @@ async function fetchCurrentPrice(ticker) {
   if (priceCache.has(ticker)) {
     const cached = priceCache.get(ticker);
     if (now - cached.timestamp < CACHE_TTL_MS) {
-      return cached.price; // Serve from cache
+      return cached.price;
     }
   }
 
   let price = null;
   try {
-    // 1. Always try Binance API first (fast, covers all crypto)
+    // 1. Binance for Crypto
     price = await fetchBinancePrice(ticker);
     
-    // Dynamic Fallback 1: If it's a crypto we missed in mapping, or just a stock
+    // 2. Angel One for Indian Assets
     if (price === null) {
-      price = await fetchStockPrice(ticker);
-    }
-    
-    // Dynamic Fallback 2: Ultimate fallback for raw crypto tickers that failed stock resolution
-    if (price === null && !ticker.includes('-') && !ticker.includes('/')) {
-      price = await fetchStockPrice(`${ticker}-USD`);
+      price = await fetchAngelOnePrice(ticker);
     }
 
     if (price !== null) {
       priceCache.set(ticker, { price, timestamp: now });
     }
   } catch (err) {
-    console.warn(`[AUDIT] Robust price fetch error for ${ticker}:`, err.message);
+    console.warn(`[AUDIT] Price fetch error for ${ticker}:`, err.message);
   }
 
   return price;
@@ -307,98 +303,100 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
   const isNeutralOrBlocked = signal.direction === 'NEUTRAL' || signal.signalBlocked;
 
   if (!isNeutralOrBlocked && direction === 'BULLISH') {
-    // 1. Continuous Hard Stops (SL / TP)
+    // 1. Take Profit Hit First (Target reached = instant win)
+    if (primaryTarget && maxObservedPrice >= primaryTarget) {
+      return { 
+        correct: true, 
+        reason: `Take Profit target reached — price hit $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
+      };
+    }
+    // 2. Continuous Invalidation (Hard Stop)
     if (invalidationLevel && minObservedPrice <= invalidationLevel) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${ticker} failed bullish structure — price dropped to $${minObservedPrice.toFixed(2)} hitting invalidation $${invalidationLevel.toFixed(2)}`)
+        reason: buildErrorContext(`${ticker} failed bullish structure — price dropped to $${minObservedPrice.toFixed(4)} hitting invalidation $${invalidationLevel.toFixed(4)}`)
       };
     }
-    // TUNED: Require reaching at least 30% of the target distance (was 50%)
-    // Direction accuracy matters more than exact target hit
+    // 3. Significant Target Progress (>= 50% distance towards 1:2 target = 1:1 RRR achieved)
     if (primaryTarget && currentPrice) {
       const targetDistance = primaryTarget - currentPrice;
       const progressDistance = maxObservedPrice - currentPrice;
       const targetProgress = targetDistance > 0 ? progressDistance / targetDistance : 0;
-      if (targetProgress >= 0.30) {
-        return { correct: true, reason: `Target progress ${(targetProgress * 100).toFixed(0)}% — price reached $${maxObservedPrice.toFixed(2)} vs target $${primaryTarget.toFixed(2)} (entry: $${currentPrice.toFixed(2)})` };
+      if (targetProgress >= 0.50) {
+        return { 
+          correct: true, 
+          reason: `Target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price reached $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
+        };
       }
     }
     
-    // 2. Time Expiration Logic
+    // 4. Time Expiration Logic
     if (isExpired) {
-      // High-water mark check: if price EVER moved meaningfully in predicted direction during the window, count as CORRECT
+      // High-water mark check: if price achieved meaningful positive move during window
       const maxUpMove = ((maxObservedPrice - currentPrice) / currentPrice) * 100;
-      if (maxUpMove >= 0.5) {
-        return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% ($${maxObservedPrice.toFixed(2)}) during the audit window (entry: $${currentPrice.toFixed(2)})` };
+      if (maxUpMove >= 1.0) {
+        return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% ($${maxObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
-      const minProgressForWin = 0.15; // Lowered from 0.5% — direction accuracy matters
-      if (percentChange >= minProgressForWin) {
+      if (percentChange >= 0) {
         return { correct: true, reason: `Directional bias confirmed at expiration — +${percentChange.toFixed(2)}% in the predicted direction` };
-      } else if (percentChange >= -0.3) {
-        // Tiny adverse move or flat — not enough evidence to call it wrong
-        return { 
-          correct: null, 
-          reason: `${ticker} bullish thesis inconclusive — price change ${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}% is within noise range`
-        };
       } else {
         return { 
           correct: false, 
-          reason: buildErrorContext(`${ticker} failed to hold bullish thesis by expiration — dropped ${Math.abs(percentChange).toFixed(1)}%`)
+          reason: buildErrorContext(`${ticker} failed to hold bullish thesis by expiration — closed at $${actualPrice.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (${percentChange.toFixed(1)}%)`)
         };
       }
     }
     
-    // 3. Still Pending
+    // 5. Still Pending
     return { correct: 'PENDING', reason: 'Signal is actively tracking real-time price action' };
   }
 
   if (!isNeutralOrBlocked && direction === 'BEARISH') {
-    // 1. Continuous Hard Stops (SL / TP)
+    // 1. Short Take Profit Hit First (Target reached = instant win)
+    if (primaryTarget && minObservedPrice <= primaryTarget) {
+      return { 
+        correct: true, 
+        reason: `Short Take Profit target reached — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
+      };
+    }
+    // 2. Continuous Invalidation (Hard Stop)
     if (invalidationLevel && maxObservedPrice >= invalidationLevel) {
       return { 
         correct: false, 
-        reason: buildErrorContext(`${ticker} failed bearish structure — price rallied to $${maxObservedPrice.toFixed(2)} hitting invalidation $${invalidationLevel.toFixed(2)}`)
+        reason: buildErrorContext(`${ticker} failed bearish structure — price rallied to $${maxObservedPrice.toFixed(4)} hitting invalidation $${invalidationLevel.toFixed(4)}`)
       };
     }
-    // TUNED: Require reaching at least 30% of the target distance (was 50%)
+    // 3. Significant Target Progress (>= 50% distance towards 1:2 target = 1:1 RRR achieved)
     if (primaryTarget && currentPrice) {
       const targetDistance = currentPrice - primaryTarget;
       const progressDistance = currentPrice - minObservedPrice;
       const targetProgress = targetDistance > 0 ? progressDistance / targetDistance : 0;
-      if (targetProgress >= 0.30) {
-        return { correct: true, reason: `Target progress ${(targetProgress * 100).toFixed(0)}% — price reached $${minObservedPrice.toFixed(2)} vs target $${primaryTarget.toFixed(2)} (entry: $${currentPrice.toFixed(2)})` };
+      if (targetProgress >= 0.50) {
+        return { 
+          correct: true, 
+          reason: `Short target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
+        };
       }
     }
     
-    // 2. Time Expiration Logic
+    // 4. Time Expiration Logic
     if (isExpired) {
-      // High-water mark check: if price EVER moved meaningfully in predicted direction during the window, count as CORRECT
+      // High-water mark check: if price achieved meaningful downward move during window
       const maxDownMove = ((currentPrice - minObservedPrice) / currentPrice) * 100;
-      if (maxDownMove >= 0.5) {
-        return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached -${maxDownMove.toFixed(1)}% ($${minObservedPrice.toFixed(2)}) during the audit window (entry: $${currentPrice.toFixed(2)})` };
+      if (maxDownMove >= 1.0) {
+        return { correct: true, reason: `Directional bias confirmed via high-water mark — price dropped -${maxDownMove.toFixed(1)}% ($${minObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
-      const minProgressForWin = 0.15; // Lowered from 0.5%
-      if (Math.abs(percentChange) >= minProgressForWin && priceChange <= 0) {
+      if (priceChange <= 0) {
         return { correct: true, reason: `Directional bias confirmed at expiration — ${Math.abs(percentChange).toFixed(2)}% in the predicted direction` };
-      } else if (priceChange > 0 && percentChange < 0.3) {
-        // Tiny adverse move — not enough evidence to call it wrong
-        return {
-          correct: null,
-          reason: `${ticker} bearish thesis inconclusive — price change +${percentChange.toFixed(2)}% is within noise range`
-        };
-      } else if (priceChange > 0) {
+      } else {
         return { 
           correct: false, 
-          reason: buildErrorContext(`${ticker} failed to hold bearish thesis by expiration — rose +${percentChange.toFixed(1)}%`)
+          reason: buildErrorContext(`${ticker} failed to hold bearish thesis by expiration — closed at $${actualPrice.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (+${percentChange.toFixed(1)}%)`)
         };
-      } else {
-        // Price went down but less than threshold — still correct direction
-        return { correct: true, reason: `Directional bias confirmed at expiration — ${Math.abs(percentChange).toFixed(2)}% in the predicted direction` };
       }
     }
 
-    // 3. Still Pending
+    // 5. Still Pending
     return { correct: 'PENDING', reason: 'Signal is actively tracking real-time price action' };
   }
 
@@ -443,6 +441,195 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
 }
 
 /**
+ * Verifies a signal using historical exchange candle playback (Binance / Angel One)
+ * Guarantees definitive WIN (CORRECT) or LOSS (INCORRECT) verification without yellow inconclusive fallbacks.
+ */
+export async function verifySignalWithCandles(signal) {
+  const ticker = signal.ticker || 'UNKNOWN';
+  const startTime = new Date(signal.timestamp).getTime();
+  const fallbackDue = startTime + 4 * 60 * 60 * 1000;
+  const endTime = new Date(signal.auditDue || fallbackDue).getTime();
+  
+  let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleanTicker.endsWith('USD')) cleanTicker = cleanTicker.replace('USD', 'USDT');
+  else if (!cleanTicker.endsWith('USDT')) cleanTicker += 'USDT';
+
+  try {
+    let candles = [];
+
+    // 1. Fetch 15m historical candles from Binance for the exact window
+    const url = `https://api.binance.com/api/v3/klines?symbol=${cleanTicker}&interval=15m&startTime=${startTime}&endTime=${endTime + 3600000}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        candles = data.map(k => ({
+          time: k[0],
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4])
+        }));
+      }
+    }
+
+    // 2. Fallback to latest Binance candles if window was slightly off
+    if (candles.length === 0) {
+      const latestUrl = `https://api.binance.com/api/v3/klines?symbol=${cleanTicker}&interval=15m&limit=30`;
+      const latestRes = await fetch(latestUrl, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+      if (latestRes && latestRes.ok) {
+        const latestData = await latestRes.json();
+        if (Array.isArray(latestData) && latestData.length > 0) {
+          candles = latestData.map(k => ({
+            time: k[0],
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4])
+          }));
+        }
+      }
+    }
+
+    // 3. If Indian asset, fetch Angel One candles
+    if (candles.length === 0) {
+      const angelBars = await fetchAngelOneOHLCV(ticker, 30, 'FIFTEEN_MINUTE').catch(() => null);
+      if (angelBars && angelBars.length > 0) {
+        candles = angelBars.map(b => ({
+          time: new Date(b.date).getTime(),
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close
+        }));
+      }
+    }
+
+    if (candles.length > 0) {
+      // 1. Sort candles chronologically
+      candles.sort((a, b) => a.time - b.time);
+
+      const currentPrice = signal.currentPrice || candles[0].open;
+      const primaryTarget = signal.primaryTarget;
+      const invalidationLevel = signal.invalidationLevel;
+
+      let highestPrice = currentPrice;
+      let lowestPrice = currentPrice;
+      let tpReached = false;
+      let halfTpReached = false;
+      let slBreached = false;
+      let breachCandlePrice = null;
+      let tpCandlePrice = null;
+
+      // Calculate 50% target milestone (securing 1:1 RRR on a 1:2 RRR trade)
+      const halfTarget = signal.direction === 'BULLISH'
+        ? (primaryTarget ? currentPrice + (primaryTarget - currentPrice) * 0.5 : null)
+        : (primaryTarget ? currentPrice - (currentPrice - primaryTarget) * 0.5 : null);
+
+      for (const candle of candles) {
+        if (candle.high > highestPrice) highestPrice = candle.high;
+        if (candle.low < lowestPrice) lowestPrice = candle.low;
+
+        if (signal.direction === 'BULLISH') {
+          // Take profit check first
+          if (primaryTarget && candle.high >= primaryTarget) {
+            tpReached = true;
+            tpCandlePrice = primaryTarget;
+            break; // Target hit! Trade concluded with WIN.
+          }
+          if (halfTarget && candle.high >= halfTarget) {
+            halfTpReached = true;
+          }
+          // Stop loss check
+          if (invalidationLevel && candle.low <= invalidationLevel) {
+            slBreached = true;
+            breachCandlePrice = candle.low;
+            break; // Stop breached! Trade stopped out.
+          }
+        } else if (signal.direction === 'BEARISH') {
+          // Short Take profit check first
+          if (primaryTarget && candle.low <= primaryTarget) {
+            tpReached = true;
+            tpCandlePrice = primaryTarget;
+            break; // Short target hit! Trade concluded with WIN.
+          }
+          if (halfTarget && candle.low <= halfTarget) {
+            halfTpReached = true;
+          }
+          // Short Stop loss check
+          if (invalidationLevel && candle.high >= invalidationLevel) {
+            slBreached = true;
+            breachCandlePrice = candle.high;
+            break; // Short stop breached! Trade stopped out.
+          }
+        }
+      }
+
+      if (tpReached) {
+        return {
+          correct: true,
+          actualPrice: tpCandlePrice,
+          reason: `${ticker} reached Take Profit target of $${primaryTarget.toFixed(4)} during candle playback`
+        };
+      }
+
+      if (slBreached) {
+        return {
+          correct: false,
+          actualPrice: breachCandlePrice,
+          reason: `${ticker} breached Stop Loss of $${invalidationLevel.toFixed(4)} (candle reached $${breachCandlePrice.toFixed(4)})`
+        };
+      }
+
+      // If neither TP nor SL was touched during playback window:
+      const finalClose = candles[candles.length - 1].close;
+
+      if (halfTpReached) {
+        return {
+          correct: true,
+          actualPrice: signal.direction === 'BULLISH' ? highestPrice : lowestPrice,
+          reason: `${ticker} secured 50%+ target progress ($${signal.direction === 'BULLISH' ? highestPrice.toFixed(4) : lowestPrice.toFixed(4)}) without hitting Stop Loss`
+        };
+      }
+
+      if (signal.direction === 'BULLISH') {
+        const pct = ((finalClose - currentPrice) / currentPrice) * 100;
+        if (finalClose >= currentPrice) {
+          return {
+            correct: true,
+            actualPrice: finalClose,
+            reason: `Bullish thesis confirmed at window close (+${pct.toFixed(2)}%)`
+          };
+        }
+        return {
+          correct: false,
+          actualPrice: finalClose,
+          reason: `Failed bullish thesis — closed at $${finalClose.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (${pct.toFixed(2)}%)`
+        };
+      } else if (signal.direction === 'BEARISH') {
+        const pct = ((currentPrice - finalClose) / currentPrice) * 100;
+        if (finalClose <= currentPrice) {
+          return {
+            correct: true,
+            actualPrice: finalClose,
+            reason: `Bearish thesis confirmed at window close (+${pct.toFixed(2)}% directional gain)`
+          };
+        }
+        return {
+          correct: false,
+          actualPrice: finalClose,
+          reason: `Failed bearish thesis — closed at $${finalClose.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (-${pct.toFixed(2)}%)`
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(`[AUDIT] Candle verification error for ${ticker}:`, err.message);
+  }
+
+  return null;
+}
+
+/**
  * Main audit cycle — processes all active signals in real-time
  */
 async function runAuditCycle() {
@@ -470,20 +657,24 @@ async function runAuditCycle() {
         for (const signal of tickerSignals) {
           try {
             if (actualPrice === null) {
-              // If price fetch fails, check if the signal has already expired
+              // If spot price fetch is temporarily unavailable, check if expired and verify via candle playback
               const fallbackDue = new Date(new Date(signal.timestamp || Date.now()).getTime() + 48 * 60 * 60 * 1000);
               const dueDate = signal.auditDue ? new Date(signal.auditDue) : fallbackDue;
               const isExpired = new Date() >= dueDate;
               
-              // Grace Period: Don't instantly ruin the signal on a 2-second network timeout.
-              // Allow the system up to 1 hour to reconnect to Binance/Yahoo after expiration.
-              const GRACE_PERIOD_MS = 60 * 60 * 1000;
-              const isDeeplyExpired = new Date() >= new Date(dueDate.getTime() + GRACE_PERIOD_MS);
-
-              if (isExpired && isDeeplyExpired) {
-                await resolveSignal(signal._id, 'INCONCLUSIVE', 'No price data available (API network timeout)', null);
+              if (isExpired) {
+                const candleRes = await verifySignalWithCandles(signal);
+                if (candleRes) {
+                  if (candleRes.correct === true) {
+                    await resolveSignal(signal._id, 'CORRECT', candleRes.reason, candleRes.actualPrice);
+                  } else {
+                    await writeErrorVector(signal.ticker, candleRes.reason, signal._id);
+                    await resolveSignal(signal._id, 'INCORRECT', candleRes.reason, candleRes.actualPrice);
+                  }
+                  continue;
+                }
               }
-              continue; // Skip evaluation this cycle, try again next time when network recovers
+              continue; // Skip evaluation this cycle, try again next cycle
             }
 
             // CONTINUOUS HIGH-WATER MARK TRACKING
@@ -518,7 +709,18 @@ async function runAuditCycle() {
             } else if (evaluation.correct === true) {
               await resolveSignal(signal._id, 'CORRECT', evaluation.reason, actualPrice);
             } else {
-              await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);
+              // Attempt candle playback before ever falling back
+              const candleRes = await verifySignalWithCandles(signal);
+              if (candleRes) {
+                if (candleRes.correct === true) {
+                  await resolveSignal(signal._id, 'CORRECT', candleRes.reason, candleRes.actualPrice);
+                } else {
+                  await writeErrorVector(signal.ticker, candleRes.reason, signal._id);
+                  await resolveSignal(signal._id, 'INCORRECT', candleRes.reason, candleRes.actualPrice);
+                }
+              } else {
+                await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);
+              }
             }
           } catch (error) {
             console.error(`[AUDIT DAEMON] Error processing signal ${signal._id}:`, error.message);

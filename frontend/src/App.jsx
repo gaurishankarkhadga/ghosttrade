@@ -57,78 +57,78 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public Route */}
-      <Route 
-        path="/connect" 
-        element={
-          isAuthenticated ? (
-            <Navigate to="/terminal" replace />
-          ) : (
-            <SignInPage onLoginSuccess={(key) => login(key)} />
-          )
-        } 
-      />
-      
-      {/* Public About Route */}
-      <Route path="/" element={<GhostAbout />} />
-      <Route path="/about" element={<GhostAbout />} />
-      
-      {/* Public Why Us Route */}
-      <Route path="/why-us" element={<WhyGhostTrade />} />
+        {/* Public Route */}
+        <Route 
+          path="/connect" 
+          element={
+            isAuthenticated ? (
+              <Navigate to="/terminal" replace />
+            ) : (
+              <SignInPage onLoginSuccess={(key) => login(key)} />
+            )
+          } 
+        />
+        
+        {/* Public About Route */}
+        <Route path="/" element={<GhostAbout />} />
+        <Route path="/about" element={<GhostAbout />} />
+        
+        {/* Public Why Us Route */}
+        <Route path="/why-us" element={<WhyGhostTrade />} />
 
-      {/* Protected Terminal Workspace Route */}
-      <Route 
-        path="/terminal" 
-        element={
-          <ProtectedLayout>
-            <AiChatInterface />
-          </ProtectedLayout>
-        } 
-      />
+        {/* Protected Terminal Workspace Route */}
+        <Route 
+          path="/terminal" 
+          element={
+            <ProtectedLayout>
+              <AiChatInterface />
+            </ProtectedLayout>
+          } 
+        />
 
-      {/* Protected Performance & Audit Route */}
-      <Route 
-        path="/audit" 
-        element={
-          <ProtectedLayout>
-             <PerformanceDashboard />
-          </ProtectedLayout>
-        } 
-      />
+        {/* Protected Performance & Audit Route */}
+        <Route 
+          path="/audit" 
+          element={
+            <ProtectedLayout>
+               <PerformanceDashboard />
+            </ProtectedLayout>
+          } 
+        />
 
-      {/* Protected Broker Settings Route */}
-      <Route 
-        path="/settings" 
-        element={
-          <ProtectedLayout>
-             <BrokerSettingsPage />
-          </ProtectedLayout>
-        } 
-      />
+        {/* Protected Broker Settings Route */}
+        <Route 
+          path="/settings" 
+          element={
+            <ProtectedLayout>
+               <BrokerSettingsPage />
+            </ProtectedLayout>
+          } 
+        />
 
-      {/* OAuth Callback Route */}
-      <Route 
-        path="/oauth/callback" 
-        element={<OAuthCallback />} 
-      />
+        {/* OAuth Callback Route */}
+        <Route 
+          path="/oauth/callback" 
+          element={<OAuthCallback />} 
+        />
 
-      {/* Pricing Route */}
-      <Route 
-        path="/pricing" 
-        element={<PricingModal />} 
-      />
+        {/* Pricing Route */}
+        <Route 
+          path="/pricing" 
+          element={<PricingModal />} 
+        />
 
-      {/* Default Redirection */}
-      <Route 
-        path="/" 
-        element={<Navigate to={isAuthenticated ? "/terminal" : "/connect"} replace />} 
-      />
-      
-      {/* Catch-all 404 (Redirect to root) */}
-      <Route 
-        path="*" 
-        element={<Navigate to="/" replace />} 
-      />
-    </Routes>
+        {/* Default Redirection */}
+        <Route 
+          path="/" 
+          element={<Navigate to={isAuthenticated ? "/terminal" : "/connect"} replace />} 
+        />
+        
+        {/* Catch-all 404 (Redirect to root) */}
+        <Route 
+          path="*" 
+          element={<Navigate to="/" replace />} 
+        />
+      </Routes>
   );
 }

@@ -63,6 +63,7 @@ async function runGhostBrainLoop() {
       console.error('[WORKER: SCANNER] Loop error:', e.message);
     }
     // Sleep matches OHLCV cache TTL (5 min) / 5 = scan every 60s to avoid redundant cache reads and Yahoo rate-limits
+    // Sleep matches OHLCV cache TTL (5 min) / 5 = scan every 60s to avoid redundant cache reads and exchange rate-limits
     await new Promise(r => setTimeout(r, 60000));
   }
 }

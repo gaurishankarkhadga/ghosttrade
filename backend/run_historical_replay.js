@@ -30,6 +30,7 @@ const MIN_WARMUP_BARS = 200;
 const FORWARD_WINDOW = 5;
 
 // Delay between API calls to respect Yahoo Finance rate limits
+// Delay between API calls to respect rate limits
 const DELAY_MS = 2000;
 
 // ─────────────────────────────────────────────────────
@@ -228,6 +229,7 @@ async function main() {
     results.push(result);
 
     // Rate limit between Yahoo Finance calls
+    // Rate limit between API calls
     if (i < ALL_ASSETS.length - 1) {
       await new Promise(r => setTimeout(r, DELAY_MS));
     }

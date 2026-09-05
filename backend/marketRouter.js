@@ -9,13 +9,13 @@ export const MARKET_TYPES = {
 };
 
 export const DEFAULT_WATCHLISTS = {
-    CRYPTO: ['BTC-USD', 'ETH-USD', 'SOL-USD'],
-    NSE: ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', '^NSEI']
+    CRYPTO: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+    NSE: ['RELIANCE', 'TCS', 'INFY', 'NIFTY']
 };
 
 /**
  * Detects the market type of a given symbol.
- * @param {string} symbol - e.g. "BTC-USD", "RELIANCE.NS", "^NSEI", "BINANCE:BTC-USD", "NSE:RELIANCE"
+ * @param {string} symbol - e.g. "BTCUSDT", "RELIANCE", "NIFTY", "BINANCE:BTCUSDT", "NSE:RELIANCE"
  * @returns {object} { symbol, marketType, cleanSymbol }
  */
 export function parseTicker(symbol) {
@@ -26,9 +26,9 @@ export function parseTicker(symbol) {
     let clean = symbol.trim().toUpperCase();
     let marketType = MARKET_TYPES.CRYPTO;
 
-    if (clean.startsWith('NSE:') || clean.endsWith('.NS') || clean.endsWith('.BO') || clean === '^NSEI' || clean === '^BSESN') {
+    if (clean.startsWith('NSE:') || clean.endsWith('.NS') || clean.endsWith('.BO') || clean === 'NIFTY' || clean === 'BANKNIFTY' || clean === '^NSEI' || clean === '^BSESN') {
         marketType = MARKET_TYPES.NSE;
-        clean = clean.replace('NSE:', '');
+        clean = clean.replace('NSE:', '').replace(/\.(NS|BO)$/, '').replace('^NSEI', 'NIFTY').replace('^BSESN', 'SENSEX');
     } else if (clean.startsWith('BINANCE:')) {
         marketType = MARKET_TYPES.CRYPTO;
         clean = clean.replace('BINANCE:', '');
@@ -42,17 +42,13 @@ export function parseTicker(symbol) {
 }
 
 /**
- * Normalizes Yahoo Finance ticker formatting
+ * Normalizes ticker symbol to standard exchange format
  * @param {string} symbol 
- * @returns {string} formatted Yahoo Finance symbol
+ * @returns {string} clean standard symbol
  */
-export function toYahooSymbol(symbol) {
+export function toStandardSymbol(symbol) {
     const parsed = parseTicker(symbol);
-    if (parsed.marketType === MARKET_TYPES.NSE) {
-        if (parsed.cleanSymbol.endsWith('.NS') || parsed.cleanSymbol.startsWith('^')) {
-            return parsed.cleanSymbol;
-        }
-        return `${parsed.cleanSymbol}.NS`;
-    }
     return parsed.cleanSymbol;
 }
+
+export const toYahooSymbol = toStandardSymbol;

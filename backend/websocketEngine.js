@@ -146,12 +146,14 @@ export function startWebSocketPipeline(tickers = []) {
                     setTimeout(() => startWebSocketPipeline(tickers), 5000);
                 } else {
                     console.warn(`[WEBSOCKET] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}). Remaining in REST/Yahoo Fallback Mode.`);
+                    console.warn(`[WEBSOCKET] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}). Remaining in REST Polling Mode.`);
                 }
             });
 
             ws.on('error', (err) => {
                 clearTimeout(safetyTimer);
                 console.error(`[WEBSOCKET] Cloud Connection Warning: ${err.message}. (Cloud host IPs like Render/AWS use Yahoo REST Fallback).`);
+                console.error(`[WEBSOCKET] Connection Notice: ${err.message}. (Using direct REST API).`);
                 resolve();
             });
         } catch (e) {
