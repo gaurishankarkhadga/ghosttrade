@@ -31,8 +31,8 @@ const SCORE_WEIGHTS = {
 };
 
 // Minimum composite score to generate a trade signal (0-100)
-// HARDENED: 55 requires definitive statistical edge and prevents sub-50% chop
-const MIN_SIGNAL_SCORE = 55;
+// HARDENED A++ INSTITUTIONAL GRADE: 65 requires definitive statistical edge and filters out 55-64% consolidation chop
+const MIN_SIGNAL_SCORE = 65;
 
 // Minimum directional votes required (out of ~5-7 voters: Pattern, MA, Partial MA, RSI, MACD, BB, OFI)
 // Pattern is null ~70% of the time → effective voter pool is usually 6
@@ -433,11 +433,21 @@ export async function generateSignal(ticker, candles, options = {}) {
       }
   }
 
+  let volatilityReject = false;
+  let volatilityReason = null;
+  if (atrResult && (atrResult.regime === 'EXTREME_VOLATILITY' || atrResult.percentOfPrice > 5.0)) {
+    volatilityReject = true;
+    volatilityReason = `Volatility Shock Block: ATR is ${atrResult.percentOfPrice}% of price (extreme expansion). High risk of slippage and stop hunts.`;
+    reasons.push(volatilityReason);
+  }
+
   // Compute reference ATR-based levels for both Trade and Shield Mode
   const tentativeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
   const slTpResult = computeStopLossTakeProfit(votingCandles, tentativeSide, currentPrice, 2.5, 2.0);
 
-  if (direction === 'NEUTRAL' || compositeScore < MIN_SIGNAL_SCORE || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject) {
+  const effectiveMinScore = options.minScore || MIN_SIGNAL_SCORE;
+
+  if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject || volatilityReject) {
     let forensicGate = 'MATHEMATICAL_THRESHOLD';
     let retailTrap = 'Retail traders trade setups without mathematical edge, suffering negative expectancy drawdown.';
     let capitalDefense = `Shield Engine locked execution to preserve capital. Expected Value is -$${Math.abs(evPer100).toFixed(2)} per $100 risked.`;
@@ -454,6 +464,10 @@ export async function generateSignal(ticker, candles, options = {}) {
       forensicGate = 'STATISTICAL_HURST_CI_GATE';
       retailTrap = 'Retail traders trade point estimates ignoring confidence intervals. When 95% CI spans across all regimes, predictive power is zero.';
       capitalDefense = 'Shield Engine rejected ambiguous statistical regime. Zero capital deployed until confidence intervals tighten.';
+    } else if (volatilityReject) {
+      forensicGate = 'VOLATILITY_SHOCK_GATE';
+      retailTrap = 'Retail traders chase volatility spikes and news candles where slippage and spread blowout destroy stops.';
+      capitalDefense = 'Shield Engine detected extreme volatility expansion (> 5% ATR). Capital safely protected on sidelines.';
     } else if (macroReject || mesoReject) {
       forensicGate = 'COUNTER_TREND_TRAP_GATE';
       retailTrap = 'Retail traders chase intraday 15m momentum directly into higher-timeframe 1D/4H macro resistance, getting stopped out instantly.';
@@ -462,16 +476,18 @@ export async function generateSignal(ticker, candles, options = {}) {
       forensicGate = 'VWAP_OVEREXTENSION_GATE';
       retailTrap = 'Retail traders buy at the top of the move (> 2σ above VWAP) where institutional market makers distribute.';
       capitalDefense = 'Shield Engine blocked overextended entry. Capital preserved against mean-reverting snapback.';
-    } else if (compositeScore < MIN_SIGNAL_SCORE) {
+    } else if (compositeScore < effectiveMinScore) {
       forensicGate = 'NEGATIVE_EXPECTANCY_GATE';
-      retailTrap = `Retail traders trade setups with a low score (${compositeScore}/100) and negative mathematical expected value ($${evPer100} / $100 risked).`;
-      capitalDefense = `Shield Engine blocked execution. Preserved capital for positive-expectancy setups.`;
+      retailTrap = `Retail traders trade setups with a score (${compositeScore}/100) below the A++ institutional conviction threshold (${effectiveMinScore}/100).`;
+      capitalDefense = `Shield Engine blocked marginal setup. Preserved capital for A++ institutional setups.`;
     }
 
     return {
       action: 'SHIELD_MODE',
       reason: direction === 'NEUTRAL'
         ? 'No clear directional consensus from technical analysis'
+        : volatilityReject
+        ? volatilityReason
         : vwapReject
         ? vwapReason
         : hurstCIReject

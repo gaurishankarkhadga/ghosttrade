@@ -16,7 +16,9 @@ const RISK_CONFIG = {
   correlation_threshold: 0.75,  // KEEP existing Phase 1 logic
   correlation_lookback_bars: 200, 
   max_allowed_spread_pct: 0.35, // Black swan spread expansion threshold (%)
-  max_depth_depletion_pct: 50.0 // Order book depth depletion threshold (%)
+  max_depth_depletion_pct: 50.0,// Order book depth depletion threshold (%)
+  max_consecutive_losses: 3,    // Hard stop on 3 consecutive losses
+  consecutive_loss_cooldown_hours: 4 // Mandatory 4-hour cooldown to kill tilt and chop
 };
 
 /**
@@ -182,6 +184,33 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
         reason: "DAILY_LOSS_LIMIT_HIT",
         todayPnlPct: dailyPnLRaw * 100
       };
+    }
+
+    // CHECK 2b — Consecutive Loss Streak Circuit Breaker (Anti-Tilt & Anti-Chop Freeze)
+    const recentClosedTrades = await tradesColl.find({
+      status: { $in: ['CLOSED_TP', 'CLOSED_SL', 'WIN', 'LOSS'] },
+      userId
+    }).sort({ closedAt: -1 }).limit(RISK_CONFIG.max_consecutive_losses).toArray();
+
+    if (recentClosedTrades.length >= RISK_CONFIG.max_consecutive_losses) {
+      const allLosses = recentClosedTrades.every(t => t.status === 'CLOSED_SL' || t.status === 'LOSS' || (t.pnl !== undefined && t.pnl < 0));
+      if (allLosses) {
+        const lastClosedTime = new Date(recentClosedTrades[0].closedAt).getTime();
+        const cooldownMs = RISK_CONFIG.consecutive_loss_cooldown_hours * 3600 * 1000;
+        const timeSinceLastLoss = Date.now() - lastClosedTime;
+        
+        if (timeSinceLastLoss < cooldownMs) {
+          const remainingMinutes = Math.ceil((cooldownMs - timeSinceLastLoss) / 60000);
+          console.warn(`[RISK CONTROL] 🚨 CONSECUTIVE LOSS CIRCUIT BREAKER: ${recentClosedTrades.length} consecutive losses. Cooldown active for ${remainingMinutes}m.`);
+          return {
+            allowed: false,
+            reason: 'CONSECUTIVE_LOSS_CIRCUIT_BREAKER',
+            detail: `${recentClosedTrades.length} consecutive losses detected. ${RISK_CONFIG.consecutive_loss_cooldown_hours}-hour capital preservation cooldown active (${remainingMinutes}m remaining) to protect against chop drawdown.`,
+            consecutiveLosses: recentClosedTrades.length,
+            remainingMinutes
+          };
+        }
+      }
     }
 
     // CHECK 3 — Dynamic Covariance Matrix (Correlation Blocking)
