@@ -22,9 +22,11 @@ async function checkOpenTrades() {
     // console.log(`[MONITOR] Tracking ${openTrades.length} open trades...`);
 
     for (const trade of openTrades) {
-      const currentPrice = await fetchLivePrice(trade.asset);
+      // If underlyingAsset is tracked (e.g. F&O), track underlying price; otherwise track asset directly
+      const assetToTrack = trade.underlyingAsset || trade.asset;
+      const currentPrice = await fetchLivePrice(assetToTrack);
       if (!currentPrice) {
-        console.warn(`[MONITOR] Could not fetch live price for ${trade.asset}. Skipping.`);
+        console.warn(`[MONITOR] Could not fetch live price for ${assetToTrack}. Skipping.`);
         continue;
       }
 
@@ -32,34 +34,78 @@ async function checkOpenTrades() {
       let hitTP = false;
       let reason = '';
 
-      if (trade.side === 'LONG') {
-        if (currentPrice <= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
-        else if (currentPrice >= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
-      } else if (trade.side === 'SHORT') {
-        if (currentPrice >= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
-        else if (currentPrice <= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
+      if (trade.side === 'LONG' || trade.side === 'BUY') {
+        if (trade.stopLoss && currentPrice <= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
+        else if (trade.takeProfit && currentPrice >= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
+      } else if (trade.side === 'SHORT' || trade.side === 'SELL') {
+        if (trade.stopLoss && currentPrice >= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
+        else if (trade.takeProfit && currentPrice <= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
       }
 
       if (hitSL || hitTP) {
-        const pnlPct = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100 * (trade.side === 'SHORT' ? -1 : 1);
+        const pnlPct = trade.entryPrice > 0
+          ? ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100 * ((trade.side === 'SHORT' || trade.side === 'SELL') ? -1 : 1)
+          : 0;
         const finalStatus = pnlPct >= 0 ? 'WIN' : 'LOSS';
 
-        console.log(`[MONITOR] 🚨 TRADE CLOSED: ${trade.asset} [${trade.side}] - Hit ${reason}`);
-        console.log(`          Entry: $${trade.entryPrice} | Exit: $${currentPrice}`);
+        console.log(`[MONITOR] 🚨 TRADE TRIGGERED EXIT: ${trade.asset} [${trade.side}] - Hit ${reason}`);
+        console.log(`          Entry: $${trade.entryPrice} | Exit Price: $${currentPrice}`);
         console.log(`          Result: ${finalStatus} | PnL: ${pnlPct.toFixed(2)}%`);
 
-        // Note: Live broker exit routing has been removed for the Global Intelligence Terminal architecture.
-        // The ledger is now the primary source of truth for all trades.
+        // ═══════════════════════════════════════════════════════
+        // LIVE BROKER EXIT EXECUTION — Closes real exchange position
+        // ═══════════════════════════════════════════════════════
+        let brokerExitInfo = null;
+        if (trade.mode && trade.mode.startsWith('LIVE') && trade.broker && trade.userId) {
+          try {
+            const { getBrokerKeys } = await import('./brokerKeyManager.js');
+            const { createAdapter } = await import('./brokerAdapter.js');
+            const credentials = await getBrokerKeys(trade.userId, trade.broker);
+            if (credentials) {
+              const adapter = createAdapter(trade.broker, credentials);
+              // Exit side is opposite of the executed contract side (BUY -> SELL, SELL -> BUY)
+              const executedSide = (trade.contractSide || trade.side || 'BUY').toUpperCase();
+              const exitSide = executedSide === 'BUY' || executedSide === 'LONG' ? 'SELL' : 'BUY';
+
+              console.log(`[MONITOR] 🔴 SENDING LIVE BROKER EXIT ORDER: ${exitSide} ${trade.quantity} of ${trade.asset} on ${trade.broker}...`);
+              const exitOrder = await adapter.placeOrder({
+                symbol: trade.asset,
+                asset: trade.asset,
+                symbolToken: trade.symbolToken || null,
+                side: exitSide,
+                type: 'MARKET',
+                orderType: 'MARKET',
+                quantity: trade.quantity,
+                price: currentPrice
+              });
+
+              brokerExitInfo = {
+                orderId: exitOrder?.orderId || null,
+                status: exitOrder?.success ? 'FILLED' : 'FAILED',
+                filledPrice: exitOrder?.filledPrice || currentPrice,
+                message: exitOrder?.message || null,
+                exitedAt: new Date().toISOString()
+              };
+              console.log(`[MONITOR] ✅ LIVE BROKER EXIT RESULT:`, brokerExitInfo);
+            } else {
+              console.warn(`[MONITOR] ⚠️ No broker credentials found for ${trade.userId} on ${trade.broker}. Could not close live position.`);
+            }
+          } catch (brokerErr) {
+            console.error(`[MONITOR] ❌ LIVE BROKER EXIT FAILED for ${trade.asset}:`, brokerErr.message);
+            brokerExitInfo = { status: 'FAILED', error: brokerErr.message };
+          }
+        }
 
         await db.collection('paper_trades').findOneAndUpdate(
           { _id: trade._id, status: 'OPEN' },
           {
             $set: {
               status: finalStatus,
-              exitPrice: currentPrice,
+              exitPrice: brokerExitInfo?.filledPrice || currentPrice,
               pnl: pnlPct,
               closedAt: new Date().toISOString(),
-              closeReason: reason
+              closeReason: reason,
+              brokerExit: brokerExitInfo
             }
           }
         );

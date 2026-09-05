@@ -43,6 +43,59 @@ const MODE_TO_BROKER = {
     'LIVE_FNO':    'ANGEL_ONE',
 };
 
+/**
+ * Calculates precision-aware quantity for asset execution.
+ * Respects exchange step sizes, lot sizes, and minimum notional values.
+ */
+export function calculateExecutionQuantity(asset, capitalAllocation, entryPrice) {
+    if (!entryPrice || entryPrice <= 0 || !capitalAllocation || capitalAllocation <= 0) {
+        return { quantity: 0, valid: false, reason: 'Invalid price or capital allocation' };
+    }
+
+    const rawQty = capitalAllocation / entryPrice;
+    const upper = (asset || '').toUpperCase().trim();
+
+    // 1. Crypto Sizing (Binance)
+    const isCrypto = upper.endsWith('-USD') || upper.endsWith('USDT') || ['BTC','ETH','SOL','XRP','BNB','DOGE','ADA'].some(c => upper.includes(c));
+
+    if (isCrypto) {
+        // Minimum notional value for Binance is $10.00 USDT
+        if (capitalAllocation < 10.0) {
+            return { quantity: 0, valid: false, reason: `Capital allocation ($${capitalAllocation.toFixed(2)}) is below Binance minimum notional limit ($10.00 USDT)` };
+        }
+
+        let decimals = 2; // Default for altcoins
+        if (upper.includes('BTC')) decimals = 5;
+        else if (upper.includes('ETH')) decimals = 4;
+        else if (upper.includes('SOL') || upper.includes('BNB') || upper.includes('AVAX')) decimals = 3;
+        else if (upper.includes('PEPE') || upper.includes('SHIB') || upper.includes('BONK')) decimals = 0;
+        else if (entryPrice > 100) decimals = 3;
+        else if (entryPrice > 1) decimals = 2;
+        else decimals = 1;
+
+        const multiplier = Math.pow(10, decimals);
+        const quantity = Math.floor(rawQty * multiplier) / multiplier;
+
+        if (quantity <= 0) {
+            return { quantity: 0, valid: false, reason: `Calculated quantity (${rawQty.toFixed(6)}) rounds to 0 at precision ${decimals}` };
+        }
+
+        return { quantity, valid: true, decimals };
+    }
+
+    // 2. Indian F&O (NIFTY / BANKNIFTY)
+    if (upper.includes('NIFTY') || upper.includes('BANKNIFTY')) {
+        const defaultLot = upper.includes('BANKNIFTY') ? 15 : 25;
+        const lots = Math.max(1, Math.floor(rawQty / defaultLot));
+        const quantity = lots * defaultLot;
+        return { quantity, valid: true, lots, lotSize: defaultLot };
+    }
+
+    // 3. Equities (Stocks)
+    const quantity = Math.max(1, Math.floor(rawQty));
+    return { quantity, valid: true };
+}
+
 class UnifiedExecutionEngine {
     constructor() {
         // Default: PAPER trading mode (backward compatible)
@@ -159,9 +212,14 @@ class UnifiedExecutionEngine {
             regime
         });
 
-        // Compute position capital and share quantity
+        // Compute position capital and precision-aware quantity
         const capitalAllocation = (accountBalance * (kellyResult.halfKelly / 100));
-        const quantity = Math.max(1, Math.floor(capitalAllocation / entryPrice));
+        const qtyResult = calculateExecutionQuantity(asset, capitalAllocation, entryPrice);
+        if (!qtyResult.valid) {
+            console.warn(`❌ [EXECUTION BLOCKED] Position sizing invalid: ${qtyResult.reason}`);
+            return { success: false, reason: qtyResult.reason };
+        }
+        const quantity = qtyResult.quantity;
 
         console.log(`📊 [KELLY SIZING] Allocation: $${capitalAllocation.toFixed(2)} (${kellyResult.halfKelly}% of balance) ➔ Qty: ${quantity}`);
 
@@ -201,6 +259,17 @@ class UnifiedExecutionEngine {
 
         // LIVE MODE — Route through Broker Adapter
         if (VALID_LIVE_MODES.includes(activeMode)) {
+            // 4.0 BINANCE SPOT SHORT PROTECTION
+            if (activeMode === 'LIVE_CRYPTO' && (side.toUpperCase() === 'SHORT' || side.toUpperCase() === 'SELL')) {
+                console.warn(`❌ [EXECUTION BLOCKED] Binance Spot API does not permit naked short selling.`);
+                return {
+                    success: false,
+                    tradeId,
+                    mode: activeMode,
+                    reason: 'SPOT_CANNOT_SHORT: Binance Spot API does not support naked short selling. To short crypto, use Binance USDT-M Futures or Paper Mode.'
+                };
+            }
+
             const brokerName = MODE_TO_BROKER[activeMode] || getBrokerForTicker(asset);
             console.log(`🔴 [LIVE TRADING] Routing ${asset} via ${brokerName} adapter`);
 
@@ -295,12 +364,16 @@ class UnifiedExecutionEngine {
                 // Log trade to DB regardless of success (for audit trail)
                 await this.logTradeToDb({
                     id: tradeId,
-                    asset,
+                    asset: finalAsset,
+                    underlyingAsset: asset,
                     side,
+                    contractSide: finalSide,
                     entryPrice: orderResult.filledPrice || entryPrice,
+                    underlyingEntryPrice: entryPrice,
                     stopLoss,
                     takeProfit,
-                    quantity,
+                    quantity: finalQuantity,
+                    symbolToken,
                     kellySize: kellyResult.halfKelly,
                     status: orderResult.success ? 'OPEN' : 'FAILED',
                     mode: activeMode,

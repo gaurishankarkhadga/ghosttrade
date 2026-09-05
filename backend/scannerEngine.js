@@ -144,20 +144,31 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
         livePrice: price
       });
 
-      // Build trade card if signal is actionable
-      if (signalData && signalData.action === 'TRADE') {
+      // Build trade card for both TRADE and SHIELD_MODE with complete telemetry
+      if (signalData) {
+        const isShield = signalData.action === 'SHIELD_MODE';
         tradeCard = {
           asset: ticker,
-          side: signalData.tradeSide,
+          side: signalData.tradeSide || (signalData.direction === 'BEARISH' ? 'SHORT' : 'LONG'),
           entryPrice: signalData.currentPrice,
-          stopLoss: signalData.stopLoss,
-          takeProfit: signalData.takeProfit,
-          kellySize: signalData.kelly?.halfKelly || 0,
-          pattern: signalData.pattern || signalData.setupId || 'ENGINE_DETECTED',
-          regime: regime1d.regime,
+          stopLoss: signalData.stopLoss || sl,
+          takeProfit: signalData.takeProfit || tp,
+          takeProfit1: signalData.takeProfit1,
+          takeProfit2: signalData.takeProfit2,
+          riskPercentage: 2,
+          kellySize: isShield ? 0 : (signalData.kelly?.halfKelly ? parseFloat((signalData.kelly.halfKelly * 100).toFixed(1)) : 0),
+          pattern: signalData.pattern || signalData.setupId || (isShield ? 'CAPITAL_PRESERVATION_SHIELD' : 'ENGINE_DETECTED'),
+          regime: signalData.regime?.regime || regime1d.regime,
           source: 'GLOBAL_SCANNER',
-          buyerPercent: signalData.buyerPercent || 50,
-          hurstScore: hurst1d?.meanH ? Number(hurst1d.meanH.toFixed(2)) : 0.50
+          buyerPercent: signalData.buyerPercent !== undefined ? signalData.buyerPercent : 50,
+          hurstScore: signalData.hurst?.meanH ? Number(signalData.hurst.meanH.toFixed(2)) : (hurst1d?.meanH ? Number(hurst1d.meanH.toFixed(2)) : 0.50),
+          scoreBreakdown: signalData.scoreBreakdown,
+          signalScore: signalData.score,
+          ofiSource: signalData.scoreBreakdown?.ofiSource,
+          signalBlocked: isShield,
+          shieldReason: isShield ? (signalData.reason || 'Capital preserved: no statistical edge') : null,
+          expectedValue: signalData.expectedValue,
+          riskRewardRatio: signalData.riskRewardRatio || 2.0
         };
       }
     } catch (sigErr) {

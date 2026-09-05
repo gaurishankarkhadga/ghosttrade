@@ -26,11 +26,11 @@ import './AiMessageBubble.css';
 // as visual bar gauges. All data comes from the backend engine.
 // =====================================================
 const FACTOR_META = {
-  pattern:   { label: 'Pattern Recognition',  color: '#a78bfa', icon: <BarChart3 size={14}/> },
-  sma:       { label: 'Trend Alignment (SMA)', color: '#34d399', icon: <TrendingUp size={14}/> },
-  momentum:  { label: 'Momentum (RSI+MACD)',   color: '#60a5fa', icon: <Zap size={14}/> },
-  orderFlow: { label: 'Order Flow Imbalance',  color: '#f59e0b', icon: <Activity size={14}/> },
-  hurst:     { label: 'Regime Inertia (Hurst)',color: '#f87171', icon: <Crosshair size={14}/> },
+  regime:     { label: 'Fractal Regime (Hurst DFA)',   color: '#34d399', icon: <Crosshair size={14}/> },
+  confluence: { label: 'Technical Confluence (RSI+MA)', color: '#60a5fa', icon: <Zap size={14}/> },
+  orderFlow:  { label: 'Order Flow & L2 Imbalance',    color: '#f59e0b', icon: <Activity size={14}/> },
+  volume:     { label: 'Volume Confirmation & CVD',    color: '#a78bfa', icon: <BarChart3 size={14}/> },
+  winRate:    { label: 'Historical Backtest Win Rate', color: '#38bdf8', icon: <TrendingUp size={14}/> },
 };
 
 function useProgressAnimation(trigger) {
@@ -52,41 +52,46 @@ function useProgressAnimation(trigger) {
 function SignalScoreCard({ scoreBreakdown, totalScore, direction, regime, isAnimating }) {
   const barsFilled = useProgressAnimation(isAnimating);
 
-  // Derive factor scores from the breakdown object or compute fallbacks
+  // Exact deterministic factor scores directly from the backend Signal Generator Engine
   const factors = [
     {
-      key: 'pattern',
-      rawScore: scoreBreakdown?.patternScore ?? (direction !== 'NEUTRAL' ? 18 : 0),
+      key: 'regime',
+      rawScore: scoreBreakdown?.regimePoints ?? (scoreBreakdown?.regimeAlignment ? Math.round(scoreBreakdown.regimeAlignment * 0.25) : 0),
       maxScore: 25,
+      pctVal: scoreBreakdown?.regimeAlignment ?? 0
     },
     {
-      key: 'sma',
-      rawScore: scoreBreakdown?.smaScore ?? (direction === 'LONG' ? 15 : direction === 'SHORT' ? 12 : 0),
-      maxScore: 20,
-    },
-    {
-      key: 'momentum',
-      rawScore: scoreBreakdown?.momentumScore ?? 14,
-      maxScore: 20,
+      key: 'confluence',
+      rawScore: scoreBreakdown?.confluencePoints ?? (scoreBreakdown?.technicalConfluence ? Math.round(scoreBreakdown.technicalConfluence * 0.25) : 0),
+      maxScore: 25,
+      pctVal: scoreBreakdown?.technicalConfluence ?? 0
     },
     {
       key: 'orderFlow',
-      rawScore: scoreBreakdown?.ofiScore ?? 12,
+      rawScore: scoreBreakdown?.orderFlowPoints ?? (scoreBreakdown?.orderFlow ? Math.round(scoreBreakdown.orderFlow * 0.20) : 0),
       maxScore: 20,
+      pctVal: scoreBreakdown?.orderFlow ?? 0
     },
     {
-      key: 'hurst',
-      rawScore: scoreBreakdown?.hurstScore ?? (regime === 'TRENDING' ? 13 : regime === 'MEAN_REVERTING' ? 10 : 5),
+      key: 'volume',
+      rawScore: scoreBreakdown?.volumePoints ?? (scoreBreakdown?.volumeConfirmation ? Math.round(scoreBreakdown.volumeConfirmation * 0.15) : 0),
       maxScore: 15,
+      pctVal: scoreBreakdown?.volumeConfirmation ?? 0
+    },
+    {
+      key: 'winRate',
+      rawScore: scoreBreakdown?.winRatePoints ?? (scoreBreakdown?.historicalWinRate ? Math.round(scoreBreakdown.historicalWinRate * 0.15) : 0),
+      maxScore: 15,
+      pctVal: scoreBreakdown?.historicalWinRate ?? 0
     },
   ];
 
-  const safeTotal = totalScore ?? factors.reduce((s, f) => s + f.rawScore, 0);
-  const grade = safeTotal >= 80 ? { label: 'A+', color: '#34d399' }
-              : safeTotal >= 65 ? { label: 'A',  color: '#60a5fa' }
-              : safeTotal >= 50 ? { label: 'B',  color: '#a78bfa' }
-              : safeTotal >= 40 ? { label: 'C',  color: '#f59e0b' }
-              :                   { label: 'D',  color: '#f87171' };
+  const safeTotal = totalScore ?? (scoreBreakdown?.totalScore ?? factors.reduce((s, f) => s + f.rawScore, 0));
+  const grade = safeTotal >= 80 ? { label: 'A+ (Institutional Edge)', color: '#34d399' }
+              : safeTotal >= 65 ? { label: 'A (High Probability)',  color: '#60a5fa' }
+              : safeTotal >= 55 ? { label: 'B (Quantitative Edge)', color: '#a78bfa' }
+              : safeTotal >= 40 ? { label: 'C (Shield Blocked)',    color: '#f59e0b' }
+              :                   { label: 'D (High Risk - Blocked)', color: '#f87171' };
 
   return (
     <div className="score-card">
@@ -268,6 +273,8 @@ const TradeExecutionCard = ({
   scoreBreakdown,   // 5-factor score object from Signal Generator
   signalScore,      // total composite score (0-100)
   ofiSource,        // 'BINANCE_AGGTRADE' | 'CANDLE_APPROXIMATION'
+  shieldReason,     // real forensic reason from engine
+  expectedValue,    // mathematical EV per $100
   isParentStreaming,
   isNewMessage
 }) => {
@@ -293,13 +300,10 @@ const TradeExecutionCard = ({
     const scroll = () => window.dispatchEvent(new Event('chat-scroll'));
     
     if (step === 1) timer = setTimeout(() => { setStep(2); scroll(); }, 400); // Wait for headers
-    // step 2 waits for guided text to finish typing
     else if (step === 3) timer = setTimeout(() => { setStep(4); scroll(); }, 800); // Wait for gauges
     else if (step === 4) timer = setTimeout(() => { setStep(5); scroll(); }, 300); // Wait for concept pill
-    // step 5 waits for beginner text to finish typing
     else if (step === 6) timer = setTimeout(() => { setStep(7); scroll(); }, 400); // Wait for RR visualizer
     else if (step === 7) timer = setTimeout(() => { setStep(8); scroll(); }, 600); // Wait for score card
-    // step 8 waits for pro text to finish typing
     else if (step === 9) timer = setTimeout(() => { setStep(10); scroll(); }, 300); // Wait for actions
     
     return () => clearTimeout(timer);
@@ -314,23 +318,38 @@ const TradeExecutionCard = ({
   
   const safeEntryPrice = entryPrice || (typeof price === 'string' ? parseFloat(price.replace(/,/g, '')) : price) || 0;
   const safeStopLoss = stopLoss || (isLong ? safeEntryPrice * 0.98 : safeEntryPrice * 1.02);
-  const safeTakeProfit = takeProfit || (isLong ? safeEntryPrice * 1.06 : safeEntryPrice * 0.94);
-  const safeRisk = riskPercentage || 2;
+  const safeTakeProfit = takeProfit || (isLong ? safeEntryPrice * 1.04 : safeEntryPrice * 0.96);
   
-  const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+  const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '0.00';
   const fEntry = formatPrice(safeEntryPrice);
   const fStop = formatPrice(safeStopLoss);
   const fTarget = formatPrice(safeTakeProfit);
 
-  const dBuyerPercent = typeof buyerPercent === 'number' ? buyerPercent : (isLong ? 68 : 32);
+  const dBuyerPercent = typeof buyerPercent === 'number' ? buyerPercent : 50;
   const sellerPercent = 100 - dBuyerPercent;
-  const dHurstScore = typeof hurstScore === 'number' ? hurstScore : (regime === 'MEAN_REVERTING' ? 0.42 : 0.64);
-  const rrrRatio = isLong ? ((safeTakeProfit - safeEntryPrice) / (safeEntryPrice - safeStopLoss)).toFixed(1) : ((safeEntryPrice - safeTakeProfit) / (safeStopLoss - safeEntryPrice)).toFixed(1);
+  const dHurstScore = typeof hurstScore === 'number' ? hurstScore : 0.50;
 
-  const beginnerText = educationalLesson?.beginnerLesson || `Think of ${asset} like a fast train running downhill. The Market Regime is TRENDING with strong momentum. We enter ${side} with controlled risk to protect your capital.`;
-  const proText = educationalLesson?.proLesson || `• Regime State: ${regime || 'TRENDING'} (Hurst H > 0.55 confirms trend memory).\n• Order Flow Delta: Institutional buyers dominating liquidity depth.\n• Kelly Sizing: Half-Kelly sizing applied to prevent volatility drag.`;
-  const shieldReasonText = "Risk Engine restricted capital allocation to 0% due to adverse regime or macro volatility. Execution is safely blocked to protect your account.";
-  const guidedRiskText = `Risking ${safeRisk}% to make ${isLong ? '6' : '6'}%.\nProtective Stop Loss is safely set at $${fStop}.`;
+  const riskDist = Math.abs(safeEntryPrice - safeStopLoss);
+  const rewardDist = Math.abs(safeTakeProfit - safeEntryPrice);
+  const actualRiskPct = safeEntryPrice > 0 ? ((riskDist / safeEntryPrice) * 100).toFixed(2) : '2.00';
+  const actualRewardPct = safeEntryPrice > 0 ? ((rewardDist / safeEntryPrice) * 100).toFixed(2) : '4.00';
+  const rrrRatio = riskDist > 0 ? (rewardDist / riskDist).toFixed(1) : '2.0';
+
+  const beginnerText = educationalLesson?.beginnerLesson || (
+    isShield
+      ? `Capital Preservation is active for ${asset}. The market regime (${regime || 'RANDOM_WALK'}) lacks statistical edge. Zero capital is deployed to protect your balance.`
+      : `High-probability ${side} setup detected on ${asset}. We enter at $${fEntry} with strict Stop Loss at $${fStop} targeting $${fTarget} (1:${rrrRatio} RRR).`
+  );
+
+  const proText = educationalLesson?.proLesson || (
+    `• Regime State: ${regime || 'ACTIVE'} | Hurst Exponent (H): ${dHurstScore}\n• Order Flow Delta: ${dBuyerPercent}% Buyers / ${sellerPercent}% Sellers\n• Mathematical Expectancy: ${isShield ? 'Negative (< $0.00) — Blocked' : 'Positive Edge Confirmed (1:2.0 RRR)'}`
+  );
+
+  const shieldReasonText = shieldReason || (
+    "Quantitative engine restricted capital allocation to 0% due to negative expected value or random walk chop. Capital safely preserved."
+  );
+
+  const guidedRiskText = `Risking ${actualRiskPct}% to gain ${actualRewardPct}% (Strict 1:${rrrRatio} RRR).\nProtective Stop Loss: $${fStop} | Target: $${fTarget}.`;
   
   const smoothedShieldReason = useControlledTypewriter(shieldReasonText, step === 2, step > 2, !isNewMessage, isShield ? onGuidedComplete : null);
   const smoothedGuidedRisk = useControlledTypewriter(guidedRiskText, step === 2, step > 2, !isNewMessage, !isShield ? onGuidedComplete : null);

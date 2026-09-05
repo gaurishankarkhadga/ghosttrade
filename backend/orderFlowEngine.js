@@ -249,16 +249,71 @@ export async function fetchOrderFlow(ticker, delayMs = 0) {
 }
 
 export async function fetchOrderBookDepth(ticker, delayMs = 0) {
+  let cleanTicker = (ticker || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleanTicker.endsWith('USD')) cleanTicker = cleanTicker.replace('USD', 'USDT');
+  else if (!cleanTicker.endsWith('USDT') && !cleanTicker.endsWith('BTC')) cleanTicker += 'USDT';
+
+  // Tier 1: Direct Binance Level 2 Depth for Crypto
+  if (isBinanceCrypto(ticker) || cleanTicker.endsWith('USDT')) {
+    try {
+      const url = `https://api.binance.com/api/v3/depth?symbol=${cleanTicker}&limit=50`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && Array.isArray(d.bids) && Array.isArray(d.asks) && d.bids.length > 0 && d.asks.length > 0) {
+          const bids = d.bids.map(([p, q]) => [parseFloat(p), parseFloat(q)]);
+          const asks = d.asks.map(([p, q]) => [parseFloat(p), parseFloat(q)]);
+          const totalBidVol = bids.reduce((s, [p, q]) => s + q, 0);
+          const totalAskVol = asks.reduce((s, [p, q]) => s + q, 0);
+          const rawObi = (totalBidVol + totalAskVol) > 0 ? (totalBidVol - totalAskVol) / (totalBidVol + totalAskVol) : 0;
+          const obi = Math.max(-1.0, Math.min(1.0, rawObi));
+
+          // Sort by resting liquidity size to isolate institutional walls
+          const sortedBids = [...bids].sort((a, b) => b[1] - a[1]);
+          const sortedAsks = [...asks].sort((a, b) => b[1] - a[1]);
+
+          const topBid = sortedBids[0];
+          const topAsk = sortedAsks[0];
+
+          return {
+            available: true,
+            source: 'BINANCE_L2_DEPTH',
+            totalBidVol: parseFloat(totalBidVol.toFixed(3)),
+            totalAskVol: parseFloat(totalAskVol.toFixed(3)),
+            orderBookImbalance: parseFloat((obi * 100).toFixed(1)),
+            topBidWall: { price: topBid[0], qty: topBid[1] },
+            topAskWall: { price: topAsk[0], qty: topAsk[1] },
+            buyWall: topBid[0],
+            sellWall: topAsk[0],
+            buyWalls: sortedBids.slice(0, 3).map(w => w[0]),
+            sellWalls: sortedAsks.slice(0, 3).map(w => w[0]),
+            wallStrength: 'LIVE_INSTITUTIONAL_ORDERBOOK'
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`[L2 DEPTH] Binance live depth fetch failed for ${ticker}: ${err.message}. Falling back to candle approximation.`);
+    }
+  }
+
+  // Tier 2: Fallback to candle-based walls for Traditional Assets or when depth endpoint is offline
   try {
     const data = await fetchOHLCV(ticker, 50);
     if (data.error || !data.bars || data.bars.length < 20) {
-      return { available: false, buyWall: null, sellWall: null, wallStrength: 'INSUFFICIENT_DATA' };
+      return { available: false, buyWall: null, sellWall: null, wallStrength: 'INSUFFICIENT_DATA', orderBookImbalance: 0 };
     }
     const walls = detectLiquidityWalls(data.bars);
-    return { available: true, ...walls, buyWalls: walls.buyWall ? [walls.buyWall] : [], sellWalls: walls.sellWall ? [walls.sellWall] : [] };
+    return { 
+      available: true, 
+      source: 'CANDLE_APPROXIMATION',
+      ...walls, 
+      orderBookImbalance: 0,
+      buyWalls: walls.buyWall ? [walls.buyWall] : [], 
+      sellWalls: walls.sellWall ? [walls.sellWall] : [] 
+    };
   } catch (err) {
     console.warn(`[OFI] Live order book depth failed for ${ticker}:`, err.message);
-    return { available: false, buyWalls: [], sellWalls: [], wallStrength: 'UNKNOWN' };
+    return { available: false, buyWalls: [], sellWalls: [], wallStrength: 'UNKNOWN', orderBookImbalance: 0 };
   }
 }
 
@@ -270,8 +325,19 @@ export function formatOrderFlowContext(flowData, depthData) {
   ctx += '\n';
   if (flowData?.tradeCount) ctx += `• Trade Sample: ${flowData.tradeCount} recent trades\n`;
   if (flowData?.netDelta) ctx += `• Net Delta Volume: ${flowData.netDelta}\n`;
-  if (depthData?.buyWalls?.length) ctx += `• Institutional BUY Walls: ${depthData.buyWalls.join(', ')}\n`;
-  if (depthData?.sellWalls?.length) ctx += `• Institutional SELL Walls: ${depthData.sellWalls.join(', ')}\n`;
+  if (depthData?.orderBookImbalance !== undefined && depthData?.source === 'BINANCE_L2_DEPTH') {
+    ctx += `• Level 2 Order Book Imbalance (OBI): ${depthData.orderBookImbalance > 0 ? '+' : ''}${depthData.orderBookImbalance}%\n`;
+  }
+  if (depthData?.topBidWall) {
+    ctx += `• Institutional BUY Wall: ${depthData.topBidWall.qty} @ $${depthData.topBidWall.price}\n`;
+  } else if (depthData?.buyWalls?.length) {
+    ctx += `• Institutional BUY Walls: ${depthData.buyWalls.join(', ')}\n`;
+  }
+  if (depthData?.topAskWall) {
+    ctx += `• Institutional SELL Wall: ${depthData.topAskWall.qty} @ $${depthData.topAskWall.price}\n`;
+  } else if (depthData?.sellWalls?.length) {
+    ctx += `• Institutional SELL Walls: ${depthData.sellWalls.join(', ')}\n`;
+  }
   return ctx;
 }
 

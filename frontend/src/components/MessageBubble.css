@@ -799,7 +799,13 @@
 
 .bullish-text { color: #10b981; }
 .bearish-text { color: #ef4444; }
+.shield-text { color: #f87171; }
 .neutral-text { color: #94a3b8; }
+
+.verdict-shield {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%) !important;
+}
 
 .font-mono {
   font-family: var(--font-mono);
@@ -876,6 +882,41 @@
   padding: 6px !important;
   border-radius: 4px;
   margin-top: 4px;
+}
+
+/* Card variations for Institutional Report */
+.beginner-takeaway-card {
+  border-color: rgba(56, 189, 248, 0.25) !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.asymmetry-ev-card {
+  border-color: rgba(52, 211, 153, 0.25) !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.fractal-proof-card {
+  border-color: rgba(192, 132, 252, 0.25) !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.order-book-card {
+  border-color: rgba(251, 191, 36, 0.25) !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.confluence-matrix-card {
+  border-color: rgba(96, 165, 250, 0.25) !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+}
+
+.shield-proof-card {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  background: rgba(239, 68, 68, 0.04) !important;
+}
+
+.ev-highlight {
+  transition: all 0.2s ease;
 }
 
 /* Additional Universal Formatter Styles */

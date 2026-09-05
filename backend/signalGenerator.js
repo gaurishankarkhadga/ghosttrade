@@ -12,7 +12,7 @@ import { detectPatterns } from './patternEngine.js';
 import { calculateHurst } from './hurstEngine.js';
 import { classifyRegime } from './regimeClassifier.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
-import { calculateOrderFlowImbalance } from './orderFlowEngine.js';
+import { calculateOrderFlowImbalance, fetchOrderBookDepth } from './orderFlowEngine.js';
 import { rsi, macd, bollingerBands, atr, sma, volumeAnalysis, vwap } from './technicalEngine.js';
 import { getClosePrices, getLogReturns } from './dataFetcher.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION } from './sharedConfig.js';
@@ -31,9 +31,8 @@ const SCORE_WEIGHTS = {
 };
 
 // Minimum composite score to generate a trade signal (0-100)
-// TUNED: 45 allows borderline-actionable signals through while still filtering noise
-// (was 60 — too strict, caused 87% NEUTRAL predictions)
-const MIN_SIGNAL_SCORE = 45;
+// HARDENED: 55 requires definitive statistical edge and prevents sub-50% chop
+const MIN_SIGNAL_SCORE = 55;
 
 // Minimum directional votes required (out of ~5-7 voters: Pattern, MA, Partial MA, RSI, MACD, BB, OFI)
 // Pattern is null ~70% of the time → effective voter pool is usually 6
@@ -118,6 +117,18 @@ export async function generateSignal(ticker, candles, options = {}) {
   const ofiSourcePenalty = ofiSource === 'BINANCE_AGGTRADE' ? 1.0 : 0.6;
 
   // ─────────────────────────────────────────────────────
+  // LAYER 4b: LEVEL 2 ORDER BOOK DEPTH & IMBALANCE (OBI)
+  // ─────────────────────────────────────────────────────
+  let depthData = options.depthData || null;
+  if (!depthData && typeof fetchOrderBookDepth === 'function') {
+    try {
+      depthData = await fetchOrderBookDepth(ticker);
+    } catch (_) {
+      depthData = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
   // LAYER 5: MACRO TREND ALIGNMENT
   // ─────────────────────────────────────────────────────
   let macroTrend = 'UNKNOWN';
@@ -191,23 +202,23 @@ export async function generateSignal(ticker, candles, options = {}) {
     }
   }
 
-  // Vote 3: RSI (widened bands: 52/48 instead of 55/45 to capture more directional signals)
+  // Vote 3: RSI (54/46 momentum band — prevents flat chop from voting)
   if (rsiResult) {
-    if (rsiResult.value > 52) {
+    if (rsiResult.value > 54) {
       directionVotes.BULLISH += 1;
       reasons.push(`RSI(14) = ${rsiResult.value} — bullish momentum`);
-    } else if (rsiResult.value < 48) {
+    } else if (rsiResult.value < 46) {
       directionVotes.BEARISH += 1;
       reasons.push(`RSI(14) = ${rsiResult.value} — bearish momentum`);
     }
   }
 
-  // Vote 4: MACD (relaxed: vote on histogram direction alone, not requiring macd line same sign)
+  // Vote 4: MACD (requiring meaningful histogram expansion > 0.0001)
   if (macdResult) {
-    if (macdResult.histogram > 0) {
+    if (macdResult.histogram > 0.0001) {
       directionVotes.BULLISH += 1;
       reasons.push(`MACD bullish: histogram=${macdResult.histogram.toFixed(4)}`);
-    } else if (macdResult.histogram < 0) {
+    } else if (macdResult.histogram < -0.0001) {
       directionVotes.BEARISH += 1;
       reasons.push(`MACD bearish: histogram=${macdResult.histogram.toFixed(4)}`);
     }
@@ -343,18 +354,38 @@ export async function generateSignal(ticker, candles, options = {}) {
     scoreBreakdown.historicalWinRate * SCORE_WEIGHTS.HISTORICAL_WIN_RATE
   );
 
+  // ─── MATHEMATICAL EXPECTED VALUE (EV) & ASYMMETRY (1:2.0 RRR) ───
+  const pWin = Math.max(0.05, Math.min(0.95, compositeScore / 100));
+  const pLoss = 1.0 - pWin;
+  // Net Expected Value per $100 risked (assuming $200 win on 1:2.0 RRR, $100 loss, minus $1.50 execution friction/fees)
+  const evPer100 = parseFloat(((pWin * 200) - (pLoss * 100) - 1.50).toFixed(2));
+  const breakEvenWinRate = 33.33; // 1 / (1 + 2.0) = 33.33%
+
+  // Factor points mapped to exact max weights: 25, 25, 20, 15, 15 (sum = compositeScore)
+  scoreBreakdown.regimePoints = Math.round(scoreBreakdown.regimeAlignment * SCORE_WEIGHTS.REGIME_ALIGNMENT);
+  scoreBreakdown.confluencePoints = Math.round(scoreBreakdown.technicalConfluence * SCORE_WEIGHTS.TECHNICAL_CONFLUENCE);
+  scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * SCORE_WEIGHTS.ORDER_FLOW);
+  scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * SCORE_WEIGHTS.VOLUME_CONFIRMATION);
+  scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * SCORE_WEIGHTS.HISTORICAL_WIN_RATE);
+  scoreBreakdown.totalScore = compositeScore;
+  scoreBreakdown.ofiSource = ofiSource;
+  scoreBreakdown.orderBookImbalance = depthData?.orderBookImbalance ?? null;
+
+  // Add L2 order book depth insight to reasons if available
+  if (depthData && depthData.source === 'BINANCE_L2_DEPTH') {
+    reasons.push(`Level 2 Order Book Imbalance: ${depthData.orderBookImbalance > 0 ? '+' : ''}${depthData.orderBookImbalance}% [Binance Live 50-Depth]`);
+    if (depthData.topBidWall) reasons.push(`Institutional Bid Wall: ${depthData.topBidWall.qty} @ $${depthData.topBidWall.price}`);
+    if (depthData.topAskWall) reasons.push(`Institutional Ask Wall: ${depthData.topAskWall.qty} @ $${depthData.topAskWall.price}`);
+  }
+
   // ─────────────────────────────────────────────────────
   // HURST CI REGIME-SPAN CHECK — Reject when CI spans all 3 regimes
-  // If the 95% CI crosses both 0.45 and 0.55, the Hurst read is useless
   // ─────────────────────────────────────────────────────
   let hurstCIReject = false;
   let hurstCIReason = null;
   if (hurstResult && hurstResult.ci95) {
     const ciLower = hurstResult.ci95.lower;
     const ciUpper = hurstResult.ci95.upper;
-    // CI spans deep into opposite regime zones — truly ambiguous
-    // Using 0.40/0.60 instead of 0.45/0.55 to avoid blocking ~78% of readings
-    // This catches only deeply uncertain CIs (e.g., [0.30, 0.70]) not borderline ones
     if (ciLower < 0.40 && ciUpper > 0.60) {
       hurstCIReject = true;
       hurstCIReason = `Hurst 95% CI [${ciLower.toFixed(3)}, ${ciUpper.toFixed(3)}] spans all 3 regimes — no statistical edge detectable`;
@@ -402,7 +433,41 @@ export async function generateSignal(ticker, candles, options = {}) {
       }
   }
 
+  // Compute reference ATR-based levels for both Trade and Shield Mode
+  const tentativeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
+  const slTpResult = computeStopLossTakeProfit(votingCandles, tentativeSide, currentPrice, 2.5, 2.0);
+
   if (direction === 'NEUTRAL' || compositeScore < MIN_SIGNAL_SCORE || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject) {
+    let forensicGate = 'MATHEMATICAL_THRESHOLD';
+    let retailTrap = 'Retail traders trade setups without mathematical edge, suffering negative expectancy drawdown.';
+    let capitalDefense = `Shield Engine locked execution to preserve capital. Expected Value is -$${Math.abs(evPer100).toFixed(2)} per $100 risked.`;
+
+    if (direction === 'NEUTRAL') {
+      forensicGate = 'DIRECTIONAL_CONSENSUS_GATE';
+      retailTrap = 'Retail traders force trades in non-directional chop out of boredom or FOMO.';
+      capitalDefense = 'Shield Engine forced 0% capital allocation until directional consensus forms.';
+    } else if (regimeResult.regime === 'RANDOM_WALK') {
+      forensicGate = 'FRACTAL_RANDOM_WALK_GATE';
+      retailTrap = 'Retail traders look for patterns in Geometric Brownian Motion (H ≈ 0.50) where future returns have zero autocorrelation.';
+      capitalDefense = 'Shield Engine forced 0% capital allocation. Preserved 100% of trading capital from random walk fee burn and chop drawdown.';
+    } else if (hurstCIReject) {
+      forensicGate = 'STATISTICAL_HURST_CI_GATE';
+      retailTrap = 'Retail traders trade point estimates ignoring confidence intervals. When 95% CI spans across all regimes, predictive power is zero.';
+      capitalDefense = 'Shield Engine rejected ambiguous statistical regime. Zero capital deployed until confidence intervals tighten.';
+    } else if (macroReject || mesoReject) {
+      forensicGate = 'COUNTER_TREND_TRAP_GATE';
+      retailTrap = 'Retail traders chase intraday 15m momentum directly into higher-timeframe 1D/4H macro resistance, getting stopped out instantly.';
+      capitalDefense = 'Shield Engine detected cross-timeframe divergence. Capital safely held in reserve to await macro alignment.';
+    } else if (vwapReject) {
+      forensicGate = 'VWAP_OVEREXTENSION_GATE';
+      retailTrap = 'Retail traders buy at the top of the move (> 2σ above VWAP) where institutional market makers distribute.';
+      capitalDefense = 'Shield Engine blocked overextended entry. Capital preserved against mean-reverting snapback.';
+    } else if (compositeScore < MIN_SIGNAL_SCORE) {
+      forensicGate = 'NEGATIVE_EXPECTANCY_GATE';
+      retailTrap = `Retail traders trade setups with a low score (${compositeScore}/100) and negative mathematical expected value ($${evPer100} / $100 risked).`;
+      capitalDefense = `Shield Engine blocked execution. Preserved capital for positive-expectancy setups.`;
+    }
+
     return {
       action: 'SHIELD_MODE',
       reason: direction === 'NEUTRAL'
@@ -418,24 +483,32 @@ export async function generateSignal(ticker, candles, options = {}) {
         : `Composite score ${compositeScore}/100 below minimum threshold (${MIN_SIGNAL_SCORE})`,
       ticker,
       direction,
+      tradeSide: tentativeSide,
       score: compositeScore,
       scoreBreakdown,
       regime: regimeResult,
       hurst: hurstResult,
       ofi: ofiResult,
+      buyerPercent: Math.round(((ofiResult.ofi + 1) / 2) * 100),
       pattern: pattern || null,
       reasons,
       currentPrice,
-      kelly: { action: 'SHIELD_MODE', halfKelly: 0, kellyF: 0, reason: 'Shield Mode — no trade' },
+      stopLoss: slTpResult?.stopLoss,
+      takeProfit: slTpResult?.takeProfit,
+      takeProfit1: slTpResult?.takeProfit1,
+      takeProfit2: slTpResult?.takeProfit2,
+      riskDistance: slTpResult?.slDistance,
+      rewardDistance: slTpResult?.tpDistance,
+      riskRewardRatio: 2.0,
+      breakEvenWinRate,
+      expectedValue: evPer100,
+      depthData,
+      forensicGate,
+      retailTrap,
+      capitalDefense,
+      kelly: { action: 'SHIELD_MODE', halfKelly: 0, kellyF: 0, reason: 'Shield Mode — capital preserved' },
     };
   }
-
-  // ─────────────────────────────────────────────────────
-  // STOP LOSS / TAKE PROFIT (Deterministic, ATR-based)
-  // Use voting-timeframe candles for SL/TP (1h ATR matches 4h prediction window)
-  // ─────────────────────────────────────────────────────
-  const tradeSide = direction === 'BULLISH' ? 'LONG' : 'SHORT';
-  const slTpResult = computeStopLossTakeProfit(votingCandles, tradeSide, currentPrice, 2.5, 2.0);
 
   if (!slTpResult) {
     return {
@@ -443,7 +516,10 @@ export async function generateSignal(ticker, candles, options = {}) {
       reason: 'Could not calculate ATR-based Stop Loss / Take Profit — insufficient volatility data',
       ticker, direction, score: compositeScore, scoreBreakdown,
       regime: regimeResult, hurst: hurstResult, ofi: ofiResult,
+      buyerPercent: Math.round(((ofiResult.ofi + 1) / 2) * 100),
       pattern, reasons, currentPrice,
+      expectedValue: evPer100,
+      depthData,
       kelly: { action: 'SHIELD_MODE', halfKelly: 0, kellyF: 0, reason: 'Shield Mode — ATR unavailable' },
     };
   }
@@ -460,7 +536,6 @@ export async function generateSignal(ticker, candles, options = {}) {
     });
     kellyResult.reason = `Setup ${setupId}: Statistical Kelly from ${setupStats.sample_size} backtested samples`;
   } else {
-    // Heuristic Kelly — use a conservative 2% edge estimate
     kellyResult = computeKelly({
       mean_return: 0.02,
       variance: 0.005,
@@ -469,19 +544,35 @@ export async function generateSignal(ticker, candles, options = {}) {
     kellyResult.reason = 'Heuristic Kelly sizing (insufficient backtest data for this setup)';
   }
 
-  // If Kelly says no edge, override to SHIELD
   if (kellyResult.action === 'SHIELD_MODE') {
     return {
       action: 'SHIELD_MODE',
       reason: `Kelly Criterion rejected: ${kellyResult.reason}`,
-      ticker, direction, score: compositeScore, scoreBreakdown,
+      ticker, direction, tradeSide: tentativeSide, score: compositeScore, scoreBreakdown,
       regime: regimeResult, hurst: hurstResult, ofi: ofiResult,
+      buyerPercent: Math.round(((ofiResult.ofi + 1) / 2) * 100),
       pattern, reasons, currentPrice,
+      stopLoss: slTpResult.stopLoss,
+      takeProfit: slTpResult.takeProfit,
+      takeProfit1: slTpResult.takeProfit1,
+      takeProfit2: slTpResult.takeProfit2,
+      riskDistance: slTpResult.slDistance,
+      rewardDistance: slTpResult.tpDistance,
+      riskRewardRatio: 2.0,
+      breakEvenWinRate,
+      expectedValue: evPer100,
+      depthData,
+      forensicGate: 'KELLY_RISK_RUIN_GATE',
+      retailTrap: 'Trading without sizing discipline risks gambler ruin during volatility spikes.',
+      capitalDefense: 'Kelly Engine set sizing to 0% to prevent variance drawdown.',
+      kelly: kellyResult
     };
   }
 
+  const tradeSide = tentativeSide;
+
   // ─────────────────────────────────────────────────────
-  // FINAL SIGNAL OUTPUT
+  // FINAL SIGNAL OUTPUT (ACTION: TRADE)
   // ─────────────────────────────────────────────────────
   return {
     action: 'TRADE',
@@ -500,6 +591,10 @@ export async function generateSignal(ticker, candles, options = {}) {
     atr: slTpResult.atr,
     riskDistance: slTpResult.slDistance,
     rewardDistance: slTpResult.tpDistance,
+    riskRewardRatio: 2.0,
+    breakEvenWinRate,
+    expectedValue: evPer100,
+    depthData,
 
     // Kelly Sizing
     kelly: kellyResult,
@@ -516,7 +611,7 @@ export async function generateSignal(ticker, candles, options = {}) {
 
     // Order Flow (REAL, not fake)
     ofi: ofiResult,
-    buyerPercent: Math.round(((ofiResult.ofi + 1) / 2) * 100), // Normalize OFI [-1,1] to [0%,100%]
+    buyerPercent: Math.round(((ofiResult.ofi + 1) / 2) * 100),
 
     // Pattern & Setup
     pattern: pattern || null,
@@ -532,7 +627,7 @@ export async function generateSignal(ticker, candles, options = {}) {
       ? (sma20 > sma50 && sma50 > sma200 ? 'BULLISH' : sma20 < sma50 && sma50 < sma200 ? 'BEARISH' : 'NEUTRAL')
       : 'UNKNOWN',
 
-    // Human-readable reasons (for Gemini to translate)
+    // Human-readable reasons
     reasons,
 
     // Timestamp

@@ -235,8 +235,8 @@ export async function handleGeminiConnection(clientWs, options = {}) {
           await new Promise(r => setTimeout(r, 30));
         }
         
-        // Send trade card if signal is actionable
-        if (cachedAsset.tradeCard && cachedAsset.signalData.action === 'TRADE') {
+        // Send trade / shield card for interactive terminal visualizer
+        if (cachedAsset.tradeCard) {
           clientWs.send(JSON.stringify({
             status: 'trade_card',
             tradeData: {
@@ -245,9 +245,10 @@ export async function handleGeminiConnection(clientWs, options = {}) {
             }
           }));
 
-          // Log the cached signal to the DB for the Audit Dashboard
-          try {
-            const s = cachedAsset.signalData;
+          // Log the cached signal to the DB for the Audit Dashboard (only real actionable trades)
+          if (cachedAsset.signalData.action === 'TRADE') {
+            try {
+              const s = cachedAsset.signalData;
             const auditDue = new Date(Date.now() + 4 * 3600000); // 4 hours for crypto by default
             const logData = {
               ticker: extractedTicker,
@@ -297,10 +298,11 @@ export async function handleGeminiConnection(clientWs, options = {}) {
             console.error('[GLOBAL CACHE] Failed to log signal:', e.message);
           }
         }
-        
-        clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: cachedAsset.currentPrice || null }));
-        return; // Done — no Gemini API call, no data fetching, no CPU work
       }
+        
+      clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: cachedAsset.currentPrice || null }));
+      return; // Done — no Gemini API call, no data fetching, no CPU work
+    }
       // If no cache hit, fall through to the full pipeline (first-time analysis)
       console.log(`[GLOBAL CACHE MISS] ${extractedTicker} — falling through to full analysis pipeline`);
     }
@@ -777,51 +779,96 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     );
 
     // Use REAL order flow from signal generator (not fake hardcoded data)
-    const dynamicBuyerPercent = signal?.buyerPercent ?? (direction === 'BULLISH' ? 68 : 32);
-    const dynamicHurstScore = hurstData?.meanH ? Number(hurstData.meanH.toFixed(2)) : 0.50;
+    const dynamicBuyerPercent = signal?.buyerPercent !== undefined ? signal.buyerPercent : 50;
+    const dynamicHurstScore = hurstData?.meanH ? Number(hurstData.meanH.toFixed(2)) : (signal?.hurst?.meanH ? Number(signal.hurst.meanH.toFixed(2)) : 0.50);
+    const tradeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
 
-    // SEND TRADE CARD IF VALID
-    if (!signalBlocked && ticker && ticker !== 'UNKNOWN') {
-      const tradeSide = direction === 'BULLISH' ? 'LONG' : direction === 'BEARISH' ? 'SHORT' : 'BUY';
-
-      let riskAllowed = true;
-      let riskBlockReason = null;
-      try {
-        const riskCheck = await canOpenNewTrade(ticker, tradeSide);
-        if (!riskCheck.allowed) {
-          riskAllowed = false;
-          riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
-            ? `MAX CONCURRENT TRADES (${riskCheck.count}/3)`
-            : riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT'
-              ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
-              : riskCheck.reason === 'CORRELATION_LIMIT'
-                ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
-                : riskCheck.reason;
-        }
-      } catch (riskErr) {
-        console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
-      }
-
-      if (riskAllowed) {
+    // SEND TRADE / SHIELD CARD IF VALID
+    if (ticker && ticker !== 'UNKNOWN') {
+      if (signalBlocked) {
+        // Dispatch Shield Mode Terminal Card
         clientWs.send(JSON.stringify({
           status: 'trade_card',
           tradeData: {
-            asset: ticker, side: tradeSide,
+            asset: ticker, 
+            side: tradeSide,
             entryPrice: currentPrice,
-            stopLoss, takeProfit: primaryTarget,
-            riskPercentage: 2, kellySize: kellyResult.halfKelly,
-            pattern: setupId || signal?.pattern || 'ENGINE_DETECTED',
-            regime: regimeData?.regime || 'N/A',
-            source: 'QUANT_ENGINE',
-            predictiveHorizon, educationalLesson,
+            stopLoss: stopLoss || signal?.stopLoss,
+            takeProfit: primaryTarget || signal?.takeProfit,
+            takeProfit1: signal?.takeProfit1,
+            takeProfit2: signal?.takeProfit2,
+            riskPercentage: 2, 
+            kellySize: 0,
+            pattern: setupId || signal?.pattern || 'CAPITAL_PRESERVATION_SHIELD',
+            regime: regimeData?.regime || signal?.regime?.regime || 'RANDOM_WALK',
+            source: 'SHIELD_ENGINE',
+            predictiveHorizon, 
+            educationalLesson,
             buyerPercent: dynamicBuyerPercent,
-            hurstScore: dynamicHurstScore
+            hurstScore: dynamicHurstScore,
+            scoreBreakdown: signal?.scoreBreakdown || null,
+            signalScore: rawConfidence,
+            ofiSource: signal?.scoreBreakdown?.ofiSource || flowData?.source || 'CANDLE_APPROXIMATION',
+            signalBlocked: true,
+            shieldReason: blockedReason || 'Capital protected: negative expectancy',
+            expectedValue: signal?.expectedValue,
+            riskRewardRatio: 2.0
           }
         }));
       } else {
-        const notice = `\n⚠️ RISK CONTROL: ${riskBlockReason}\n`;
-        clientWs.send(JSON.stringify({ status: 'update', text: notice }));
-        fullText += notice;
+        // Trade is approved by Deterministic Engine — Check portfolio risk control
+        let riskAllowed = true;
+        let riskBlockReason = null;
+        try {
+          const riskCheck = await canOpenNewTrade(ticker, tradeSide);
+          if (!riskCheck.allowed) {
+            riskAllowed = false;
+            riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
+              ? `MAX CONCURRENT TRADES (${riskCheck.count}/3)`
+              : riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT'
+                ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
+                : riskCheck.reason === 'CORRELATION_LIMIT'
+                  ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
+                  : riskCheck.reason;
+          }
+        } catch (riskErr) {
+          console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
+        }
+
+        if (riskAllowed) {
+          clientWs.send(JSON.stringify({
+            status: 'trade_card',
+            tradeData: {
+              asset: ticker, 
+              side: tradeSide,
+              entryPrice: currentPrice,
+              stopLoss, 
+              takeProfit: primaryTarget,
+              takeProfit1: signal?.takeProfit1,
+              takeProfit2: signal?.takeProfit2,
+              riskPercentage: 2, 
+              kellySize: kellyResult.halfKelly ? parseFloat((kellyResult.halfKelly * 100).toFixed(1)) : 0,
+              pattern: setupId || signal?.pattern || 'QUANT_CONFLUENCE',
+              regime: regimeData?.regime || 'N/A',
+              source: 'QUANT_ENGINE',
+              predictiveHorizon, 
+              educationalLesson,
+              buyerPercent: dynamicBuyerPercent,
+              hurstScore: dynamicHurstScore,
+              scoreBreakdown: signal?.scoreBreakdown || null,
+              signalScore: rawConfidence,
+              ofiSource: signal?.scoreBreakdown?.ofiSource || flowData?.source || 'BINANCE_AGGTRADE',
+              signalBlocked: false,
+              shieldReason: null,
+              expectedValue: signal?.expectedValue,
+              riskRewardRatio: 2.0
+            }
+          }));
+        } else {
+          const notice = `\n⚠️ RISK CONTROL: ${riskBlockReason}\n`;
+          clientWs.send(JSON.stringify({ status: 'update', text: notice }));
+          fullText += notice;
+        }
       }
     }
 
