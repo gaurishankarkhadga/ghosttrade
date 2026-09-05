@@ -295,6 +295,17 @@ export function formatCachedAnalysisAsChat(asset) {
   text += `• 1D Macro Structure: ${asset.macroRegime || 'Macro Neutral'}\n`;
   text += `\n`;
 
+  // 5b. Smart Money Liquidity Sweep & Stop-Hunt Radar
+  if (signal.liquiditySweep) {
+    const sw = signal.liquiditySweep;
+    text += `🎯 SMART MONEY LIQUIDITY SWEEP & STOP-HUNT RADAR:\n`;
+    text += `• Sweep State: ${sw.detected ? '🚨 ' + sw.sweepType + ' CONFIRMED' : sw.sweepType === 'UNSWEPT_POOL_TRAP' ? '⚠️ UNSWEPT LIQUIDITY TRAP' : 'Inactive (No Sweeps)'}\n`;
+    text += `• Detail: ${sw.description}\n`;
+    if (sw.poolLevel) text += `• Reference Pool Level: $${fPrice(sw.poolLevel)}\n`;
+    if (sw.wickRatio) text += `• Wick Absorption Ratio: ${Math.round(sw.wickRatio * 100)}% (Smart Money Footprint)\n`;
+    text += `• Breakeven Trail Protocol: Active @ +1.0R ($0.00 Capital Risk Lock)\n\n`;
+  }
+
   // 6. Shield Mode Forensic Audit
   text += `🛡️ CAPITAL PRESERVATION SHIELD PROOF:\n`;
   if (!isTrade) {

@@ -64,7 +64,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
     return match ? match[1].trim() : '';
   };
 
-  const nextHeaderPattern = '(?:🎯 BEGINNER TAKEAWAY:|⚖️ MATHEMATICAL ASYMMETRY|🔬 FRACTAL MATHEMATICS|🌊 LEVEL 2 ORDER BOOK|🌐 MULTI-TIMEFRAME|🛡️ CAPITAL PRESERVATION|TRADE LEVELS:|INSTITUTIONAL REASONING:|MODULE 14|$)';
+  const nextHeaderPattern = '(?:🎯 BEGINNER TAKEAWAY:|⚖️ MATHEMATICAL ASYMMETRY|🔬 FRACTAL MATHEMATICS|🌊 LEVEL 2 ORDER BOOK|🌐 MULTI-TIMEFRAME|🎯 SMART MONEY LIQUIDITY|🛡️ CAPITAL PRESERVATION|TRADE LEVELS:|INSTITUTIONAL REASONING:|MODULE 14|$)';
 
   const verdictText = extractSection(new RegExp(`PREDICTION VERDICT:([\\s\\S]*?)${nextHeaderPattern}`));
   const beginnerText = extractSection(new RegExp(`🎯 BEGINNER TAKEAWAY:([\\s\\S]*?)${nextHeaderPattern}`));
@@ -72,6 +72,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
   const fractalText = extractSection(new RegExp(`🔬 FRACTAL MATHEMATICS[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
   const orderBookText = extractSection(new RegExp(`🌊 LEVEL 2 ORDER BOOK[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
   const confluenceText = extractSection(new RegExp(`🌐 MULTI-TIMEFRAME[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const liquidityText = extractSection(new RegExp(`🎯 SMART MONEY LIQUIDITY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
   const shieldProofText = extractSection(new RegExp(`🛡️ CAPITAL PRESERVATION[^:]*:([\\s\\S]*?)(?:_Data Telemetry|$)`));
 
   // Legacy sections (for chart image mode / custom AI prompts)
@@ -105,6 +106,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
   const fractalList = parseList(fractalText);
   const orderBookList = parseList(orderBookText);
   const confluenceList = parseList(confluenceText);
+  const liquidityList = parseList(liquidityText);
   const shieldList = parseList(shieldProofText);
   const levelsList = parseList(levelsText);
   const reasoningList = parseList(reasoningText);
@@ -241,6 +243,27 @@ export default function InstitutionalReport({ content, isStreaming }) {
             {confluenceList.map((item, idx) => (
               <li key={idx} className="reasoning-item stream-anim">
                 <span className="reasoning-bullet" style={{ background: '#60a5fa' }}></span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 6. SMART MONEY LIQUIDITY SWEEP & BREAKEVEN RADAR */}
+      {liquidityText && (
+        <div className="report-card liquidity-sweep-card" style={{
+          borderColor: 'rgba(168,85,247,0.35)',
+          background: 'rgba(168,85,247,0.03)'
+        }}>
+          <div className="report-card-header" style={{ color: '#c084fc', borderBottomColor: 'rgba(168,85,247,0.15)' }}>
+            <Crosshair size={16} />
+            <span>SMART MONEY LIQUIDITY SWEEP & BREAKEVEN RADAR</span>
+          </div>
+          <ul className="report-list">
+            {liquidityList.map((item, idx) => (
+              <li key={idx} className="reasoning-item stream-anim">
+                <span className="reasoning-bullet" style={{ background: '#a855f7' }}></span>
                 <span>{item}</span>
               </li>
             ))}

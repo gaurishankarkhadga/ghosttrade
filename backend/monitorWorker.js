@@ -30,15 +30,56 @@ async function checkOpenTrades() {
         continue;
       }
 
+      // ═══════════════════════════════════════════════════════
+      // DYNAMIC BREAKEVEN RISK-NEUTRALIZER (+1.0R Trail)
+      // If price reaches TP1 (+1.0R), lock Stop-Loss to Entry ($0 Risk)
+      // ═══════════════════════════════════════════════════════
+      if (!trade.breakevenLocked && trade.entryPrice && trade.stopLoss) {
+        const initialSl = trade.initialStopLoss || trade.stopLoss;
+        const riskDist = Math.abs(trade.entryPrice - initialSl);
+        const tp1Price = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? trade.entryPrice + riskDist
+          : trade.entryPrice - riskDist;
+
+        const reachedTP1 = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? currentPrice >= tp1Price
+          : currentPrice <= tp1Price;
+
+        if (reachedTP1 && riskDist > 0) {
+          trade.initialStopLoss = initialSl;
+          trade.stopLoss = trade.entryPrice;
+          trade.breakevenLocked = true;
+
+          try {
+            await db.collection('paper_trades').updateOne(
+              { _id: trade._id },
+              {
+                $set: {
+                  stopLoss: trade.entryPrice,
+                  initialStopLoss: initialSl,
+                  breakevenLocked: true,
+                  breakevenLockedAt: new Date()
+                }
+              }
+            );
+            console.log(`[MONITOR] 🛡️ BREAKEVEN LOCKED: ${trade.asset} reached +1.0R ($${tp1Price.toFixed(2)}). Stop Loss moved to Entry $${trade.entryPrice} ($0 Capital Risk).`);
+          } catch (err) {
+            console.warn(`[MONITOR] Failed to persist breakeven lock for ${trade.asset}:`, err.message);
+          }
+        }
+      }
+
       let hitSL = false;
       let hitTP = false;
       let reason = '';
 
       if (trade.side === 'LONG' || trade.side === 'BUY') {
         if (trade.stopLoss && currentPrice <= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
+        if (trade.stopLoss && currentPrice <= trade.stopLoss) { hitSL = true; reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS'; }
         else if (trade.takeProfit && currentPrice >= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
       } else if (trade.side === 'SHORT' || trade.side === 'SELL') {
         if (trade.stopLoss && currentPrice >= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
+        if (trade.stopLoss && currentPrice >= trade.stopLoss) { hitSL = true; reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS'; }
         else if (trade.takeProfit && currentPrice <= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
       }
 

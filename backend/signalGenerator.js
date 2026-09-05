@@ -18,6 +18,7 @@ import { getClosePrices, getLogReturns } from './dataFetcher.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION } from './sharedConfig.js';
 import { computeKelly } from './kellyEngine.js';
 import { getDb } from './mongoConfig.js';
+import { detectLiquiditySweep } from './liquiditySweepEngine.js';
 
 // =====================================================
 // SCORING WEIGHTS — Empirically tuned composite weights
@@ -345,7 +346,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   scoreBreakdown.historicalWinRate = histScore;
 
   // ─── WEIGHTED COMPOSITE SCORE ───
-  const compositeScore = Math.round(
+  let compositeScore = Math.round(
     scoreBreakdown.regimeAlignment * SCORE_WEIGHTS.REGIME_ALIGNMENT +
     scoreBreakdown.technicalConfluence * SCORE_WEIGHTS.TECHNICAL_CONFLUENCE +
     scoreBreakdown.orderFlow * SCORE_WEIGHTS.ORDER_FLOW +
@@ -440,13 +441,52 @@ export async function generateSignal(ticker, candles, options = {}) {
     reasons.push(volatilityReason);
   }
 
+  // LAYER 5: SMART MONEY LIQUIDITY SWEEP & STOP-HUNT RADAR
+  const sweepResult = detectLiquiditySweep(votingCandles);
+  let sweepTrapReject = false;
+  let sweepTrapReason = null;
+
+  if (sweepResult.sweepType === 'UNSWEPT_POOL_TRAP') {
+    if ((direction === 'BULLISH' && sweepResult.poolType === 'EQUAL_HIGHS') ||
+        (direction === 'BEARISH' && sweepResult.poolType === 'EQUAL_LOWS')) {
+      sweepTrapReject = true;
+      sweepTrapReason = sweepResult.description;
+      reasons.push(sweepTrapReason);
+    }
+  }
+
+  // If a verified sweep and reclaim occurs in our trade direction, award sweep conviction bonus
+  if (sweepResult.detected && sweepResult.direction === direction) {
+    const sweepBonus = sweepResult.capitalPreservationScore || 15;
+    compositeScore = Math.min(100, compositeScore + sweepBonus);
+    scoreBreakdown.liquiditySweep = sweepBonus;
+    reasons.push(sweepResult.description);
+  }
+
   // Compute reference ATR-based levels for both Trade and Shield Mode
   const tentativeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
   const slTpResult = computeStopLossTakeProfit(votingCandles, tentativeSide, currentPrice, 2.5, 2.0);
 
+  // If sweep provides a verified tight stop beyond the wick, optimize asymmetry
+  if (sweepResult.detected && sweepResult.direction === direction && sweepResult.tightStopLoss && slTpResult) {
+    if (tentativeSide === 'LONG' && sweepResult.tightStopLoss < currentPrice) {
+      slTpResult.stopLoss = sweepResult.tightStopLoss;
+      slTpResult.slDistance = currentPrice - sweepResult.tightStopLoss;
+      slTpResult.takeProfit1 = currentPrice + slTpResult.slDistance;
+      slTpResult.takeProfit2 = currentPrice + (2.0 * slTpResult.slDistance);
+      slTpResult.takeProfit = slTpResult.takeProfit2;
+    } else if (tentativeSide === 'SHORT' && sweepResult.tightStopLoss > currentPrice) {
+      slTpResult.stopLoss = sweepResult.tightStopLoss;
+      slTpResult.slDistance = sweepResult.tightStopLoss - currentPrice;
+      slTpResult.takeProfit1 = currentPrice - slTpResult.slDistance;
+      slTpResult.takeProfit2 = currentPrice - (2.0 * slTpResult.slDistance);
+      slTpResult.takeProfit = slTpResult.takeProfit2;
+    }
+  }
+
   const effectiveMinScore = options.minScore || MIN_SIGNAL_SCORE;
 
-  if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject || volatilityReject) {
+  if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject || volatilityReject || sweepTrapReject) {
     let forensicGate = 'MATHEMATICAL_THRESHOLD';
     let retailTrap = 'Retail traders trade setups without mathematical edge, suffering negative expectancy drawdown.';
     let capitalDefense = `Shield Engine locked execution to preserve capital. Expected Value is -$${Math.abs(evPer100).toFixed(2)} per $100 risked.`;
@@ -467,6 +507,10 @@ export async function generateSignal(ticker, candles, options = {}) {
       forensicGate = 'VOLATILITY_SHOCK_GATE';
       retailTrap = 'Retail traders chase volatility spikes and news candles where slippage and spread blowout destroy stops.';
       capitalDefense = 'Shield Engine detected extreme volatility expansion (> 5% ATR). Capital safely protected on sidelines.';
+    } else if (sweepTrapReject) {
+      forensicGate = 'UNCONFIRMED_LIQUIDITY_TRAP_GATE';
+      retailTrap = sweepResult.retailTrap || 'Retail traders buy or sell into unswept liquidity pools right before institutional stop hunts.';
+      capitalDefense = 'Shield Engine detected price entering an unswept pool. Capital safely defended against immediate stop hunts.';
     } else if (macroReject || mesoReject) {
       forensicGate = 'COUNTER_TREND_TRAP_GATE';
       retailTrap = 'Retail traders chase intraday 15m momentum directly into higher-timeframe 1D/4H macro resistance, getting stopped out instantly.';
@@ -518,6 +562,7 @@ export async function generateSignal(ticker, candles, options = {}) {
       breakEvenWinRate,
       expectedValue: evPer100,
       depthData,
+      liquiditySweep: sweepResult,
       forensicGate,
       retailTrap,
       capitalDefense,
@@ -610,6 +655,7 @@ export async function generateSignal(ticker, candles, options = {}) {
     breakEvenWinRate,
     expectedValue: evPer100,
     depthData,
+    liquiditySweep: sweepResult,
 
     // Kelly Sizing
     kelly: kellyResult,
