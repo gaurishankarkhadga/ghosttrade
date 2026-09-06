@@ -179,7 +179,6 @@ export default function PromptInputBar({ onSend, disabled }) {
                let chipClass = 'quick-action-chip-integrated';
                let chipIcon = '⚡ ';
                
-               if (assetData?.status === 'error') {
                const isStandby = assetData?.status === 'standby';
                const isError = assetData?.status === 'error';
 
@@ -202,9 +201,6 @@ export default function PromptInputBar({ onSend, disabled }) {
                  ? `${direction} | Score: ${signal.score}/100 | ${signal.tradeSide}` 
                  : isShield 
                    ? `Shield Mode: ${signal?.reason?.substring(0, 60) || 'No edge'}` 
-                   : assetData?.status === 'error' 
-                     ? 'API Rate Limited' 
-                     : `Score: ${assetData?.score || 0}/100`;
                    : isStandby
                      ? (assetData?.reason || 'Market Feed Standby')
                      : isError 
