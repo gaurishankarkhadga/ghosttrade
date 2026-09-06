@@ -180,8 +180,15 @@ export default function PromptInputBar({ onSend, disabled }) {
                let chipIcon = '⚡ ';
                
                if (assetData?.status === 'error') {
+               const isStandby = assetData?.status === 'standby';
+               const isError = assetData?.status === 'error';
+
+               if (isError) {
                  chipClass += ' error-chip';
                  chipIcon = '⚠️ ';
+               } else if (isStandby) {
+                 chipClass += ' standby-chip';
+                 chipIcon = '⏱️ ';
                } else if (hasTradeSignal) {
                  chipClass += ' winning-chip';
                  chipIcon = direction === 'BULLISH' ? '🟢 ' : '🔴 ';
@@ -198,6 +205,11 @@ export default function PromptInputBar({ onSend, disabled }) {
                    : assetData?.status === 'error' 
                      ? 'API Rate Limited' 
                      : `Score: ${assetData?.score || 0}/100`;
+                   : isStandby
+                     ? (assetData?.reason || 'Market Feed Standby')
+                     : isError 
+                       ? (assetData?.reason?.toLowerCase().includes('rate') ? 'API Rate Limited' : (assetData?.reason || 'Data Feed Error')) 
+                       : `Score: ${assetData?.score || 0}/100`;
 
                return (
                  <button 

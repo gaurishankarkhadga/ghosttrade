@@ -101,6 +101,20 @@
   opacity: 0.9;
 }
 
+.standby-chip {
+  background-color: rgba(100, 116, 139, 0.12);
+  border-color: rgba(100, 116, 139, 0.25);
+  color: #94a3b8;
+  opacity: 0.65;
+}
+
+.standby-chip:hover {
+  background-color: rgba(100, 116, 139, 0.22);
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #cbd5e1;
+  opacity: 0.9;
+}
+
 .bolt-prompt-textarea {
   width: 100%;
   background: transparent;

@@ -1,6 +1,35 @@
 import { SmartAPI } from 'smartapi-javascript';
 import speakeasy from 'speakeasy';
 import { BaseBrokerAdapter, registerAdapter } from '../brokerAdapter.js';
+import { getDb } from '../mongoConfig.js';
+
+// In-memory cache for process lifetime
+let _inMemorySession = null;
+
+// Sequential rate limiter queue for SmartAPI endpoints (max ~2.5 requests/second, strictly under the 3 req/s limit)
+class AngelRateLimiter {
+    constructor(minDelayMs = 400) {
+        this.minDelayMs = minDelayMs;
+        this.lastCallTime = 0;
+        this.queue = Promise.resolve();
+    }
+
+    enqueue(fn) {
+        const next = this.queue.then(async () => {
+            const now = Date.now();
+            const elapsed = now - this.lastCallTime;
+            if (elapsed < this.minDelayMs) {
+                await new Promise(r => setTimeout(r, this.minDelayMs - elapsed));
+            }
+            this.lastCallTime = Date.now();
+            return fn();
+        });
+        this.queue = next.catch(() => {}); // Prevent unhandled queue crash
+        return next;
+    }
+}
+
+const angelRateLimiter = new AngelRateLimiter(400);
 
 export class AngelOneAdapter extends BaseBrokerAdapter {
     constructor(credentials) {
@@ -22,15 +51,63 @@ export class AngelOneAdapter extends BaseBrokerAdapter {
         this.refreshToken = null;
         this.feedToken = null;
         this.isLoggedIn = false;
+        this.tokenCreatedAt = 0;
     }
 
     /**
      * Authenticate with Angel One using automated TOTP.
      * Bypasses the need for daily manual user logins.
+     * Authenticate with Angel One using persistent 20-hour session cache.
+     * Reuses active tokens to completely eliminate the "Access denied because of exceeding access rate" error.
      */
     async authenticate() {
         if (this.isLoggedIn && this.jwtToken) return true;
+        const SESSION_MAX_AGE_MS = 20 * 60 * 60 * 1000; // 20 hours (SmartAPI tokens last 24h)
 
+        // 1. Check in-instance session
+        if (this.isLoggedIn && this.jwtToken && (Date.now() - this.tokenCreatedAt < SESSION_MAX_AGE_MS)) {
+            return true;
+        }
+
+        // 2. Check process in-memory session
+        if (_inMemorySession && _inMemorySession.clientCode === this.clientCode && (Date.now() - _inMemorySession.updatedAt < SESSION_MAX_AGE_MS)) {
+            this.jwtToken = _inMemorySession.jwtToken;
+            this.refreshToken = _inMemorySession.refreshToken;
+            this.feedToken = _inMemorySession.feedToken;
+            this.smartApi.setAccessToken(this.jwtToken);
+            this.smartApi.setPublicToken(this.refreshToken);
+            this.smartApi.setClientCode(this.clientCode);
+            this.isLoggedIn = true;
+            this.tokenCreatedAt = _inMemorySession.updatedAt;
+            return true;
+        }
+
+        // 3. Check persistent database session (shared across worker threads and server restarts)
+        try {
+            const db = await getDb();
+            const savedSession = await db.collection('broker_sessions').findOne({
+                broker: 'ANGEL_ONE',
+                clientCode: this.clientCode
+            });
+
+            if (savedSession && savedSession.jwtToken && (Date.now() - savedSession.updatedAt < SESSION_MAX_AGE_MS)) {
+                this.jwtToken = savedSession.jwtToken;
+                this.refreshToken = savedSession.refreshToken;
+                this.feedToken = savedSession.feedToken;
+                this.smartApi.setAccessToken(this.jwtToken);
+                this.smartApi.setPublicToken(this.refreshToken);
+                this.smartApi.setClientCode(this.clientCode);
+                this.isLoggedIn = true;
+                this.tokenCreatedAt = savedSession.updatedAt;
+                _inMemorySession = savedSession;
+                console.log(`[ANGEL ONE] Restored active session for ${this.clientCode} from database cache (valid for ${((SESSION_MAX_AGE_MS - (Date.now() - savedSession.updatedAt)) / 3600000).toFixed(1)}h).`);
+                return true;
+            }
+        } catch (dbErr) {
+            // DB session lookup non-fatal; continue to fresh login
+        }
+
+        // 4. Session missing or expired: Perform TOTP login through SmartAPI
         try {
             console.log(`[ANGEL ONE] Authenticating user ${this.clientCode}... generating automated TOTP.`);
             
@@ -49,15 +126,64 @@ export class AngelOneAdapter extends BaseBrokerAdapter {
                 this.feedToken = response.data.feedToken;
                 this.isLoggedIn = true;
                 console.log(`[ANGEL ONE] Successfully authenticated ${this.clientCode}`);
+                this.tokenCreatedAt = Date.now();
+
+                const sessionRecord = {
+                    broker: 'ANGEL_ONE',
+                    clientCode: this.clientCode,
+                    jwtToken: this.jwtToken,
+                    refreshToken: this.refreshToken,
+                    feedToken: this.feedToken,
+                    updatedAt: this.tokenCreatedAt
+                };
+
+                _inMemorySession = sessionRecord;
+
+                // Persist session to MongoDB for all workers to reuse
+                try {
+                    const db = await getDb();
+                    await db.collection('broker_sessions').updateOne(
+                        { broker: 'ANGEL_ONE', clientCode: this.clientCode },
+                        { $set: sessionRecord },
+                        { upsert: true }
+                    );
+                } catch (saveErr) {
+                    console.warn('[ANGEL ONE] Failed to persist session to DB:', saveErr.message);
+                }
+
+                console.log(`[ANGEL ONE] Successfully authenticated ${this.clientCode} and cached 24h session.`);
                 return true;
             } else {
                 console.error('[ANGEL ONE] Auth Failed:', response.message || 'Unknown error');
+                console.error('[ANGEL ONE] Auth Failed:', response?.message || 'Unknown error');
                 return false;
             }
         } catch (error) {
             console.error('[ANGEL ONE] Auth Exception:', error.message);
             return false;
         }
+    }
+
+    /**
+     * Rate-limited Candle Data Fetcher
+     * Enforces queue serialization to guarantee <= 2.5 req/sec (below Angel One 3 req/sec limit)
+     */
+    async getCandleData(params) {
+        await this.authenticate();
+        return angelRateLimiter.enqueue(async () => {
+            try {
+                const res = await this.smartApi.getCandleData(params);
+                if (res && res.message && res.message.includes('exceeding access rate')) {
+                    console.warn('[ANGEL ONE] 429 Rate limited on candle data. Backing off 2.5s...');
+                    await new Promise(r => setTimeout(r, 2500));
+                    return await this.smartApi.getCandleData(params);
+                }
+                return res;
+            } catch (err) {
+                console.error('[ANGEL ONE] getCandleData error:', err.message);
+                return null;
+            }
+        });
     }
 
     /**

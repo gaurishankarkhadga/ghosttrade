@@ -30,6 +30,18 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     // [PHASE 1] Multi-Dimensional Data
     const dataResult = await fetchMultiTimeframeOHLCV(ticker, 300);
     if (dataResult.error || !dataResult.timeframes) return { ticker, status: 'error', reason: 'TF Fetch Failed' };
+    if (dataResult.status === 'standby' || dataResult.error === 'UNSUPPORTED_REGION') {
+      return { 
+        ticker, 
+        status: 'standby', 
+        reason: dataResult.message || 'Market feed in standby',
+        currentPrice: null,
+        score: 0 
+      };
+    }
+    if (dataResult.error || !dataResult.timeframes) {
+      return { ticker, status: 'error', reason: dataResult.message || 'TF Fetch Failed' };
+    }
 
     const tf15m = dataResult.timeframes['15m'];
     const tf1h = dataResult.timeframes['1h'];
@@ -223,6 +235,12 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
     const batchResults = await Promise.all(
       sentimentBatch.map(async (t) => {
         try {
+          const upper = t.toUpperCase().replace(/\s+/g, '');
+          const isCrypto = upper.endsWith('-USD') || upper.endsWith('USDT');
+          const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(upper);
+          if (!isCrypto && !isIndian) {
+            return { ticker: t, sentimentBias: 'NEUTRAL', multiplier: 1.0, alerts: [] };
+          }
           const s = await fetchAssetSentiment(t);
           return { ticker: t, sentimentBias: s.bias, multiplier: s.multiplier, alerts: s.alerts };
         } catch (e) {

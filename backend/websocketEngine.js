@@ -12,11 +12,15 @@ import { DEFAULT_CRYPTO_WATCHLIST } from './sharedConfig.js';
 export const liveMemoryState = {
     depth: {},      // { 'BTC-USD': { bids: [], asks: [], timestamp: 12345 } }
     aggTrades: {},  // { 'BTC-USD': [{ price, qty, maker, time }] }
+    prices: {},     // { 'BTC-USD': 68450.25 } — Instant sub-millisecond price cache (0 REST calls)
+    lastUpdate: {}, // { 'BTC-USD': timestamp }
     status: 'DISCONNECTED'
 };
 
 // Register on globalThis so orderFlowEngine.js can access it synchronously
 // without a circular ESM import (orderFlowEngine → websocketEngine would be circular)
+// Register on globalThis so orderFlowEngine.js and dataFetcher.js can access it synchronously
+// without a circular ESM import
 globalThis.__ghostLiveMemory = liveMemoryState;
 
 let ws = null;
@@ -102,14 +106,25 @@ export function startWebSocketPipeline(tickers = []) {
                         
                         // Handle AggTrade payloads
                         if (parsed.stream.includes('@aggTrade')) {
+                            const tradePrice = parseFloat(parsed.data.p);
+                            const tradeQty = parseFloat(parsed.data.q);
+                            const tradeTime = parsed.data.T;
+
+                            // Update 0-latency live price cache immediately
+                            liveMemoryState.prices[ticker] = tradePrice;
+                            liveMemoryState.lastUpdate[ticker] = tradeTime;
+
                             if (!liveMemoryState.aggTrades[ticker]) {
                                 liveMemoryState.aggTrades[ticker] = [];
                             }
                             liveMemoryState.aggTrades[ticker].push({
                                 price: parseFloat(parsed.data.p),
                                 qty: parseFloat(parsed.data.q),
+                                price: tradePrice,
+                                qty: tradeQty,
                                 maker: parsed.data.m, // true if maker (sell), false if taker (buy)
                                 time: parsed.data.T
+                                time: tradeTime
                             });
                         }
                     }
