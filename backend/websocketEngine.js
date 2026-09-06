@@ -118,12 +118,9 @@ export function startWebSocketPipeline(tickers = []) {
                                 liveMemoryState.aggTrades[ticker] = [];
                             }
                             liveMemoryState.aggTrades[ticker].push({
-                                price: parseFloat(parsed.data.p),
-                                qty: parseFloat(parsed.data.q),
                                 price: tradePrice,
                                 qty: tradeQty,
                                 maker: parsed.data.m, // true if maker (sell), false if taker (buy)
-                                time: parsed.data.T
                                 time: tradeTime
                             });
                         }
