@@ -93,7 +93,6 @@ async function checkOpenTrades() {
                   stopLoss: trade.entryPrice,
                   initialStopLoss: initialSl,
                   breakevenLocked: true,
-                  breakevenLockedAt: new Date()
                   breakevenLockedAt: new Date(),
                   partialTaken: true,
                   partialPnlPct: trade.partialPnlPct,
@@ -102,10 +101,8 @@ async function checkOpenTrades() {
                 }
               }
             );
-            console.log(`[MONITOR] 🛡️ BREAKEVEN LOCKED: ${trade.asset} reached +1.0R ($${tp1Price.toFixed(2)}). Stop Loss moved to Entry $${trade.entryPrice} ($0 Capital Risk).`);
             console.log(`[MONITOR] 🛡️ 50% PARTIAL PROFIT BANKED + BREAKEVEN LOCKED: ${trade.asset} hit +1.0R ($${tp1Price.toFixed(2)}). Banked +${trade.partialPnlPct.toFixed(2)}% on 50% size. Stop Loss moved to Entry $${trade.entryPrice} ($0 Capital Risk).`);
           } catch (err) {
-            console.warn(`[MONITOR] Failed to persist breakeven lock for ${trade.asset}:`, err.message);
             console.warn(`[MONITOR] Failed to persist breakeven/partial lock for ${trade.asset}:`, err.message);
           }
         }
@@ -116,9 +113,6 @@ async function checkOpenTrades() {
       let reason = '';
 
       if (trade.side === 'LONG' || trade.side === 'BUY') {
-        if (trade.stopLoss && currentPrice <= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
-        if (trade.stopLoss && currentPrice <= trade.stopLoss) { hitSL = true; reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS'; }
-        else if (trade.takeProfit && currentPrice >= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
         if (trade.stopLoss && currentPrice <= trade.stopLoss) {
           hitSL = true;
           reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS';
@@ -127,9 +121,6 @@ async function checkOpenTrades() {
           reason = 'TAKE_PROFIT';
         }
       } else if (trade.side === 'SHORT' || trade.side === 'SELL') {
-        if (trade.stopLoss && currentPrice >= trade.stopLoss) { hitSL = true; reason = 'STOP_LOSS'; }
-        if (trade.stopLoss && currentPrice >= trade.stopLoss) { hitSL = true; reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS'; }
-        else if (trade.takeProfit && currentPrice <= trade.takeProfit) { hitTP = true; reason = 'TAKE_PROFIT'; }
         if (trade.stopLoss && currentPrice >= trade.stopLoss) {
           hitSL = true;
           reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS';
@@ -140,11 +131,9 @@ async function checkOpenTrades() {
       }
 
       if (hitSL || hitTP) {
-        const pnlPct = trade.entryPrice > 0
         const remainingExitPnlPct = trade.entryPrice > 0
           ? ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100 * ((trade.side === 'SHORT' || trade.side === 'SELL') ? -1 : 1)
           : 0;
-        const finalStatus = pnlPct >= 0 ? 'WIN' : 'LOSS';
 
         // Blended PnL: 50% partial profit + 50% remaining exit minus 0.10% friction/fee buffer
         const frictionPct = 0.10;

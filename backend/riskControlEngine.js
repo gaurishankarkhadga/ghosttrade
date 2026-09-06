@@ -18,7 +18,6 @@ const RISK_CONFIG = {
   max_allowed_spread_pct: 0.35, // Black swan spread expansion threshold (%)
   max_depth_depletion_pct: 50.0,// Order book depth depletion threshold (%)
   max_consecutive_losses: 3,    // Hard stop on 3 consecutive losses
-  consecutive_loss_cooldown_hours: 4 // Mandatory 4-hour cooldown to kill tilt and chop
   consecutive_loss_cooldown_hours: 4, // Mandatory 4-hour cooldown to kill tilt and chop
   asset_post_loss_cooldown_hours: 8,  // Mandatory 8-hour freeze on any specific asset after a stop-loss
   btc_flash_crash_threshold_pct: -2.5 // Block altcoin longs if BTC drops >2.5% in 1h

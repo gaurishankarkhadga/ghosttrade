@@ -9,7 +9,6 @@ const DEFAULT_BAR_COUNT = 300;
 
 // Simple in-memory cache for bulk scanning
 const ohlcvCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes for composite matrix
 
 // Tiered Timeframe Cache to eliminate Binance REST 429 rate limits:
@@ -148,7 +147,6 @@ export async function fetchAngelOneOHLCV(ticker, bars, interval = 'ONE_DAY') {
         todate: formatDate(toDate)
     };
 
-    const res = await adapter.smartApi.getCandleData(payload);
     const res = typeof adapter.getCandleData === 'function'
         ? await adapter.getCandleData(payload)
         : await adapter.smartApi.getCandleData(payload);
@@ -236,9 +234,8 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
  * - 1h bars cached 15m
  * - 15m bars cached 3m
  */
-export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
-  const symbol = resolveYahooSymbol(ticker);
-  if (!symbol) return { error: 'UNKNOWN_TICKER', message: `Cannot resolve ticker: ${ticker}` };
+export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT) {
+  const ticker = resolveSymbol(symbol);
 
   const cacheKey = `${symbol}_multi_${bars}`;
   const cached = ohlcvCache.get(cacheKey);
@@ -248,15 +245,9 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
   }
 
   try {
-    // 0. Try Angel One (Indian Indices)
     // 0. Try Angel One (Indian Indices) - Sequential execution via internal queue to strictly respect 3 req/sec limit
     const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
     if (isIndian) {
-       const [angel15m, angel1h, angel1d] = await Promise.all([
-          fetchAngelOneOHLCV(ticker, bars, 'FIFTEEN_MINUTE').catch(() => null),
-          fetchAngelOneOHLCV(ticker, bars, 'ONE_HOUR').catch(() => null),
-          fetchAngelOneOHLCV(ticker, bars, 'ONE_DAY').catch(() => null)
-       ]);
        const angel15m = await fetchAngelOneOHLCV(ticker, bars, 'FIFTEEN_MINUTE').catch(() => null);
        const angel1h  = await fetchAngelOneOHLCV(ticker, bars, 'ONE_HOUR').catch(() => null);
        const angel1d  = await fetchAngelOneOHLCV(ticker, bars, 'ONE_DAY').catch(() => null);
@@ -267,17 +258,10 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
           console.log(`[DATA] Multi-TF Fetched natively from Angel One for ${ticker}`);
           return finalData;
        } else {
-          return { error: 'NO_DATA', message: `Angel One failed to return complete multi-TF data for ${ticker}. Yahoo fallback strictly disabled.` };
           return { error: 'NO_DATA', message: `Angel One failed to return complete multi-TF data for ${ticker}.` };
        }
     }
 
-    // 1. Try Binance (Crypto)
-    const [binance15m, binance1h, binance1d] = await Promise.all([
-      fetchBinanceOHLCV(ticker, '15m', bars),
-      fetchBinanceOHLCV(ticker, '1h', bars),
-      fetchBinanceOHLCV(ticker, '1d', bars)
-    ]);
     // 1. Try Binance (Crypto) with Tiered Caching (1d: 60m TTL, 1h: 15m TTL, 15m: 3m TTL)
     // Slashes Binance REST weight by 80%+, eliminating HTTP 429 rate limit errors completely
     let binance1d = getCachedTF(symbol, '1d', bars, 60 * 60 * 1000);
@@ -308,7 +292,6 @@ export async function fetchMultiTimeframeOHLCV(ticker, bars = DEFAULT_BAR_COUNT)
       return finalData;
     }
 
-    return { error: 'NO_DATA', message: `No complete multi-TF data found for ${ticker}. Supported: Binance (Crypto) & Angel One (Indian Markets).` };
     return { 
       error: 'UNSUPPORTED_REGION', 
       message: `Native streaming feed for ${ticker} is on standby. Active streams: Binance (Crypto) & Angel One (Indian F&O).`,
@@ -344,15 +327,12 @@ export function getLogReturns(ohlcv) {
 }
 
 /**
- * Fetches the current live price using 100% native APIs (Binance for Crypto, Angel One for Indian assets).
  * Fetches the current live price.
  * ZERO-REST FIRST: Reads directly from the sub-millisecond WebSocket TCP stream memory (0 REST calls).
  * Falls back to REST only if the asset is not currently active in the WebSocket stream.
  */
 export async function fetchLivePrice(ticker) {
   try {
-    // 1. Try Binance First (Crypto)
-    let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const upper = ticker.toUpperCase().replace(/\s+/g, '');
 
     // 0. Instant 0-latency live price from WebSocket TCP stream memory (0 REST calls)
@@ -387,15 +367,12 @@ export async function fetchLivePrice(ticker) {
     if (cleanTicker.endsWith('USD')) cleanTicker = cleanTicker.replace('USD', 'USDT');
     else if (!cleanTicker.endsWith('USDT')) cleanTicker += 'USDT';
     
-    const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanTicker}`, { signal: AbortSignal.timeout(6000) }).catch(() => null);
     const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanTicker}`, { signal: AbortSignal.timeout(5000) }).catch(() => null);
     if (binanceRes && binanceRes.ok) {
       const bData = await binanceRes.json();
       if (bData && bData.price) return parseFloat(bData.price);
     }
     
-    // 2. Try Angel One for Indian Assets
-    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
     // 2. Fallback to Angel One for Indian Assets
     const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(upper);
     if (isIndian) {
