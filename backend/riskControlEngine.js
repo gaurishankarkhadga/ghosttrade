@@ -19,6 +19,9 @@ const RISK_CONFIG = {
   max_depth_depletion_pct: 50.0,// Order book depth depletion threshold (%)
   max_consecutive_losses: 3,    // Hard stop on 3 consecutive losses
   consecutive_loss_cooldown_hours: 4 // Mandatory 4-hour cooldown to kill tilt and chop
+  consecutive_loss_cooldown_hours: 4, // Mandatory 4-hour cooldown to kill tilt and chop
+  asset_post_loss_cooldown_hours: 8,  // Mandatory 8-hour freeze on any specific asset after a stop-loss
+  btc_flash_crash_threshold_pct: -2.5 // Block altcoin longs if BTC drops >2.5% in 1h
 };
 
 /**
@@ -211,6 +214,56 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
           };
         }
       }
+    }
+
+    // CHECK 2c — Asset-Specific Post-Loss Cooldown (Anti-Revenge Trading & Anti-Falling Knife)
+    const recentAssetLoss = await tradesColl.findOne({
+      asset: newTradeAsset,
+      userId,
+      status: { $in: ['CLOSED_SL', 'LOSS'] }
+    }, { sort: { closedAt: -1 } });
+
+    if (recentAssetLoss && recentAssetLoss.closedAt) {
+      const assetLossTime = new Date(recentAssetLoss.closedAt).getTime();
+      const assetCooldownMs = RISK_CONFIG.asset_post_loss_cooldown_hours * 3600 * 1000;
+      const timeSinceAssetLoss = Date.now() - assetLossTime;
+
+      if (timeSinceAssetLoss < assetCooldownMs) {
+        const remainingMinutes = Math.ceil((assetCooldownMs - timeSinceAssetLoss) / 60000);
+        console.warn(`[RISK CONTROL] 🛡️ ASSET COOLDOWN: ${newTradeAsset} suffered a Stop Loss recently. Frozen for ${remainingMinutes}m to avoid falling knife.`);
+        return {
+          allowed: false,
+          reason: 'ASSET_POST_LOSS_COOLDOWN',
+          detail: `${newTradeAsset} stopped out recently. 8-hour post-loss isolation active (${remainingMinutes}m remaining) to protect against knife-catching.`,
+          remainingMinutes
+        };
+      }
+    }
+
+    // CHECK 2d — BTC Flash-Crash Circuit Breaker (Altcoin Portfolio Shield)
+    const isAltcoinLong = (newTradeSide === 'LONG' || newTradeSide === 'BUY') && 
+                          !newTradeAsset.startsWith('BTC') && 
+                          (newTradeAsset.endsWith('USDT') || newTradeAsset.endsWith('USD'));
+
+    if (isAltcoinLong) {
+      try {
+        const btcData = await fetchOHLCV('BTCUSDT', 5);
+        if (btcData && btcData.bars && btcData.bars.length >= 2) {
+          const latestBar = btcData.bars[btcData.bars.length - 1];
+          const prevBar = btcData.bars[btcData.bars.length - 2];
+          const btcChange1h = ((latestBar.close - prevBar.close) / prevBar.close) * 100;
+
+          if (btcChange1h <= RISK_CONFIG.btc_flash_crash_threshold_pct) {
+            console.warn(`[RISK CONTROL] 🚨 BTC FLASH CRASH DETECTED: BTC moved ${btcChange1h.toFixed(2)}% in 1h. Freezing altcoin longs.`);
+            return {
+              allowed: false,
+              reason: 'BTC_FLASH_CRASH_SHIELD',
+              detail: `Bitcoin dropped ${btcChange1h.toFixed(2)}% in the last hour. All new Altcoin Longs blocked to prevent liquidation cascade.`,
+              btcChange1h
+            };
+          }
+        }
+      } catch (e) {}
     }
 
     // CHECK 3 — Dynamic Covariance Matrix (Correlation Blocking)

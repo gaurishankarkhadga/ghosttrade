@@ -304,6 +304,10 @@ export function formatCachedAnalysisAsChat(asset) {
     if (sw.poolLevel) text += `• Reference Pool Level: $${fPrice(sw.poolLevel)}\n`;
     if (sw.wickRatio) text += `• Wick Absorption Ratio: ${Math.round(sw.wickRatio * 100)}% (Smart Money Footprint)\n`;
     text += `• Breakeven Trail Protocol: Active @ +1.0R ($0.00 Capital Risk Lock)\n\n`;
+    text += `• Partial Profit Banking: 50% Scale-Out @ +1.0R (+0.5R cash locked)\n`;
+    text += `• Breakeven Trail Protocol: Active @ +1.0R ($0.00 Capital Risk Lock on remaining 50%)\n`;
+    text += `• Anti-Revenge Defense: 8-Hour Post-Loss Isolation Cooldown\n`;
+    text += `• Macro Institutional Flow: 4-Hour Trend Bias Alignment\n\n`;
   }
 
   // 6. Shield Mode Forensic Audit

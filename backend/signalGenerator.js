@@ -145,17 +145,38 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
 
   // ─────────────────────────────────────────────────────
-  // LAYER 5b: MESO TREND ALIGNMENT (4H)
+  // LAYER 5b: MESO TREND ALIGNMENT (4H Institutional Flow)
   // ─────────────────────────────────────────────────────
   let mesoTrend = 'UNKNOWN';
-  if (options.candles4h && options.candles4h.length >= 50) {
-    const mesoCloses = getClosePrices(options.candles4h);
+  let candles4h = options.candles4h;
+  if ((!candles4h || candles4h.length < 20) && votingCandles && votingCandles.length >= 40) {
+    candles4h = [];
+    for (let i = 0; i < votingCandles.length; i += 4) {
+      const chunk = votingCandles.slice(i, i + 4);
+      if (chunk.length === 0) continue;
+      candles4h.push({
+        open: chunk[0].open,
+        high: Math.max(...chunk.map(c => c.high)),
+        low: Math.min(...chunk.map(c => c.low)),
+        close: chunk[chunk.length - 1].close,
+        volume: chunk.reduce((s, c) => s + (c.volume || 0), 0),
+        date: chunk[chunk.length - 1].date
+      });
+    }
+  }
+
+  if (candles4h && candles4h.length >= 20) {
+    const mesoCloses = getClosePrices(candles4h);
     const mePrice = mesoCloses[mesoCloses.length - 1];
-    const meSma20 = sma(mesoCloses, 20);
-    const meSma50 = sma(mesoCloses, 50);
+    const meSma20 = sma(mesoCloses, Math.min(20, Math.floor(mesoCloses.length / 2)));
+    const meSma50 = sma(mesoCloses, Math.min(50, mesoCloses.length - 1));
     if (meSma20 && meSma50) {
       if (mePrice > meSma50 && meSma20 > meSma50) mesoTrend = 'BULLISH';
       else if (mePrice < meSma50 && meSma20 < meSma50) mesoTrend = 'BEARISH';
+      else mesoTrend = 'NEUTRAL';
+    } else if (meSma20) {
+      if (mePrice > meSma20) mesoTrend = 'BULLISH';
+      else if (mePrice < meSma20) mesoTrend = 'BEARISH';
       else mesoTrend = 'NEUTRAL';
     }
   }
@@ -409,14 +430,19 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
 
   let mesoReject = false;
+  let mesoReason = null;
   if (mesoTrend === 'BULLISH' && direction === 'BEARISH') {
     mesoReject = true;
     macroReason = 'Counter-Trend Block: Micro signal is BEARISH but Meso 4H trend is BULLISH.';
     reasons.push(macroReason);
+    mesoReason = 'Counter-Trend Block: Micro signal is BEARISH but Meso 4H trend is BULLISH.';
+    reasons.push(mesoReason);
   } else if (mesoTrend === 'BEARISH' && direction === 'BULLISH') {
     mesoReject = true;
     macroReason = 'Counter-Trend Block: Micro signal is BULLISH but Meso 4H trend is BEARISH.';
     reasons.push(macroReason);
+    mesoReason = 'Counter-Trend Block: Micro signal is BULLISH but Meso 4H trend is BEARISH.';
+    reasons.push(mesoReason);
   }
 
   let vwapReject = false;
@@ -536,7 +562,7 @@ export async function generateSignal(ticker, candles, options = {}) {
         : hurstCIReject
         ? hurstCIReason
         : (macroReject || mesoReject)
-        ? macroReason
+        ? (macroReject ? macroReason : mesoReason)
         : regimeResult.regime === 'RANDOM_WALK'
         ? 'Market is in Random Walk — no systematic edge exists'
         : `Composite score ${compositeScore}/100 below minimum threshold (${MIN_SIGNAL_SCORE})`,
