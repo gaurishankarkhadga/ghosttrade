@@ -66,9 +66,14 @@ export async function fetchBinanceOHLCV(ticker, interval, limit) {
   try {
     const url = `https://api.binance.com/api/v3/klines?symbol=${cleanTicker}&interval=${interval}&limit=${limit}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-    if (!res.ok) return null;
+    if (!res.ok) {
+       if (res.status === 429 || res.status === 418) {
+           throw new Error('Binance API Rate Limit Exceeded (HTTP 429). IP Temporarily Banned.');
+       }
+       throw new Error(`Binance API Error: ${res.statusText} (${res.status})`);
+    }
     const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
+    if (!Array.isArray(data) || data.length === 0) throw new Error(`No data returned from Binance for ${cleanTicker}`);
     
     return data.map(k => ({
       date: new Date(k[0]),
@@ -79,7 +84,7 @@ export async function fetchBinanceOHLCV(ticker, interval, limit) {
       volume: parseFloat(k[5])
     }));
   } catch (err) {
-    return null;
+    throw err;
   }
 }
 
@@ -88,7 +93,7 @@ let _angelAdapterInstance = null;
 /**
  * Helper: Try fetching OHLCV from Angel One API for Indian Markets.
  */
-export async function fetchAngelOneOHLCV(ticker, bars, interval = 'ONE_DAY') {
+export async function fetchAngelOneOHLCV(symbol, bars, interval = 'ONE_DAY') {
   const upper = ticker.toUpperCase().replace(/\s+/g, '');
   
   const tokenMap = {
@@ -97,7 +102,13 @@ export async function fetchAngelOneOHLCV(ticker, bars, interval = 'ONE_DAY') {
     'NIFTY50': '26000',
     'NSEBANK': '26009',
     '^NSEBANK': '26009',
-    '^NSEI': '26000'
+    '^NSEI': '26000',
+    'RELIANCE.NS': '2885',
+    'TCS.NS': '11536',
+    'HDFCBANK.NS': '1333',
+    'INFY.NS': '1594',
+    'ICICIBANK.NS': '4963',
+    'SBIN.NS': '3045'
   };
 
   const symbolToken = tokenMap[upper];
@@ -188,9 +199,10 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
 
   try {
     // 0. Try Angel One API First (for Indian Indices)
-    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
+    const originalUpper = symbol.toUpperCase().replace(/\s+/g, '');
+    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(originalUpper) || originalUpper.endsWith('.NS') || originalUpper.endsWith('.BO');
     if (isIndian) {
-      const angelData = await fetchAngelOneOHLCV(ticker, bars);
+      const angelData = await fetchAngelOneOHLCV(symbol, bars);
       if (angelData && angelData.length > 0) {
         if (angelData.length < 200) {
           return { error: 'INSUFFICIENT_DATA', message: `Only ${angelData.length} bars available on Angel One.`, count: angelData.length };
@@ -246,11 +258,12 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
 
   try {
     // 0. Try Angel One (Indian Indices) - Sequential execution via internal queue to strictly respect 3 req/sec limit
-    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(ticker.toUpperCase().replace(/\s+/g, ''));
+    const originalUpper = symbol.toUpperCase().replace(/\s+/g, '');
+    const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(originalUpper) || originalUpper.endsWith('.NS') || originalUpper.endsWith('.BO');
     if (isIndian) {
-       const angel15m = await fetchAngelOneOHLCV(ticker, bars, 'FIFTEEN_MINUTE').catch(() => null);
-       const angel1h  = await fetchAngelOneOHLCV(ticker, bars, 'ONE_HOUR').catch(() => null);
-       const angel1d  = await fetchAngelOneOHLCV(ticker, bars, 'ONE_DAY').catch(() => null);
+       const angel15m = await fetchAngelOneOHLCV(symbol, bars, 'FIFTEEN_MINUTE').catch(() => null);
+       const angel1h  = await fetchAngelOneOHLCV(symbol, bars, 'ONE_HOUR').catch(() => null);
+       const angel1d  = await fetchAngelOneOHLCV(symbol, bars, 'ONE_DAY').catch(() => null);
 
        if (angel15m && angel1h && angel1d && angel1d.length >= 200) {
           const finalData = { symbol: ticker, timeframes: { '15m': angel15m, '1h': angel1h, '1d': angel1d } };
@@ -298,7 +311,7 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
       status: 'standby'
     };
   } catch (err) {
-    console.error(`[DATA] Native Multi-TF fetch failed for ${symbol}:`, err.message);
+    console.error(`[DATA] Native Multi-TF fetch failed for ${symbol}:`, err.stack);
     return { error: 'FETCH_FAILED', message: err.message };
   }
 }
