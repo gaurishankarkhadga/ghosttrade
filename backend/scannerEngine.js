@@ -29,7 +29,6 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
   try {
     // [PHASE 1] Multi-Dimensional Data
     const dataResult = await fetchMultiTimeframeOHLCV(ticker, 300);
-    if (dataResult.error || !dataResult.timeframes) return { ticker, status: 'error', reason: 'TF Fetch Failed' };
     if (dataResult.status === 'standby' || dataResult.error === 'UNSUPPORTED_REGION') {
       return { 
         ticker, 
@@ -222,6 +221,7 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
   const results = [];
   const BATCH_SIZE = 10;
   const DELAY_MS = 500;
+  const DELAY_MS = 2500;
   const SENTIMENT_BATCH_SIZE = 10;
 
   const scanStartTime = Date.now();
@@ -249,6 +249,9 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
       })
     );
     allSentiments.push(...batchResults);
+    if (i + SENTIMENT_BATCH_SIZE < tickers.length) {
+      await sleep(2500);
+    }
   }
   
   // Calculate the cross-asset rotation impact matrix
@@ -277,6 +280,7 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
 
     if (i + BATCH_SIZE < tickers.length) {
       await sleep(DELAY_MS);
+      await sleep(2500);
     }
   }
 

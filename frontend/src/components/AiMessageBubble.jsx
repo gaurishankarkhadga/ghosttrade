@@ -357,7 +357,9 @@ const TradeExecutionCard = ({
   const smoothedPro = useControlledTypewriter(proText, step === 8, step > 8, !isNewMessage, onProComplete);
 
   const currentMode = useGhostStore((state) => state.executionMode) || 'PAPER';
+  const executeTrade = useGhostStore((state) => state.executeTrade);
   const isLiveMode = currentMode !== 'PAPER';
+  const safeRisk = riskPercentage || 2.0;
 
   const [tradeResult, setTradeResult] = useState(null);
 
