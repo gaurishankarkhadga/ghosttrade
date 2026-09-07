@@ -66,14 +66,9 @@ export async function fetchBinanceOHLCV(ticker, interval, limit) {
   try {
     const url = `https://api.binance.com/api/v3/klines?symbol=${cleanTicker}&interval=${interval}&limit=${limit}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-    if (!res.ok) {
-       if (res.status === 429 || res.status === 418) {
-           throw new Error('Binance API Rate Limit Exceeded (HTTP 429). IP Temporarily Banned.');
-       }
-       throw new Error(`Binance API Error: ${res.statusText} (${res.status})`);
-    }
+    if (!res.ok) return null;
     const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) throw new Error(`No data returned from Binance for ${cleanTicker}`);
+    if (!Array.isArray(data) || data.length === 0) return null;
     
     return data.map(k => ({
       date: new Date(k[0]),
@@ -84,7 +79,7 @@ export async function fetchBinanceOHLCV(ticker, interval, limit) {
       volume: parseFloat(k[5])
     }));
   } catch (err) {
-    throw err;
+    return null;
   }
 }
 
@@ -96,7 +91,7 @@ let _angelAdapterInstance = null;
 export async function fetchAngelOneOHLCV(symbol, bars, interval = 'ONE_DAY') {
   const upper = ticker.toUpperCase().replace(/\s+/g, '');
   
-  const tokenMap = {
+  let tokenMap = {
     'NIFTY': '26000',
     'BANKNIFTY': '26009',
     'NIFTY50': '26000',
@@ -110,6 +105,19 @@ export async function fetchAngelOneOHLCV(symbol, bars, interval = 'ONE_DAY') {
     'ICICIBANK.NS': '4963',
     'SBIN.NS': '3045'
   };
+  
+  try {
+      // Dynamically load ALL Indian stocks if the user has downloaded them
+      const fs = await import('fs');
+      const path = await import('path');
+      const tokensPath = path.resolve(process.cwd(), 'backend/data/angel_tokens.json');
+      if (fs.existsSync(tokensPath)) {
+          const allTokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
+          tokenMap = { ...tokenMap, ...allTokens };
+      }
+  } catch (e) {
+      // Fallback to hardcoded map
+  }
 
   const symbolToken = tokenMap[upper];
   if (!symbolToken) return null;
@@ -271,7 +279,11 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
           console.log(`[DATA] Multi-TF Fetched natively from Angel One for ${ticker}`);
           return finalData;
        } else {
-          return { error: 'NO_DATA', message: `Angel One failed to return complete multi-TF data for ${ticker}.` };
+          return { 
+            error: 'UNSUPPORTED_REGION', 
+            message: `Native streaming feed for ${ticker} is on standby.`,
+            status: 'standby'
+          };
        }
     }
 
@@ -311,8 +323,12 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
       status: 'standby'
     };
   } catch (err) {
-    console.error(`[DATA] Native Multi-TF fetch failed for ${symbol}:`, err.stack);
-    return { error: 'FETCH_FAILED', message: err.message };
+    console.error(`[DATA] Native Multi-TF fetch failed for ${symbol}:`, err.message);
+    return { 
+      error: 'UNSUPPORTED_REGION', 
+      message: `Native streaming feed for ${symbol} is on standby.`,
+      status: 'standby'
+    };
   }
 }
 
