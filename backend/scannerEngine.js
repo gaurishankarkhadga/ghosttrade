@@ -220,7 +220,7 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
 
   const results = [];
   const BATCH_SIZE = 10;
-  const DELAY_MS = 500;
+  
   const DELAY_MS = 2500;
   const SENTIMENT_BATCH_SIZE = 10;
 
@@ -280,7 +280,6 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
 
     if (i + BATCH_SIZE < tickers.length) {
       await sleep(DELAY_MS);
-      await sleep(2500);
     }
   }
 
