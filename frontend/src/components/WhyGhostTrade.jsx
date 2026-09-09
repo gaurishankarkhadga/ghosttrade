@@ -88,6 +88,27 @@ const PILLARS = [
     description: "Continuously monitors thousands of crypto, stock, and forex pairs 24/7 to detect high-probability setups.",
     metric: "24/7",
     metricLabel: "COVERAGE"
+  },
+  {
+    icon: <Crosshair size={28} />,
+    title: "Smart Money Sweep Detection",
+    description: "Actively identifies retail stop-loss clusters and detects Institutional 'Turtle Soup' fakeout traps to front-run reversals.",
+    metric: "L2",
+    metricLabel: "LIQUIDITY POOLS"
+  },
+  {
+    icon: <LineChart size={28} />,
+    title: "Profit Machine Scale-Outs",
+    description: "Automatically secures 50% profits at 1:1 risk-to-reward and deploys an ATR trailing stop to create a risk-free 'Infinite Runner'.",
+    metric: "50%",
+    metricLabel: "SCALE-OUT"
+  },
+  {
+    icon: <ShieldAlert size={28} />,
+    title: "Anti-Tilt Circuit Breakers",
+    description: "Enforces 8-hour asset isolation after a stop-loss and triggers a multi-asset freeze if BTC flashes down >2.5%.",
+    metric: "100%",
+    metricLabel: "CAPITAL SHIELD"
   }
 ];
 

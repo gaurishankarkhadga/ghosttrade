@@ -1,6 +1,6 @@
 import { atr } from './technicalEngine.js';
 
-export function computeStopLossTakeProfit(candles, side, livePrice, atrMultiplier = 1.5, rrr = 2.0) {
+export function computeStopLossTakeProfit(candles, side, livePrice, atrMultiplier = 1.5, rrr = 2.0, ticker = '') {
   if (!candles || candles.length < 15) return null;
 
   // Use Wilder's smoothed ATR from technicalEngine for consistency across all engines
@@ -19,11 +19,15 @@ export function computeStopLossTakeProfit(candles, side, livePrice, atrMultiplie
 
   const normalizedSide = (side || '').toUpperCase() === 'BUY' ? 'LONG' : (side || '').toUpperCase() === 'SELL' ? 'SHORT' : (side || '').toUpperCase();
 
-  // Institutional Risk Bounding:
-  // - Minimum risk buffer: 0.8% (prevents immediate noise stop-outs)
-  // - Maximum risk ceiling: 3.8% (prevents absurd, unachievable multi-day targets on intraday signals)
+  // FIXED: Asset-class-aware risk bounds — old 3.8% ceiling was too tight for crypto
+  // Crypto ATR on 1h/4h/daily bars routinely exceeds 4-8% of price, and with atrMultiplier=2.5
+  // the raw risk of 10-20% was clamped to 3.8%, placing stops inside normal volatility noise
+  const upperTicker = (ticker || '').toUpperCase();
+  const isCrypto = upperTicker.includes('USD') || upperTicker.includes('BTC') || upperTicker.includes('ETH') || upperTicker.endsWith('USDT');
+  const isForex = upperTicker.includes('EUR') || upperTicker.includes('GBP') || upperTicker.includes('JPY') || upperTicker.includes('CHF');
+  const maxRiskPct = isCrypto ? 0.065 : isForex ? 0.025 : 0.038; // 6.5% crypto, 2.5% forex, 3.8% equities
   const minRiskDist = currentPrice * 0.008;
-  const maxRiskDist = currentPrice * 0.038;
+  const maxRiskDist = currentPrice * maxRiskPct;
 
   let rawRisk = currentAtr * atrMultiplier;
 

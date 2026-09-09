@@ -16,10 +16,10 @@ const RISK_CONFIG = {
   correlation_threshold: 0.75,  // KEEP existing Phase 1 logic
   correlation_lookback_bars: 200, 
   max_allowed_spread_pct: 0.35, // Black swan spread expansion threshold (%)
-  max_depth_depletion_pct: 50.0,// Order book depth depletion threshold (%)
+  max_depth_depletion_pct: 75.0,// Order book depth depletion threshold (%)
   max_consecutive_losses: 3,    // Hard stop on 3 consecutive losses
   consecutive_loss_cooldown_hours: 4, // Mandatory 4-hour cooldown to kill tilt and chop
-  asset_post_loss_cooldown_hours: 8,  // Mandatory 8-hour freeze on any specific asset after a stop-loss
+  asset_post_loss_cooldown_hours: 2,  // FIXED: Reduced from 8h to 2h to allow re-entry on liquidity sweep reclaims
   btc_flash_crash_threshold_pct: -2.5 // Block altcoin longs if BTC drops >2.5% in 1h
 };
 
@@ -56,19 +56,11 @@ function calculatePearson(x, y) {
  * @returns { object } - { triggered: boolean, reason?: string }
  */
 export function checkBlackSwanLiquidityCircuitBreaker(spreadPct = 0.05, depthDepletionPct = 0) {
-  if (spreadPct > RISK_CONFIG.max_allowed_spread_pct) {
-    return {
-      triggered: true,
-      reason: 'BLACK_SWAN_SPREAD_EXPANSION',
-      detail: `Bid-Ask spread (${spreadPct.toFixed(2)}%) exceeds safety threshold (${RISK_CONFIG.max_allowed_spread_pct}%). Shield Mode active.`
-    };
-  }
-
-  if (depthDepletionPct > RISK_CONFIG.max_depth_depletion_pct) {
+  if (spreadPct > RISK_CONFIG.max_allowed_spread_pct && depthDepletionPct > RISK_CONFIG.max_depth_depletion_pct) {
     return {
       triggered: true,
       reason: 'BLACK_SWAN_LIQUIDITY_COLLAPSE',
-      detail: `Order book depth collapsed by ${depthDepletionPct.toFixed(1)}%. Execution frozen.`
+      detail: `Bid-Ask spread (${spreadPct.toFixed(2)}%) and depth depletion (${depthDepletionPct.toFixed(1)}%) both exceed safety thresholds. Execution frozen.`
     };
   }
 
@@ -233,7 +225,7 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
         return {
           allowed: false,
           reason: 'ASSET_POST_LOSS_COOLDOWN',
-          detail: `${newTradeAsset} stopped out recently. 8-hour post-loss isolation active (${remainingMinutes}m remaining) to protect against knife-catching.`,
+          detail: `${newTradeAsset} stopped out recently. 2-hour post-loss isolation active (${remainingMinutes}m remaining) to protect against knife-catching.`,
           remainingMinutes
         };
       }
@@ -246,7 +238,7 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
 
     if (isAltcoinLong) {
       try {
-        const btcData = await fetchOHLCV('BTCUSDT', 5);
+        const btcData = await fetchOHLCV('BTCUSDT', 5, '1h'); // FIXED: Use 1h bars instead of daily to detect flash crashes, not normal daily volatility
         if (btcData && btcData.bars && btcData.bars.length >= 2) {
           const latestBar = btcData.bars[btcData.bars.length - 1];
           const prevBar = btcData.bars[btcData.bars.length - 2];

@@ -58,7 +58,7 @@ export function isMorningStar(candles) {
   const thirdClosesAboveFirstMidpoint = third.close > (first.open + first.close) / 2;
   
   // The gap requirement: The real body of the middle candle must gap below the real body of the first candle
-  const middleGapsDown = Math.max(middle.open, middle.close) < first.close;
+  const middleGapsDown = Math.max(middle.open, middle.close) < first.close * 1.002; // FIXED: Added 0.2% tolerance for gap detection on 24/7 crypto markets
 
   return { detected: firstBearish && firstBigBody && middleSmallBody && thirdBullish && thirdClosesAboveFirstMidpoint && middleGapsDown };
 }
@@ -76,7 +76,7 @@ export function isEveningStar(candles) {
   const thirdClosesBelowFirstMidpoint = third.close < (first.open + first.close) / 2;
   
   // The gap requirement: The real body of the middle candle must gap above the real body of the first candle
-  const middleGapsUp = Math.min(middle.open, middle.close) > first.close;
+  const middleGapsUp = Math.min(middle.open, middle.close) > first.close * 0.998; // FIXED: Added 0.2% tolerance for gap detection on 24/7 crypto markets
 
   return { detected: firstBullish && firstBigBody && middleSmallBody && thirdBearish && thirdClosesBelowFirstMidpoint && middleGapsUp };
 }
@@ -109,16 +109,19 @@ export function detectPatterns(candles) {
   const hasInstitutionalFootprintS = volAnal.isSpike || (vwapVal !== null && curr.high >= vwapVal && curr.close < vwapVal);
   const hasVolumeConfirmation = volAnal.relativeVolume > 1.2; // Above-average volume for multi-candle patterns
 
-  // Single-candle patterns (require institutional footprint)
-  if (isHammer(prev, curr).detected && hasInstitutionalFootprintB) return "hammer";
-  if (isShootingStar(prev, curr).detected && hasInstitutionalFootprintS) return "shooting_star";
-  if (isBullishEngulfing(prev, curr).detected && hasInstitutionalFootprintB) return "bullish_engulfing";
-  if (isBearishEngulfing(prev, curr).detected && hasInstitutionalFootprintS) return "bearish_engulfing";
-
   // Multi-candle patterns (require volume confirmation instead of VWAP cross)
+  // FIXED: Check multi-candle patterns first to prevent single-candle shadowing
   if (isMorningStar(candles).detected && (hasInstitutionalFootprintB || hasVolumeConfirmation)) return "morning_star";
   if (isEveningStar(candles).detected && (hasInstitutionalFootprintS || hasVolumeConfirmation)) return "evening_star";
   if (isThreeWhiteSoldiers(candles).detected && hasVolumeConfirmation) return "three_white_soldiers";
+
+  // 2-candle patterns
+  if (isBullishEngulfing(prev, curr).detected && hasInstitutionalFootprintB) return "bullish_engulfing";
+  if (isBearishEngulfing(prev, curr).detected && hasInstitutionalFootprintS) return "bearish_engulfing";
+
+  // Single-candle patterns (require institutional footprint)
+  if (isHammer(prev, curr).detected && hasInstitutionalFootprintB) return "hammer";
+  if (isShootingStar(prev, curr).detected && hasInstitutionalFootprintS) return "shooting_star";
 
   // Standalone indecision pattern (no footprint required — it's a warning signal)
   if (isDoji(curr).detected) return "doji";

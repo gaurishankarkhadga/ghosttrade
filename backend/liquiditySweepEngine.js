@@ -53,7 +53,7 @@ export function findSwingPoints(candles, window = 3) {
  * Identifies Equal Highs (EQH) and Equal Lows (EQL) liquidity pools.
  * Tolerance threshold is 0.20% price delta.
  */
-export function findLiquidityPools(swingHighs, swingLows, currentPrice, tolerancePct = 0.20) {
+export function findLiquidityPools(swingHighs, swingLows, currentPrice, tolerancePct = 0.20, candles = []) {
   const pools = [];
 
   // 1. Equal Highs (Buy-Stop Liquidity Pool)
@@ -69,6 +69,7 @@ export function findLiquidityPools(swingHighs, swingLows, currentPrice, toleranc
           side: 'BUY_STOP_LIQUIDITY',
           price: Math.max(h1, h2),
           barsAgo: swingHighs.length - 1 - j,
+          formationIndex: swingHighs[j].index,
           description: `Dense retail short stop-loss cluster @ $${Math.max(h1, h2).toFixed(2)}`
         });
       }
@@ -88,13 +89,31 @@ export function findLiquidityPools(swingHighs, swingLows, currentPrice, toleranc
           side: 'SELL_STOP_LIQUIDITY',
           price: Math.min(l1, l2),
           barsAgo: swingLows.length - 1 - j,
+          formationIndex: swingLows[j].index,
           description: `Dense retail long stop-loss cluster @ $${Math.min(l1, l2).toFixed(2)}`
         });
       }
     }
   }
 
-  return pools;
+  const validPools = [];
+  for (const pool of pools) {
+    let consumed = false;
+    if (candles && candles.length > 0 && pool.formationIndex !== undefined) {
+      for (let k = pool.formationIndex + 1; k < candles.length; k++) {
+        if (pool.type === 'EQUAL_HIGHS' && candles[k].close > pool.price * 1.005) {
+          consumed = true; break;
+        }
+        if (pool.type === 'EQUAL_LOWS' && candles[k].close < pool.price * 0.995) {
+          consumed = true; break;
+        }
+      }
+    }
+    if (!consumed) validPools.push(pool);
+  }
+  // FIXED: Invalidate pools that have been traded through (liquidity consumed)
+
+  return validPools;
 }
 
 /**
@@ -112,7 +131,7 @@ export function detectLiquiditySweep(candles) {
   const recentCandles = candles.slice(-50);
   const { swingHighs, swingLows } = findSwingPoints(recentCandles, 2);
   const currentPrice = recentCandles[recentCandles.length - 1].close;
-  const pools = findLiquidityPools(swingHighs, swingLows, currentPrice);
+  const pools = findLiquidityPools(swingHighs, swingLows, currentPrice, 0.20, recentCandles);
 
   const currentBar = recentCandles[recentCandles.length - 1];
   const prevBar = recentCandles[recentCandles.length - 2];
@@ -134,6 +153,8 @@ export function detectLiquiditySweep(candles) {
       const wickRatio = lowerWick / (activeBar.high - activeBar.low || 1);
 
       if (wickRatio >= 0.35) {
+        let tightStopLoss = activeBar.low * 0.998;
+        if ((currentPrice - tightStopLoss) / currentPrice < 0.005) { tightStopLoss = currentPrice * 0.995; } // FIXED: Enforce minimum 0.5% stop distance to avoid spread-induced stop-outs
         return {
           detected: true,
           sweepType: 'BULLISH_SWEEP',
@@ -141,7 +162,7 @@ export function detectLiquiditySweep(candles) {
           poolLevel: lowLevel,
           sweepPrice: activeBar.low,
           wickRatio: Number(wickRatio.toFixed(2)),
-          tightStopLoss: activeBar.low * 0.998, // Anchor SL just under sweep wick
+          tightStopLoss, // Anchor SL just under sweep wick
           description: `Bullish Liquidity Sweep: Retail sell-stops @ $${lowLevel.toFixed(2)} swept & reclaimed. Lower wick ${Math.round(wickRatio * 100)}% confirms smart money absorption.`,
           gateRisk: 'LOW_RISK_RECLAIM',
           retailTrap: 'Retail traders sold the breakdown or had stops triggered right at the low.',
@@ -168,6 +189,8 @@ export function detectLiquiditySweep(candles) {
       const wickRatio = upperWick / (activeBar.high - activeBar.low || 1);
 
       if (wickRatio >= 0.35) {
+        let tightStopLoss = activeBar.high * 1.002;
+        if ((tightStopLoss - currentPrice) / currentPrice < 0.005) { tightStopLoss = currentPrice * 1.005; } // FIXED: Enforce minimum 0.5% stop distance to avoid spread-induced stop-outs
         return {
           detected: true,
           sweepType: 'BEARISH_SWEEP',
@@ -175,7 +198,7 @@ export function detectLiquiditySweep(candles) {
           poolLevel: highLevel,
           sweepPrice: activeBar.high,
           wickRatio: Number(wickRatio.toFixed(2)),
-          tightStopLoss: activeBar.high * 1.002, // Anchor SL just above sweep wick
+          tightStopLoss, // Anchor SL just above sweep wick
           description: `Bearish Liquidity Sweep: Retail buy-stops @ $${highLevel.toFixed(2)} swept & rejected. Upper wick ${Math.round(wickRatio * 100)}% confirms institutional distribution.`,
           gateRisk: 'LOW_RISK_RECLAIM',
           retailTrap: 'Retail traders bought the breakout or had short stops triggered at the top of the range.',
@@ -191,7 +214,9 @@ export function detectLiquiditySweep(candles) {
     if (distPct < 0.35) {
       return {
         detected: false,
-        sweepType: 'UNSWEPT_POOL_TRAP',
+        sweepType: 'APPROACHING_LIQUIDITY_POOL', // FIXED: Changed from hard block to score penalty — breakouts often target these pools
+        isWarning: true,
+        scorePenalty: 10,
         poolLevel: pool.price,
         poolType: pool.type,
         distancePct: Number(distPct.toFixed(2)),

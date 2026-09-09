@@ -89,7 +89,8 @@ let _angelAdapterInstance = null;
  * Helper: Try fetching OHLCV from Angel One API for Indian Markets.
  */
 export async function fetchAngelOneOHLCV(symbol, bars, interval = 'ONE_DAY') {
-  const upper = ticker.toUpperCase().replace(/\s+/g, '');
+  // FIXED: Was 'ticker' which caused ReferenceError — parameter is named 'symbol'
+  const upper = symbol.toUpperCase().replace(/\s+/g, '');
   
   let tokenMap = {
     'NIFTY': '26000',
@@ -307,7 +308,15 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
       if (binance15m) setCachedTF(symbol, '15m', bars, binance15m);
     }
     
-    if (binance15m && binance1h && binance1d && binance1d.length >= 200) {
+    // FIXED: Validate all timeframe data lengths, not just daily
+    if (!binance15m || binance15m.length < 50) {
+      console.warn(`[DataFetcher] Insufficient 15m data for ${symbol}: ${binance15m?.length || 0} bars`);
+    }
+    if (!binance1h || binance1h.length < 50) {
+      console.warn(`[DataFetcher] Insufficient 1h data for ${symbol}: ${binance1h?.length || 0} bars`);
+    }
+
+    if (binance15m && binance15m.length >= 50 && binance1h && binance1h.length >= 50 && binance1d && binance1d.length >= 200) {
       const finalData = {
         symbol: ticker,
         timeframes: { '15m': binance15m, '1h': binance1h, '1d': binance1d }

@@ -150,11 +150,14 @@ export async function generateSignal(ticker, candles, options = {}) {
   let mesoTrend = 'UNKNOWN';
   let candles4h = options.candles4h;
   if ((!candles4h || candles4h.length < 20) && votingCandles && votingCandles.length >= 40) {
+    // FIXED: Slice backwards from the end so the latest (most critical) chunk always has 4 bars.
+    // Forward-slicing from index 0 caused the latest chunk to potentially have only 1-3 bars.
     candles4h = [];
-    for (let i = 0; i < votingCandles.length; i += 4) {
-      const chunk = votingCandles.slice(i, i + 4);
+    for (let i = votingCandles.length; i > 0; i -= 4) {
+      const start = Math.max(0, i - 4);
+      const chunk = votingCandles.slice(start, i);
       if (chunk.length === 0) continue;
-      candles4h.push({
+      candles4h.unshift({
         open: chunk[0].open,
         high: Math.max(...chunk.map(c => c.high)),
         low: Math.min(...chunk.map(c => c.low)),
@@ -202,18 +205,23 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
 
   // Vote 2: Moving Average Alignment (Perfect)
+  // FIXED: Full and Partial MA votes are now mutually exclusive to prevent double-voting.
+  // Previously, both could fire simultaneously giving MAs 3/7 votes (43% of total).
+  let fullMaMatched = false;
   if (sma20 && sma50 && sma200) {
     if (sma20 > sma50 && sma50 > sma200 && currentPrice > sma20) {
       directionVotes.BULLISH += 2;
       reasons.push('SMA alignment: Golden Cross (SMA20 > SMA50 > SMA200)');
+      fullMaMatched = true;
     } else if (sma20 < sma50 && sma50 < sma200 && currentPrice < sma20) {
       directionVotes.BEARISH += 2;
       reasons.push('SMA alignment: Death Cross (SMA20 < SMA50 < SMA200)');
+      fullMaMatched = true;
     }
   }
 
-  // Vote 2b: Partial Moving Average Alignment (price trending above/below short-term MAs)
-  if (sma20 && sma50) {
+  // Vote 2b: Partial Moving Average Alignment — only if full alignment didn't match
+  if (!fullMaMatched && sma20 && sma50) {
     if (currentPrice > sma20 && currentPrice > sma50 && sma20 > sma50) {
       directionVotes.BULLISH += 1;
       reasons.push('Partial bullish MA: Price > SMA20 > SMA50');
@@ -433,14 +441,11 @@ export async function generateSignal(ticker, candles, options = {}) {
   let mesoReason = null;
   if (mesoTrend === 'BULLISH' && direction === 'BEARISH') {
     mesoReject = true;
-    macroReason = 'Counter-Trend Block: Micro signal is BEARISH but Meso 4H trend is BULLISH.';
-    reasons.push(macroReason);
+    // FIXED: Was erroneously overwriting macroReason and pushing duplicate reasons
     mesoReason = 'Counter-Trend Block: Micro signal is BEARISH but Meso 4H trend is BULLISH.';
     reasons.push(mesoReason);
   } else if (mesoTrend === 'BEARISH' && direction === 'BULLISH') {
     mesoReject = true;
-    macroReason = 'Counter-Trend Block: Micro signal is BULLISH but Meso 4H trend is BEARISH.';
-    reasons.push(macroReason);
     mesoReason = 'Counter-Trend Block: Micro signal is BULLISH but Meso 4H trend is BEARISH.';
     reasons.push(mesoReason);
   }
@@ -448,14 +453,19 @@ export async function generateSignal(ticker, candles, options = {}) {
   let vwapReject = false;
   let vwapReason = null;
   if (vwapResult) {
-      if (direction === 'BULLISH' && currentPrice > vwapResult.upperBand) {
-          vwapReject = true;
-          vwapReason = `VWAP Overextension Block: Price ($${currentPrice}) is > 2 StdDev above VWAP ($${vwapResult.vwap}). High risk of immediate pullback.`;
-          reasons.push(vwapReason);
-      } else if (direction === 'BEARISH' && currentPrice < vwapResult.lowerBand) {
-          vwapReject = true;
-          vwapReason = `VWAP Overextension Block: Price ($${currentPrice}) is > 2 StdDev below VWAP ($${vwapResult.vwap}). High risk of immediate bounce.`;
-          reasons.push(vwapReason);
+      const isVwapOverextended = (direction === 'BULLISH' && currentPrice > vwapResult.upperBand) ||
+                                  (direction === 'BEARISH' && currentPrice < vwapResult.lowerBand);
+      if (isVwapOverextended) {
+          // FIXED: In trending regimes with high confluence, allow overextension with a score penalty
+          // instead of hard blocking. Strong trends "walk the bands" and this was blocking valid breakouts.
+          if (regimeResult.regime === 'TRENDING' && compositeScore >= 70) {
+              compositeScore = Math.max(compositeScore - 10, 60);
+              reasons.push(`VWAP overextended but allowed in strong trend (score penalty: -10pts)`);
+          } else {
+              vwapReject = true;
+              vwapReason = `VWAP Overextension Block: Price ($${currentPrice}) is > 2 StdDev ${direction === 'BULLISH' ? 'above' : 'below'} VWAP ($${vwapResult.vwap}). High risk of immediate ${direction === 'BULLISH' ? 'pullback' : 'bounce'}.`;
+              reasons.push(vwapReason);
+          }
       }
   }
 
@@ -472,7 +482,13 @@ export async function generateSignal(ticker, candles, options = {}) {
   let sweepTrapReject = false;
   let sweepTrapReason = null;
 
-  if (sweepResult.sweepType === 'UNSWEPT_POOL_TRAP') {
+  // FIXED: Changed from hard rejection to score penalty — breakouts often target liquidity pools
+  if (sweepResult.sweepType === 'APPROACHING_LIQUIDITY_POOL' && sweepResult.isWarning) {
+    const penalty = sweepResult.scorePenalty || 10;
+    compositeScore = Math.max(0, compositeScore - penalty);
+    reasons.push(`Near liquidity pool (${sweepResult.poolType}) — score penalty: -${penalty}pts`);
+  } else if (sweepResult.sweepType === 'UNSWEPT_POOL_TRAP') {
+    // Legacy fallback — still handle old-format if present
     if ((direction === 'BULLISH' && sweepResult.poolType === 'EQUAL_HIGHS') ||
         (direction === 'BEARISH' && sweepResult.poolType === 'EQUAL_LOWS')) {
       sweepTrapReject = true;
@@ -491,7 +507,7 @@ export async function generateSignal(ticker, candles, options = {}) {
 
   // Compute reference ATR-based levels for both Trade and Shield Mode
   const tentativeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
-  const slTpResult = computeStopLossTakeProfit(votingCandles, tentativeSide, currentPrice, 2.5, 2.0);
+  const slTpResult = computeStopLossTakeProfit(votingCandles, tentativeSide, currentPrice, 2.5, 2.0, ticker);
 
   // If sweep provides a verified tight stop beyond the wick, optimize asymmetry
   if (sweepResult.detected && sweepResult.direction === direction && sweepResult.tightStopLoss && slTpResult) {
@@ -622,12 +638,18 @@ export async function generateSignal(ticker, candles, options = {}) {
     });
     kellyResult.reason = `Setup ${setupId}: Statistical Kelly from ${setupStats.sample_size} backtested samples`;
   } else {
+    // FIXED: Use ATR-derived values instead of hardcoded dummy figures.
+    // Hardcoded mean_return: 0.02, variance: 0.005 ignored actual asset volatility,
+    // causing oversized positions on volatile assets and undersized on calm ones.
+    const atrPct = atrResult ? (atrResult.percentOfPrice / 100) : 0.03;
+    const derivedMeanReturn = atrPct * 0.25; // Conservative: expect to capture 25% of ATR
+    const derivedVariance = atrPct * atrPct;  // Variance proportional to volatility squared
     kellyResult = computeKelly({
-      mean_return: 0.02,
-      variance: 0.005,
+      mean_return: derivedMeanReturn,
+      variance: derivedVariance,
       regime: regimeResult.regime
     });
-    kellyResult.reason = 'Heuristic Kelly sizing (insufficient backtest data for this setup)';
+    kellyResult.reason = `Heuristic Kelly sizing (ATR-derived: mean=${(derivedMeanReturn * 100).toFixed(2)}%, var=${(derivedVariance * 100).toFixed(3)}%)`;
   }
 
   if (kellyResult.action === 'SHIELD_MODE') {

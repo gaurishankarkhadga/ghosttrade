@@ -73,9 +73,22 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     const depthData = await fetchOrderBookDepth(ticker, 1000);
     
     // Graceful degradation for NSE or missing order flow
+    // FIXED: Require walls to be significant (within 1% of price and > 3x average level size)
+    // Previously, ANY wall in depth-1000 data triggered the trap, killing virtually all bullish breakouts
     let liquidityTrap = false;
-    if (depthData && depthData.sellWalls && depthData.sellWalls.length > 0 && regime15m.regime === 'UP') liquidityTrap = true;
-    if (depthData && depthData.buyWalls && depthData.buyWalls.length > 0 && regime15m.regime === 'DOWN') liquidityTrap = true;
+    if (depthData) {
+      const avgSize = depthData.avgLevelSize || 0;
+      const significantSellWalls = (depthData.sellWalls || []).filter(w => 
+        w.priceDistance !== undefined ? (w.priceDistance <= 0.01 && w.quantity >= avgSize * 3)
+        : (Math.abs(w.price - price) / price <= 0.01 && w.quantity >= avgSize * 3)
+      );
+      const significantBuyWalls = (depthData.buyWalls || []).filter(w =>
+        w.priceDistance !== undefined ? (w.priceDistance <= 0.01 && w.quantity >= avgSize * 3)
+        : (Math.abs(w.price - price) / price <= 0.01 && w.quantity >= avgSize * 3)
+      );
+      if (significantSellWalls.length > 0 && regime15m.regime === 'UP') liquidityTrap = true;
+      if (significantBuyWalls.length > 0 && regime15m.regime === 'DOWN') liquidityTrap = true;
+    }
 
 
     // [PHASE 4] QuantScore Calculation (0-100)
@@ -266,9 +279,11 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
       const impact = rotationMatrix[ticker];
       
       const mergedImpact = {
-         multiplier: impact.multiplier,
+         // FIXED: Combine both multipliers — baseSentiment.multiplier was previously discarded,
+         // so negative news on an asset had zero effect unless an entire sector event occurred
+         multiplier: (baseSentiment?.multiplier ?? 1.0) * (impact?.multiplier ?? 1.0),
          bias: baseSentiment.sentimentBias,
-         alerts: [...baseSentiment.alerts, ...impact.alerts]
+         alerts: [...baseSentiment.alerts, ...(impact?.alerts || [])]
       };
 
       const result = await scanTickerPhase4(ticker, mergedImpact);
@@ -290,8 +305,11 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
     if (a.status === 'success' && b.status !== 'success') return -1;
     
     // Sort by score then EV
+    // FIXED: evNet was undefined at top level — it's inside tradeCard.expectedValue
     if (b.score !== a.score) return (b.score || 0) - (a.score || 0);
-    return (b.evNet || 0) - (a.evNet || 0);
+    const aEv = a.tradeCard?.expectedValue?.evNet ?? a.evNet ?? 0;
+    const bEv = b.tradeCard?.expectedValue?.evNet ?? b.evNet ?? 0;
+    return bEv - aEv;
   });
 
   // Data health metrics — log data quality per scan cycle

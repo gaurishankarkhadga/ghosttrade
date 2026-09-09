@@ -679,7 +679,11 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       const ohlcvClose = p3Context.candles1d[p3Context.candles1d.length - 1].close;
       const priceDrift = trueLivePrice ? Math.abs(trueLivePrice - ohlcvClose) / trueLivePrice : 0;
       
-      if (priceDrift > 0.005) {
+      // FIXED: Asset-class-aware desync threshold — crypto needs wider tolerance
+      const isCrypto = ticker.toUpperCase().includes('USD') || ticker.toUpperCase().includes('BTC') || ticker.toUpperCase().includes('ETH');
+      const DESYNC_THRESHOLD = isCrypto ? 0.015 : 0.005; // 1.5% for crypto, 0.5% for stocks
+
+      if (priceDrift > DESYNC_THRESHOLD) {
           console.warn(`[CIRCUIT BREAKER] Data desynchronization detected for ${ticker}. Drift: ${(priceDrift*100).toFixed(2)}%. Aborting signal.`);
           signal = {
               action: 'SHIELD_MODE',

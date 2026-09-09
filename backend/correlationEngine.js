@@ -64,10 +64,10 @@ export function calculateRotationImpacts(marketSentiment) {
     
     // If there is a toxic event in this sector, and THIS asset is NOT the toxic one
     if (toxicCompetitors && toxicCompetitors.length > 0 && s.sentimentBias !== 'TOXIC') {
-      // Apply a 1.25x Liquidity Rotation Boost (capital fleeing the competitor and entering this one)
-      rotationImpacts[s.ticker].multiplier = 1.25;
+      // FIXED: Crypto toxic events cause contagion, not rotation. Apply penalty instead of boost.
+      rotationImpacts[s.ticker].multiplier = 0.5;
       rotationImpacts[s.ticker].alerts.push(
-        `LIQUIDITY ROTATION DETECTED: Capital fleeing toxic competitor(s) [${toxicCompetitors.join(', ')}]. Boost applied.`
+        `CONTAGION RISK: Sector member [${toxicCompetitors.join(', ')}] suffering toxic event. Applying contagion penalty.`
       );
     }
     

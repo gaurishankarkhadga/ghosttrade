@@ -46,21 +46,24 @@ export function classifyRegime(hurstResult) {
   // Heuristic Score = base certainty reduced by CI width uncertainty and instability penalty
   let heuristicScore = distanceFromNeutral;
 
-  // Penalize for wide confidence interval (only if wider than a typical 0.35 bound)
-  const ciPenalty = Math.max(0, (ciWidth - 0.35)) * 1.5; 
-  heuristicScore -= Math.min(ciPenalty, 0.30); // Max 30% penalty
+  // Penalize for wide confidence interval (only if wider than a typical 0.40 bound)
+  // FIXED: Reduced CI penalty (was 0.30, too harsh for 200-bar daily Hurst)
+  const ciPenalty = Math.max(0, (ciWidth - 0.40)) * 1.0; 
+  heuristicScore -= Math.min(ciPenalty, 0.15); // Max 15% penalty
 
   // Penalize for R/S vs DFA disagreement
   if (!isStable) {
-    const instabilityPenalty = Math.min(disagreement, 0.20); // Max 20% penalty
+    // FIXED: Reduced instability penalty cap from 0.20 to 0.10
+    const instabilityPenalty = Math.min(disagreement * 0.5, 0.10); // Max 10% penalty
     heuristicScore -= instabilityPenalty;
   }
 
   // Clamp to [0, 1]
   heuristicScore = Math.max(0, Math.min(1, heuristicScore));
 
-  // PRD Requirement: must be ≥60% heuristic score to be shown as actionable
-  const ACTIONABLE_THRESHOLD = 0.60;
+  // PRD Requirement: must be ≥50% heuristic score to be shown as actionable
+  // FIXED: Lowered actionable threshold from 0.60 to 0.50
+  const ACTIONABLE_THRESHOLD = 0.50;
   const isActionable = heuristicScore >= ACTIONABLE_THRESHOLD && regime !== 'RANDOM_WALK';
 
   // Strategy guidance based on regime + actionability

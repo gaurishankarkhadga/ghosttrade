@@ -85,23 +85,45 @@ export function rsi(closes, period = 14) {
 export function macd(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
   if (closes.length < slowPeriod + signalPeriod) return null;
 
-  // Calculate MACD line values for signal EMA
+  // FIXED: Single-pass incremental EMA computation — was O(N²) with slice-based recalculation
+  // which also produced numerically incorrect values due to insufficient EMA warmup
+  const fastK = 2 / (fastPeriod + 1);
+  const slowK = 2 / (slowPeriod + 1);
+
+  // Initialize EMAs with SMA seeds
+  let fastEmaVal = 0;
+  for (let i = 0; i < fastPeriod; i++) fastEmaVal += closes[i];
+  fastEmaVal /= fastPeriod;
+
+  let slowEmaVal = 0;
+  for (let i = 0; i < slowPeriod; i++) slowEmaVal += closes[i];
+  slowEmaVal /= slowPeriod;
+
+  // Warm up fast EMA from fastPeriod to slowPeriod
+  for (let i = fastPeriod; i < slowPeriod; i++) {
+    fastEmaVal = closes[i] * fastK + fastEmaVal * (1 - fastK);
+  }
+
+  // Build MACD line from slowPeriod onwards (both EMAs are now warmed up)
   const macdLine = [];
-  for (let i = slowPeriod; i <= closes.length; i++) {
-    const slice = closes.slice(0, i);
-    const fastEma = ema(slice, fastPeriod);
-    const slowEma = ema(slice, slowPeriod);
-    if (fastEma !== null && slowEma !== null) {
-      macdLine.push(fastEma - slowEma);
-    }
+  for (let i = slowPeriod; i < closes.length; i++) {
+    fastEmaVal = closes[i] * fastK + fastEmaVal * (1 - fastK);
+    slowEmaVal = closes[i] * slowK + slowEmaVal * (1 - slowK);
+    macdLine.push(fastEmaVal - slowEmaVal);
   }
 
   if (macdLine.length < signalPeriod) return null;
 
-  const macdVal = macdLine[macdLine.length - 1];
-  const signalVal = ema(macdLine, signalPeriod);
-  if (signalVal === null) return null;
+  // Calculate signal line using incremental EMA of MACD line
+  const signalK = 2 / (signalPeriod + 1);
+  let signalVal = 0;
+  for (let i = 0; i < signalPeriod; i++) signalVal += macdLine[i];
+  signalVal /= signalPeriod;
+  for (let i = signalPeriod; i < macdLine.length; i++) {
+    signalVal = macdLine[i] * signalK + signalVal * (1 - signalK);
+  }
 
+  const macdVal = macdLine[macdLine.length - 1];
   const histogram = macdVal - signalVal;
 
   let interpretation;
@@ -236,10 +258,14 @@ export function volumeAnalysis(bars, lookback = 20) {
   const trend = last5 > prev5 * 1.1 ? 'INCREASING' : last5 < prev5 * 0.9 ? 'DECREASING' : 'STABLE';
 
   // Check for volume-price divergence
+  // FIXED: Require meaningful price move (>1.5%) and persistent volume decline (3+ bars)
+  // to avoid flagging minor intra-week pauses as divergence during institutional breakouts
+  const priceChangePct = Math.abs(bars[bars.length - 1].close - bars[bars.length - 5].close) / bars[bars.length - 5].close;
   const priceUp = bars[bars.length - 1].close > bars[bars.length - 5].close;
-  const volumeDown = trend === 'DECREASING';
-  const divergence = priceUp && volumeDown ? 'BEARISH_DIVERGENCE'
-    : !priceUp && volumeDown ? 'BULLISH_DIVERGENCE'
+  const volumeDown = trend === 'DECREASING' && (last5 < prev5 * 0.75); // Require significant volume decline (25%+)
+  const meaningfulMove = priceChangePct > 0.015; // At least 1.5% price move
+  const divergence = meaningfulMove && priceUp && volumeDown ? 'BEARISH_DIVERGENCE'
+    : meaningfulMove && !priceUp && volumeDown ? 'BULLISH_DIVERGENCE'
     : 'NONE';
 
   let interpretation;
@@ -408,6 +434,15 @@ export function vwap(candles) {
       startIndex = i + 1;
       break;
     }
+  }
+
+  // FIXED: Detect daily data (all candles have unique dates) and use rolling 20-bar VWAP
+  // instead of session-anchored VWAP. On daily bars, session anchoring only captures 1 candle,
+  // making stdDev = 0 and upper/lower bands collapse to VWAP = typical price,
+  // which falsely triggers the VWAP_OVEREXTENSION_GATE in signalGenerator.js
+  const sessionBarCount = candles.length - startIndex;
+  if (sessionBarCount <= 1) {
+    startIndex = Math.max(0, candles.length - 20); // Use 20-bar rolling VWAP for daily data
   }
 
   // Calculate VWAP

@@ -303,18 +303,18 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
   const isNeutralOrBlocked = signal.direction === 'NEUTRAL' || signal.signalBlocked;
 
   if (!isNeutralOrBlocked && direction === 'BULLISH') {
-    // 1. Take Profit Hit First (Target reached = instant win)
-    if (primaryTarget && maxObservedPrice >= primaryTarget) {
-      return { 
-        correct: true, 
-        reason: `Take Profit target reached — price hit $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
-      };
-    }
     // 2. Continuous Invalidation (Hard Stop)
     if (invalidationLevel && minObservedPrice <= invalidationLevel) {
       return { 
         correct: false, 
         reason: buildErrorContext(`${ticker} failed bullish structure — price dropped to $${minObservedPrice.toFixed(4)} hitting invalidation $${invalidationLevel.toFixed(4)}`)
+      };
+    }
+    // 1. Take Profit Hit First (Target reached = instant win)
+    if (primaryTarget && maxObservedPrice >= primaryTarget) {
+      return { 
+        correct: true, 
+        reason: `Take Profit target reached — price hit $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
       };
     }
     // 3. Significant Target Progress (>= 50% distance towards 1:2 target = 1:1 RRR achieved)
@@ -323,10 +323,8 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
       const progressDistance = maxObservedPrice - currentPrice;
       const targetProgress = targetDistance > 0 ? progressDistance / targetDistance : 0;
       if (targetProgress >= 0.50) {
-        return { 
-          correct: true, 
-          reason: `Target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price reached $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
-        };
+        // FIXED: 50% progress is tracked but no longer counts as an instant WIN
+        console.log(`[AUDIT] Target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price reached $${maxObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})`);
       }
     }
     
@@ -334,10 +332,12 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
     if (isExpired) {
       // High-water mark check: if price achieved meaningful positive move during window
       const maxUpMove = ((maxObservedPrice - currentPrice) / currentPrice) * 100;
-      if (maxUpMove >= 1.0) {
+      // FIXED: High-water mark threshold raised from 1.0% to 1.5%
+      if (maxUpMove >= 1.5) {
         return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% ($${maxObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
-      if (percentChange >= 0) {
+      // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
+      if (percentChange >= 0.5) {
         return { correct: true, reason: `Directional bias confirmed at expiration — +${percentChange.toFixed(2)}% in the predicted direction` };
       } else {
         return { 
@@ -352,18 +352,18 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
   }
 
   if (!isNeutralOrBlocked && direction === 'BEARISH') {
-    // 1. Short Take Profit Hit First (Target reached = instant win)
-    if (primaryTarget && minObservedPrice <= primaryTarget) {
-      return { 
-        correct: true, 
-        reason: `Short Take Profit target reached — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
-      };
-    }
     // 2. Continuous Invalidation (Hard Stop)
     if (invalidationLevel && maxObservedPrice >= invalidationLevel) {
       return { 
         correct: false, 
         reason: buildErrorContext(`${ticker} failed bearish structure — price rallied to $${maxObservedPrice.toFixed(4)} hitting invalidation $${invalidationLevel.toFixed(4)}`)
+      };
+    }
+    // 1. Short Take Profit Hit First (Target reached = instant win)
+    if (primaryTarget && minObservedPrice <= primaryTarget) {
+      return { 
+        correct: true, 
+        reason: `Short Take Profit target reached — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
       };
     }
     // 3. Significant Target Progress (>= 50% distance towards 1:2 target = 1:1 RRR achieved)
@@ -372,10 +372,8 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
       const progressDistance = currentPrice - minObservedPrice;
       const targetProgress = targetDistance > 0 ? progressDistance / targetDistance : 0;
       if (targetProgress >= 0.50) {
-        return { 
-          correct: true, 
-          reason: `Short target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})` 
-        };
+        // FIXED: 50% progress is tracked but no longer counts as an instant WIN
+        console.log(`[AUDIT] Short target progress ${(targetProgress * 100).toFixed(0)}% (1:1 RRR secured) — price dropped to $${minObservedPrice.toFixed(4)} vs target $${primaryTarget.toFixed(4)} (entry: $${currentPrice.toFixed(4)})`);
       }
     }
     
@@ -383,10 +381,12 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
     if (isExpired) {
       // High-water mark check: if price achieved meaningful downward move during window
       const maxDownMove = ((currentPrice - minObservedPrice) / currentPrice) * 100;
-      if (maxDownMove >= 1.0) {
+      // FIXED: High-water mark threshold raised from 1.0% to 1.5%
+      if (maxDownMove >= 1.5) {
         return { correct: true, reason: `Directional bias confirmed via high-water mark — price dropped -${maxDownMove.toFixed(1)}% ($${minObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
-      if (priceChange <= 0) {
+      // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
+      if (percentChange <= -0.5) {
         return { correct: true, reason: `Directional bias confirmed at expiration — ${Math.abs(percentChange).toFixed(2)}% in the predicted direction` };
       } else {
         return { 
@@ -531,6 +531,12 @@ export async function verifySignalWithCandles(signal) {
         if (candle.low < lowestPrice) lowestPrice = candle.low;
 
         if (signal.direction === 'BULLISH') {
+          if (primaryTarget && invalidationLevel && candle.high >= primaryTarget && candle.low <= invalidationLevel) {
+            // FIXED: Ambiguous candle where both TP and SL hit — default to LOSS (conservative)
+            slBreached = true;
+            breachCandlePrice = candle.low;
+            break;
+          }
           // Take profit check first
           if (primaryTarget && candle.high >= primaryTarget) {
             tpReached = true;
@@ -547,6 +553,12 @@ export async function verifySignalWithCandles(signal) {
             break; // Stop breached! Trade stopped out.
           }
         } else if (signal.direction === 'BEARISH') {
+          if (primaryTarget && invalidationLevel && candle.low <= primaryTarget && candle.high >= invalidationLevel) {
+            // FIXED: Ambiguous candle where both TP and SL hit — default to LOSS (conservative)
+            slBreached = true;
+            breachCandlePrice = candle.high;
+            break;
+          }
           // Short Take profit check first
           if (primaryTarget && candle.low <= primaryTarget) {
             tpReached = true;

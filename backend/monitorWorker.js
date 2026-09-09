@@ -86,6 +86,9 @@ async function checkOpenTrades() {
           }
 
           try {
+            // FIXED: Update trade quantity after partial exit to prevent double-exit
+            const remainingQty = Number((trade.quantity - (trade.quantity * 0.5)).toFixed(8));
+            
             await db.collection('paper_trades').updateOne(
               { _id: trade._id },
               {
@@ -97,10 +100,12 @@ async function checkOpenTrades() {
                   partialTaken: true,
                   partialPnlPct: trade.partialPnlPct,
                   partialPrice: currentPrice,
-                  partialClosedAt: new Date()
+                  partialClosedAt: new Date(),
+                  quantity: remainingQty
                 }
               }
             );
+            trade.quantity = remainingQty; // Update in-memory reference
             console.log(`[MONITOR] 🛡️ 50% PARTIAL PROFIT BANKED + BREAKEVEN LOCKED: ${trade.asset} hit +1.0R ($${tp1Price.toFixed(2)}). Banked +${trade.partialPnlPct.toFixed(2)}% on 50% size. Stop Loss moved to Entry $${trade.entryPrice} ($0 Capital Risk).`);
           } catch (err) {
             console.warn(`[MONITOR] Failed to persist breakeven/partial lock for ${trade.asset}:`, err.message);

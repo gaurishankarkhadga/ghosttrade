@@ -45,7 +45,8 @@ async function fetchLiveNews(ticker) {
 
   // Source 2: Google News RSS (works for both crypto and stocks)
   try {
-    const searchTerm = isNSE ? `${cleanTicker}+NSE+stock` : `${cleanTicker}+crypto`;
+    const isCrypto = ticker.endsWith('USDT') || ticker.endsWith('USD') || ticker.endsWith('BTC') || ticker.endsWith('ETH');
+    const searchTerm = isNSE ? `${cleanTicker}+NSE+stock` : (isCrypto ? `${cleanTicker}+crypto` : `${cleanTicker}+stock+market`);
     const googleRssUrl = `https://news.google.com/rss/search?q=${searchTerm}&hl=en&gl=US&ceid=US:en`;
     const gResponse = await fetch(googleRssUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
@@ -100,7 +101,7 @@ async function fetchLiveNews(ticker) {
  * Runs a lightweight NLP keyword matrix over the news headlines to calculate
  * a sentiment multiplier for the Quantitative Score.
  */
-function calculateSentimentMultiplier(headlines, ticker) {
+function calculateSentimentMultiplier(headlines, ticker, tradeSide) {
   if (!headlines || headlines.length === 0) {
     return { multiplier: 1.0, bias: 'NEUTRAL', alerts: [] };
   }
@@ -110,7 +111,8 @@ function calculateSentimentMultiplier(headlines, ticker) {
   let bearishHits = 0;
   let alerts = [];
 
-  const text = headlines.map(h => h.title.toLowerCase()).join(' ');
+  // FIXED: Proximity bleed prevention using ' |||BREAK||| '
+  const text = headlines.map(h => h.title.toLowerCase()).join(' |||BREAK||| ');
   const cleanTicker = ticker.replace('.NS', '').replace('NSE:', '').split('-')[0].toLowerCase();
 
   TOXIC_KEYWORDS.forEach(kw => {
@@ -142,12 +144,22 @@ function calculateSentimentMultiplier(headlines, ticker) {
   let bias = 'NEUTRAL';
 
   if (bullishHits > bearishHits) {
-    multiplier = 1.2; // 20% boost to QuantScore
-    bias = 'BULLISH';
+    if (tradeSide === 'LONG') {
+      multiplier = 1.15; // Aligned boost
+      bias = 'BULLISH_ALIGNED';
+    } else {
+      multiplier = 1.2; // 20% boost to QuantScore (legacy fallback)
+      bias = 'BULLISH';
+    }
     alerts.push(`BULLISH CATALYST: Positive news sentiment detected.`);
   } else if (bearishHits > bullishHits) {
-    multiplier = 0.7; // 30% penalty to QuantScore
-    bias = 'BEARISH';
+    if (tradeSide === 'SHORT') {
+      multiplier = 1.15; // Aligned boost for bearish setup
+      bias = 'BEARISH_ALIGNED';
+    } else {
+      multiplier = 0.7; // 30% penalty to QuantScore (legacy fallback)
+      bias = 'BEARISH';
+    }
     alerts.push(`BEARISH CLOUD: Negative news sentiment detected.`);
   }
 
@@ -157,10 +169,10 @@ function calculateSentimentMultiplier(headlines, ticker) {
 /**
  * Main public function. Fetches news for the asset and analyzes sentiment.
  */
-export async function fetchAssetSentiment(ticker) {
+export async function fetchAssetSentiment(ticker, tradeSide) {
   try {
     const headlines = await fetchLiveNews(ticker);
-    const sentiment = calculateSentimentMultiplier(headlines, ticker);
+    const sentiment = calculateSentimentMultiplier(headlines, ticker, tradeSide);
     
     return {
       success: true,

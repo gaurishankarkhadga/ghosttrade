@@ -417,6 +417,7 @@ export default function GhostAbout() {
                         </p>
                         <ul className="spec-list">
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Institutional Order Book Imbalance Detection</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Smart Money Liquidity Sweep & Turtle Soup Detection</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Multi-Market Cointegration & Trend Analysis</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Automated Spread & Volatility Threshold Filtering</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Probability Density Scoring for Every Trade</span></motion.li>
@@ -551,6 +552,8 @@ export default function GhostAbout() {
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Real-Time Parametric Value-at-Risk (VaR) Checks</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Automatic Circuit Breakers on High Volatility</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Dynamic Stop-Loss & Target Management</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>50% Profit Scale-Outs with Infinite Runner Trailing Stops</span></motion.li>
+                          <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Anti-Tilt Circuit Breakers (8h Asset Cooldown, BTC Flash Crash Shield)</span></motion.li>
                           <motion.li variants={tabItemVariants}><CheckCircle2 size={16} className="icon-emerald" /> <span>Hard Daily Drawdown Limit Enforcers</span></motion.li>
                         </ul>
                       </motion.div>

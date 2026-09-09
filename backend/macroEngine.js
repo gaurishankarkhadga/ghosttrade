@@ -81,10 +81,22 @@ export async function fetchMacroCorrelations() {
       }
     }
 
+    let riskScore = 50;
+    if (btc) {
+      if (btc.changePercent > 2) riskScore += 20;
+      if (btc.changePercent < -2) riskScore -= 20;
+    }
+    if (eth) {
+      if (eth.changePercent > 2) riskScore += 15;
+      if (eth.changePercent < -3) riskScore -= 15;
+    }
+    riskScore = Math.max(0, Math.min(100, riskScore));
+
     return {
       spx: null,
       dxy: null,
       vix: null,
+      riskScore, // FIXED: Added computed riskScore as proxy for SPX/DXY/VIX macro conditions
       btc: btc ? { price: btc.price, change: btc.changePercent } : null,
       eth: eth ? { price: eth.price, change: eth.changePercent } : null,
       riskEnvironment,
