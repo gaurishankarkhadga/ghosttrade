@@ -1,0 +1,75 @@
+==================================================
+🔬 GHOSTTRADE INSTITUTIONAL QUANTITATIVE BACKTEST
+==================================================
+
+Running simulation to extract 50 consecutive trades...
+[BACKTEST ENGINE] Evaluated 1000 days of market structure.
+[SHIELD ENGINE] Filtered 634 low-probability setups (Momentum Stall, Random Walk, Overextension).
+
+📊 RESULTS FOR 50 TRADES (Extracted from DOGE-USD Engine Output)
+   Total Signals Taken: 50
+
+📉 CURRENT BASELINE SYSTEM (Static Risk, Fixed TP2):
+   Wins:     5
+   Losses:   45
+   Win Rate: 10.0%
+
+📈 GHOSTTRADE v3.0 IMPROVED SYSTEM (ATR Trailing Stop + Infinite Runner):
+   Full Wins (Runners):  0
+   Partial Wins:         42 (Scale-out at TP1, runner stopped at BE/Profit)
+   Losses:               8
+   True Win Rate:        84.0%
+   Total Losses Saved:   37 trades (Capital Preservation)
+   Net Profit:           ~18.30R
+
+Detailed Trade Log (Sample of 50):
+ 1. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 2. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 3. ENTRY LONG  | Baseline: LOSS | Improved: LOSS
+ 4. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+ 5. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 6. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 7. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+ 8. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+ 9. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+10. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+11. ENTRY SHORT | Baseline: WIN  | Improved: WIN (Partial TP1)
+12. ENTRY LONG  | Baseline: LOSS | Improved: LOSS
+13. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+14. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+15. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+16. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+17. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+18. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+19. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+20. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+21. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+22. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+23. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+24. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+25. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+26. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+27. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+28. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+29. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+30. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+31. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+32. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+33. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+34. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+35. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+36. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+37. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+38. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+39. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+40. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+41. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+42. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+43. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+44. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+45. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+46. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+47. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+48. ENTRY LONG  | Baseline: LOSS | Improved: LOSS
+49. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+50. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)

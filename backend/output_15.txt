@@ -1,0 +1,40 @@
+==================================================
+🔬 GHOSTTRADE INSTITUTIONAL QUANTITATIVE BACKTEST
+==================================================
+
+Running simulation to extract 15 consecutive trades...
+[BACKTEST ENGINE] Evaluated 530 days of market structure.
+[SHIELD ENGINE] Filtered 215 low-probability setups (Momentum Stall, Random Walk, Overextension).
+
+📊 RESULTS FOR 15 TRADES (Extracted from BNB-USD Engine Output)
+   Total Signals Taken: 15
+
+📉 CURRENT BASELINE SYSTEM (Static Risk, Fixed TP2):
+   Wins:     5
+   Losses:   10
+   Win Rate: 33.3%
+
+📈 GHOSTTRADE v3.0 IMPROVED SYSTEM (ATR Trailing Stop + Infinite Runner):
+   Full Wins (Runners):  0
+   Partial Wins:         12 (Scale-out at TP1, runner stopped at BE/Profit)
+   Losses:               3
+   True Win Rate:        80.0%
+   Total Losses Saved:   7 trades (Capital Preservation)
+   Net Profit:           ~5.75R
+
+Detailed Trade Log (Sample of 15):
+ 1. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 2. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 3. ENTRY LONG  | Baseline: LOSS | Improved: LOSS
+ 4. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+ 5. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 6. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+ 7. ENTRY SHORT | Baseline: LOSS | Improved: LOSS
+ 8. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+ 9. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)
+10. ENTRY LONG  | Baseline: LOSS | Improved: WIN (Partial TP1)
+11. ENTRY SHORT | Baseline: WIN  | Improved: WIN (Partial TP1)
+12. ENTRY LONG  | Baseline: LOSS | Improved: LOSS
+13. ENTRY SHORT | Baseline: WIN  | Improved: WIN (Partial TP1)
+14. ENTRY LONG  | Baseline: WIN  | Improved: WIN (Partial TP1)
+15. ENTRY SHORT | Baseline: LOSS | Improved: WIN (Partial TP1)

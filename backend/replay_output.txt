@@ -1,0 +1,154 @@
+════════════════════════════════════════════════════════════════════
+  GHOSTTRADE HISTORICAL REPLAY PIPELINE — v1.0
+  Assets  : 27 (20 crypto + 7 stocks)
+  Window  : 365 daily bars (~1 year)
+  Forward : 5 bar resolution window
+  Purpose : Seed calibration + Kelly engines with empirical outcomes
+════════════════════════════════════════════════════════════════════
+
+
+[1/27] BTC-USD
+
+  [REPLAY] BTC-USD — Fetching 365 bars...
+  [REPLAY] BTC-USD — SKIPPED: NO_DATA
+
+[2/27] ETH-USD
+
+  [REPLAY] ETH-USD — Fetching 365 bars...
+  [REPLAY] ETH-USD — SKIPPED: NO_DATA
+
+[3/27] SOL-USD
+
+  [REPLAY] SOL-USD — Fetching 365 bars...
+  [REPLAY] SOL-USD — SKIPPED: NO_DATA
+
+[4/27] XRP-USD
+
+  [REPLAY] XRP-USD — Fetching 365 bars...
+  [REPLAY] XRP-USD — SKIPPED: NO_DATA
+
+[5/27] BNB-USD
+
+  [REPLAY] BNB-USD — Fetching 365 bars...
+  [REPLAY] BNB-USD — SKIPPED: NO_DATA
+
+[6/27] DOGE-USD
+
+  [REPLAY] DOGE-USD — Fetching 365 bars...
+  [REPLAY] DOGE-USD — SKIPPED: NO_DATA
+
+[7/27] ADA-USD
+
+  [REPLAY] ADA-USD — Fetching 365 bars...
+  [REPLAY] ADA-USD — SKIPPED: NO_DATA
+
+[8/27] AVAX-USD
+
+  [REPLAY] AVAX-USD — Fetching 365 bars...
+  [REPLAY] AVAX-USD — SKIPPED: NO_DATA
+
+[9/27] LINK-USD
+
+  [REPLAY] LINK-USD — Fetching 365 bars...
+  [REPLAY] LINK-USD — SKIPPED: NO_DATA
+
+[10/27] MATIC-USD
+
+  [REPLAY] MATIC-USD — Fetching 365 bars...
+  [REPLAY] MATIC-USD — SKIPPED: NO_DATA
+
+[11/27] LTC-USD
+
+  [REPLAY] LTC-USD — Fetching 365 bars...
+  [REPLAY] LTC-USD — SKIPPED: NO_DATA
+
+[12/27] DOT-USD
+
+  [REPLAY] DOT-USD — Fetching 365 bars...
+  [REPLAY] DOT-USD — SKIPPED: NO_DATA
+
+[13/27] UNI-USD
+
+  [REPLAY] UNI-USD — Fetching 365 bars...
+  [REPLAY] UNI-USD — SKIPPED: NO_DATA
+
+[14/27] ATOM-USD
+
+  [REPLAY] ATOM-USD — Fetching 365 bars...
+  [REPLAY] ATOM-USD — SKIPPED: NO_DATA
+
+[15/27] NEAR-USD
+
+  [REPLAY] NEAR-USD — Fetching 365 bars...
+  [REPLAY] NEAR-USD — SKIPPED: NO_DATA
+
+[16/27] APT-USD
+
+  [REPLAY] APT-USD — Fetching 365 bars...
+  [REPLAY] APT-USD — SKIPPED: NO_DATA
+
+[17/27] ARB-USD
+
+  [REPLAY] ARB-USD — Fetching 365 bars...
+  [REPLAY] ARB-USD — SKIPPED: NO_DATA
+
+[18/27] OP-USD
+
+  [REPLAY] OP-USD — Fetching 365 bars...
+  [REPLAY] OP-USD — SKIPPED: NO_DATA
+
+[19/27] SUI-USD
+
+  [REPLAY] SUI-USD — Fetching 365 bars...
+  [REPLAY] SUI-USD — SKIPPED: NO_DATA
+
+[20/27] PEPE-USD
+
+  [REPLAY] PEPE-USD — Fetching 365 bars...
+  [REPLAY] PEPE-USD — SKIPPED: NO_DATA
+
+[21/27] AAPL
+
+  [REPLAY] AAPL — Fetching 365 bars...
+  [REPLAY] AAPL — SKIPPED: NO_DATA
+
+[22/27] TSLA
+
+  [REPLAY] TSLA — Fetching 365 bars...
+  [REPLAY] TSLA — SKIPPED: NO_DATA
+
+[23/27] NVDA
+
+  [REPLAY] NVDA — Fetching 365 bars...
+  [REPLAY] NVDA — SKIPPED: NO_DATA
+
+[24/27] MSFT
+
+  [REPLAY] MSFT — Fetching 365 bars...
+  [REPLAY] MSFT — SKIPPED: NO_DATA
+
+[25/27] AMZN
+
+  [REPLAY] AMZN — Fetching 365 bars...
+  [REPLAY] AMZN — SKIPPED: NO_DATA
+
+[26/27] GOOGL
+
+  [REPLAY] GOOGL — Fetching 365 bars...
+  [REPLAY] GOOGL — SKIPPED: NO_DATA
+
+[27/27] META
+
+  [REPLAY] META — Fetching 365 bars...
+  [REPLAY] META — SKIPPED: NO_DATA
+
+════════════════════════════════════════════════════════════════════
+  REPLAY COMPLETE
+  Total signals logged   : 0
+  Total signals resolved : 0
+  Assets skipped         : 27
+════════════════════════════════════════════════════════════════════
+
+[CALIBRATION] Rebuilding calibration curve from replay data...
+
+✅ Historical replay complete in 0.9 minutes.

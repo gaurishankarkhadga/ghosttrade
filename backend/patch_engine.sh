@@ -1,0 +1,2 @@
+#!/bin/bash
+sed -i 's/expectedValue: signal?.expectedValue,/expectedValue: signal?.expectedValue,\n              candles: isSimpleMode && ohlcvData ? ohlcvData.slice(-50) : undefined,\n              winRate: signal?.scoreBreakdown?.winRate || 50,\n              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: ohlcvData ? ohlcvData.slice(-50).map(c=>c.close) : [] },\n              signalFactors: signal?.scoreBreakdown,/g' ../backend/geminiEngine.js
