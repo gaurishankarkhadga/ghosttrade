@@ -10,6 +10,15 @@ const useGhostStore = create(
       role: 'trader',
       promptsUsed: 0,
       isSimpleMode: false,
+      learningStats: { quizCorrect: 0, quizTotal: 0, conceptsMastered: [], sessionsCompleted: 0 },
+      updateLearningStats: (correct, concept) => set((state) => ({
+        learningStats: {
+          ...state.learningStats,
+          quizCorrect: state.learningStats.quizCorrect + (correct ? 1 : 0),
+          quizTotal: state.learningStats.quizTotal + 1,
+          conceptsMastered: concept ? [...new Set([...state.learningStats.conceptsMastered, concept])] : state.learningStats.conceptsMastered
+        }
+      })),
       wsStatus: 'DISCONNECTED',
       
       syncSubscription: async (planId) => {

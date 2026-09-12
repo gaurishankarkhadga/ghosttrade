@@ -29,12 +29,20 @@ const ProtectedLayout = ({ children }) => {
     return <Navigate to="/pricing" replace />;
   }
 
+  const isAuditPage = location.pathname === '/audit';
+
   return (
     <div className="app-container">
       <TerminalNavbar
         isConnected={isConnected}
         onLockTerminal={() => logout()}
       />
+      <div className={isAuditPage ? "hide-navbar-mobile" : ""}>
+        <TerminalNavbar
+          isConnected={isConnected}
+          onLockTerminal={() => logout()}
+        />
+      </div>
       
       <main className="main-workspace">
         {children}

@@ -21,7 +21,7 @@ export default function TerminalNavbar({ isConnected, onLockTerminal }) {
   
   const navigate = useNavigate();
   const location = useLocation();
-  const isAuditPage = location.pathname === '/audit';
+  const isAuditPage = location.pathname.startsWith('/audit');
 
   const modeInfo = MODE_LABELS[executionMode] || MODE_LABELS['PAPER'];
   const isLive = executionMode !== 'PAPER';

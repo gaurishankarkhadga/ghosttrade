@@ -30,3 +30,10 @@
     height: 100dvh;
   }
 }
+
+/* Hide navbar only on mobile for the audit page */
+@media (max-width: 768px) {
+  .hide-navbar-mobile {
+    display: none !important;
+  }
+}

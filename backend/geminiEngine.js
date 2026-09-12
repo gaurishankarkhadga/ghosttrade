@@ -31,6 +31,8 @@ import { generateTradeLesson } from './educationalMentorEngine.js';
 import { getWatchlistForRegions, listAvailableRegions } from './globalWatchlists.js';
 import { generateSignal } from './signalGenerator.js';
 import { runBulkScanPhase4 } from './scannerEngine.js';
+import { preTradeGate } from './ghostMindEngine.js';
+import { calculateOrderFlowImbalance } from './orderFlowEngine.js';
 import { getGlobalAssetAnalysis, getAllCachedAssets, formatCachedAnalysisAsChat, getCacheInfo } from './globalAnalysisCache.js';
 import { handleConversation } from './conversationEngine.js';
 import { classifyIntentWithGroq } from './intentClassifier.js';
@@ -700,6 +702,16 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               ofiSource,
               livePrice: trueLivePrice 
           });
+
+          // GhostMind v2: Pre-Trade Gate
+          const gateResult = await preTradeGate(signal, ticker);
+          if (gateResult.blocked) {
+            signal.action = 'SHIELD_MODE';
+            signal.reason = gateResult.reason;
+            if (gateResult.additionalReasons && gateResult.additionalReasons.length > 0) {
+               signal.reasons = [...(signal.reasons || []), ...gateResult.additionalReasons];
+            }
+          }
       }
       console.log(`[SIGNAL GEN] ${ticker}: action=${signal.action} direction=${signal.direction} score=${signal.score}`);
     }
@@ -816,6 +828,12 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
             signalBlocked: true,
             shieldReason: blockedReason || 'Capital protected: negative expectancy',
             expectedValue: signal?.expectedValue,
+              candles: isSimpleMode && ohlcvData ? ohlcvData.slice(-50) : undefined,
+              candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
+              winRate: signal?.scoreBreakdown?.winRate || 50,
+              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: ohlcvData ? ohlcvData.slice(-50).map(c=>c.close) : [] },
+              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+              signalFactors: signal?.scoreBreakdown,
             riskRewardRatio: 2.0
           }
         }));
@@ -865,6 +883,12 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               signalBlocked: false,
               shieldReason: null,
               expectedValue: signal?.expectedValue,
+              candles: isSimpleMode && ohlcvData ? ohlcvData.slice(-50) : undefined,
+              candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
+              winRate: signal?.scoreBreakdown?.winRate || 50,
+              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: ohlcvData ? ohlcvData.slice(-50).map(c=>c.close) : [] },
+              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+              signalFactors: signal?.scoreBreakdown,
               riskRewardRatio: 2.0
             }
           }));

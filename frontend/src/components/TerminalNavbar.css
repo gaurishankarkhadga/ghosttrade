@@ -321,7 +321,7 @@
     padding: 0.5rem 1rem;
   }
 
-  .audit-mobile-hidden {
+  header.terminal-top-navbar.audit-mobile-hidden {
     display: none !important;
   }
 }

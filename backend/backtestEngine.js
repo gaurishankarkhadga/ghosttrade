@@ -1,5 +1,6 @@
 import { fetchOHLCV } from './dataFetcher.js';
 import { generateSignal } from './signalGenerator.js';
+import { preTradeGate } from './ghostMindEngine.js';
 
 export async function runBacktest(asset, days = 730) {
   console.log(`[BACKTEST ENGINE] Starting historical simulation for ${asset} over past ${days} days.`);
@@ -27,6 +28,13 @@ export async function runBacktest(asset, days = 730) {
     
     // Generate signal on historical slice
     const signal = await generateSignal(asset, history, { useCache: false });
+    
+    // GhostMind v2: Pre-Trade Gate
+    const gateResult = await preTradeGate(signal, asset);
+    if (gateResult.blocked) {
+      signal.action = 'SHIELD_MODE';
+      signal.reason = gateResult.reason;
+    }
 
     if (signal.action === 'TRADE' || signal.action === 'BUY' || signal.action === 'LONG') {
       tradesTaken++;

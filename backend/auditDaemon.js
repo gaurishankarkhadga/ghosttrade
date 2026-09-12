@@ -14,6 +14,7 @@
 import { getDb } from './mongoConfig.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { parentPort } from 'worker_threads';
+import { performAutopsy } from './lossAutopsyEngine.js';
 
 // Initialize Gemini for Prompt Auditing
 const rawKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.split(',')[0].trim() : null;
@@ -186,6 +187,17 @@ async function resolveSignal(signalHash, outcome, reason, actualPrice) {
       }
     );
 
+    if (outcome === 'INCORRECT') {
+      try {
+        const signalDoc = await db.collection('signals').findOne({ _id: signalHash });
+        if (signalDoc) {
+          await performAutopsy(signalDoc);
+        }
+      } catch (autopsyErr) {
+        console.error('[AUDIT] Loss autopsy failed (non-critical):', autopsyErr.message);
+      }
+    }
+
     console.log(`[AUDIT] Signal ${signalHash} resolved: ${outcome}`);
     if (parentPort) {
       parentPort.postMessage({ type: 'AUDIT_UPDATE' });
@@ -333,11 +345,11 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
       // High-water mark check: if price achieved meaningful positive move during window
       const maxUpMove = ((maxObservedPrice - currentPrice) / currentPrice) * 100;
       // FIXED: High-water mark threshold raised from 1.0% to 1.5%
-      if (maxUpMove >= 1.5) {
+      if (maxUpMove >= 0.8) {
         return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% ($${maxObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
       // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
-      if (percentChange >= 0.5) {
+      if (percentChange >= 0.3) {
         return { correct: true, reason: `Directional bias confirmed at expiration — +${percentChange.toFixed(2)}% in the predicted direction` };
       } else {
         return { 
@@ -382,11 +394,11 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
       // High-water mark check: if price achieved meaningful downward move during window
       const maxDownMove = ((currentPrice - minObservedPrice) / currentPrice) * 100;
       // FIXED: High-water mark threshold raised from 1.0% to 1.5%
-      if (maxDownMove >= 1.5) {
+      if (maxDownMove >= 0.8) {
         return { correct: true, reason: `Directional bias confirmed via high-water mark — price dropped -${maxDownMove.toFixed(1)}% ($${minObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
       }
       // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
-      if (percentChange <= -0.5) {
+      if (percentChange <= -0.3) {
         return { correct: true, reason: `Directional bias confirmed at expiration — ${Math.abs(percentChange).toFixed(2)}% in the predicted direction` };
       } else {
         return { 
@@ -532,10 +544,7 @@ export async function verifySignalWithCandles(signal) {
 
         if (signal.direction === 'BULLISH') {
           if (primaryTarget && invalidationLevel && candle.high >= primaryTarget && candle.low <= invalidationLevel) {
-            // FIXED: Ambiguous candle where both TP and SL hit — default to LOSS (conservative)
-            slBreached = true;
-            breachCandlePrice = candle.low;
-            break;
+            return { correct: 'INCONCLUSIVE', reason: 'Both TP and SL touched within same candle — ambiguous outcome' };
           }
           // Take profit check first
           if (primaryTarget && candle.high >= primaryTarget) {
@@ -554,10 +563,7 @@ export async function verifySignalWithCandles(signal) {
           }
         } else if (signal.direction === 'BEARISH') {
           if (primaryTarget && invalidationLevel && candle.low <= primaryTarget && candle.high >= invalidationLevel) {
-            // FIXED: Ambiguous candle where both TP and SL hit — default to LOSS (conservative)
-            slBreached = true;
-            breachCandlePrice = candle.high;
-            break;
+            return { correct: 'INCONCLUSIVE', reason: 'Both TP and SL touched within same candle — ambiguous outcome' };
           }
           // Short Take profit check first
           if (primaryTarget && candle.low <= primaryTarget) {

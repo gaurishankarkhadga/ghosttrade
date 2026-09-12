@@ -1,5 +1,6 @@
 import { getDb, closeDb } from './mongoConfig.js';
-import { fetchLivePrice } from './dataFetcher.js';
+import { fetchLivePrice, fetchOHLCV } from './dataFetcher.js';
+import { fetchLivePrice, fetchOHLCV, fetchMultiTimeframeOHLCV } from './dataFetcher.js';
 import { ObjectId } from 'mongodb';
 import { executionManager } from './executionEngine.js';
 
@@ -31,19 +32,73 @@ async function checkOpenTrades() {
       }
 
       // ═══════════════════════════════════════════════════════
-      // DYNAMIC BREAKEVEN RISK-NEUTRALIZER (+1.0R Trail)
-      // If price reaches TP1 (+1.0R), lock Stop-Loss to Entry ($0 Risk)
-      // DYNAMIC BREAKEVEN & 50% PARTIAL PROFIT SCALE-OUT (+1.0R Trail)
-      // When price reaches TP1 (+1.0R):
-      // 1. Immediately bank 50% partial profit (+0.5R banked into balance)
+      // FEATURE 1: Early Warning Cut at -0.3R
+      // ═══════════════════════════════════════════════════════
+      if (!trade.thesisChecked && !trade.breakevenLocked && trade.entryPrice && trade.stopLoss) {
+        const initialSl = trade.initialStopLoss || trade.stopLoss;
+        const riskDist = Math.abs(trade.entryPrice - initialSl);
+        const warningDist = riskDist * 0.3;
+        
+        const warningPrice = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? trade.entryPrice - warningDist
+          : trade.entryPrice + warningDist;
+          
+        const hitWarning = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? currentPrice <= warningPrice
+          : currentPrice >= warningPrice;
+
+        if (hitWarning && riskDist > 0) {
+          try {
+            const candles = await fetchOHLCV(assetToTrack, '1h', 1);
+            if (candles && candles.length > 0) {
+            const multiData = await fetchMultiTimeframeOHLCV(assetToTrack, 5);
+            if (multiData && multiData.timeframes && multiData.timeframes['1h'] && multiData.timeframes['1h'].length > 0) {
+              const candles = multiData.timeframes['1h'];
+              const latestCandle = candles[candles.length - 1];
+              const bodySize = Math.abs(latestCandle.close - latestCandle.open);
+              const bodyPct = (bodySize / latestCandle.close) * 100;
+              
+              const isLong = (trade.side === 'LONG' || trade.side === 'BUY');
+              const oppositeClose = isLong 
+                ? latestCandle.close < latestCandle.open 
+                : latestCandle.close > latestCandle.open;
+              
+              if (oppositeClose && bodyPct > 1) {
+                console.log(`[MONITOR] ⚠️ Thesis invalid for ${trade.asset}, cutting early at -0.3R.`);
+                trade.stopLoss = currentPrice; // Force exit immediately
+              }
+            }
+          } catch (e) {
+            console.warn(`[MONITOR] Thesis check failed for ${trade.asset}: ${e.message}`);
+          }
+          trade.thesisChecked = true;
+          try {
+            await db.collection('paper_trades').updateOne(
+              { _id: trade._id },
+              { $set: { thesisChecked: true, stopLoss: trade.stopLoss } }
+            );
+          } catch (err) {
+            console.warn(`[MONITOR] Failed to update thesisChecked for ${trade.asset}:`, err.message);
+          }
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════
+      // v3.0 FAST BREAKEVEN LOCK (+0.5R Trail)
+      // When price reaches just +0.5R (half the risk distance):
+      // 1. Immediately bank 50% partial profit (+0.25R locked in)
       // 2. Lock Stop-Loss on the remaining 50% to Entry ($0 Risk)
+      // Result: Trade becomes risk-free VERY quickly.
+      // Even if remaining 50% stops at breakeven, net PnL = +0.25R (WIN)
       // ═══════════════════════════════════════════════════════
       if (!trade.breakevenLocked && trade.entryPrice && trade.stopLoss) {
         const initialSl = trade.initialStopLoss || trade.stopLoss;
         const riskDist = Math.abs(trade.entryPrice - initialSl);
+        // v3.0: Trigger at +0.5R instead of +1.0R for faster risk elimination
+        const halfRiskDist = riskDist * 0.5;
         const tp1Price = (trade.side === 'LONG' || trade.side === 'BUY')
-          ? trade.entryPrice + riskDist
-          : trade.entryPrice - riskDist;
+          ? trade.entryPrice + halfRiskDist
+          : trade.entryPrice - halfRiskDist;
 
         const reachedTP1 = (trade.side === 'LONG' || trade.side === 'BUY')
           ? currentPrice >= tp1Price
@@ -54,7 +109,7 @@ async function checkOpenTrades() {
           trade.stopLoss = trade.entryPrice;
           trade.breakevenLocked = true;
           trade.partialTaken = true;
-          trade.partialPnlPct = (riskDist / trade.entryPrice) * 100; // +1.0R gain on 50% size
+          trade.partialPnlPct = (halfRiskDist / trade.entryPrice) * 100; // +0.5R gain on 50% size
 
           // If Live Broker Trade, execute 50% market exit order
           if (trade.mode && trade.mode.startsWith('LIVE') && trade.broker && trade.userId && trade.quantity > 0) {
@@ -113,14 +168,178 @@ async function checkOpenTrades() {
         }
       }
 
+      // ═══════════════════════════════════════════════════════
+      // FEATURE 2: Trailing Stop After Breakeven Lock
+      // ═══════════════════════════════════════════════════════
+      if (trade.breakevenLocked && trade.entryPrice && trade.stopLoss) {
+        const initialSl = trade.initialStopLoss || trade.stopLoss;
+        const riskDist = Math.abs(trade.entryPrice - initialSl);
+        const trailDist = riskDist * 0.5;
+        
+        const isLong = (trade.side === 'LONG' || trade.side === 'BUY');
+        
+        let hwm = trade.highWaterMark || trade.entryPrice;
+        let lwm = trade.lowWaterMark || trade.entryPrice;
+        let slUpdated = false;
+        let hwmChanged = false;
+
+        if (isLong) {
+          if (currentPrice > hwm) {
+            hwm = currentPrice;
+            trade.highWaterMark = hwm;
+            hwmChanged = true;
+            const newSl = hwm - trailDist;
+            if (newSl > trade.stopLoss) {
+              trade.stopLoss = newSl;
+              slUpdated = true;
+            }
+          }
+        } else {
+          if (currentPrice < lwm) {
+            lwm = currentPrice;
+            trade.lowWaterMark = lwm;
+            hwmChanged = true;
+            const newSl = lwm + trailDist;
+            if (newSl < trade.stopLoss) {
+              trade.stopLoss = newSl;
+              slUpdated = true;
+            }
+          }
+        }
+
+        if (hwmChanged) {
+           try {
+             const updateDoc = { stopLoss: trade.stopLoss };
+             if (isLong) updateDoc.highWaterMark = hwm;
+             else updateDoc.lowWaterMark = lwm;
+             
+             await db.collection('paper_trades').updateOne(
+               { _id: trade._id },
+               { $set: updateDoc }
+             );
+             if (slUpdated) {
+               console.log(`[MONITOR] 📈 TRAILING STOP MOVED for ${trade.asset}: New SL at $${trade.stopLoss.toFixed(4)}`);
+             }
+           } catch (err) {
+             console.warn(`[MONITOR] Failed to update trailing stop for ${trade.asset}:`, err.message);
+           }
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════
+      // FEATURE 3: Multi-Tier Profit Taking (Tier 2 at +1.0R)
+      // ═══════════════════════════════════════════════════════
+      if (trade.breakevenLocked && !trade.tier2Taken && trade.entryPrice && trade.stopLoss) {
+        const initialSl = trade.initialStopLoss || trade.stopLoss;
+        const riskDist = Math.abs(trade.entryPrice - initialSl);
+        const tp2Price = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? trade.entryPrice + riskDist
+          : trade.entryPrice - riskDist;
+
+        const reachedTP2 = (trade.side === 'LONG' || trade.side === 'BUY')
+          ? currentPrice >= tp2Price
+          : currentPrice <= tp2Price;
+
+        if (reachedTP2 && riskDist > 0) {
+          trade.tier2Taken = true;
+          const tier2PnlPct = (riskDist / trade.entryPrice) * 100;
+
+          if (trade.mode && trade.mode.startsWith('LIVE') && trade.broker && trade.userId && trade.quantity > 0) {
+            try {
+              const { getBrokerKeys } = await import('./brokerKeyManager.js');
+              const { createAdapter } = await import('./brokerAdapter.js');
+              const credentials = await getBrokerKeys(trade.userId, trade.broker);
+              if (credentials) {
+                const adapter = createAdapter(trade.broker, credentials);
+                const executedSide = (trade.contractSide || trade.side || 'BUY').toUpperCase();
+                const partialExitSide = executedSide === 'BUY' || executedSide === 'LONG' ? 'SELL' : 'BUY';
+                const partialQty = Number((trade.quantity * 0.5).toFixed(4)); // 50% of REMAINING quantity
+
+                console.log(`[MONITOR] 💰 EXECUTING TIER 2 PROFIT ORDER: ${partialExitSide} ${partialQty} of ${trade.asset} on ${trade.broker}...`);
+                await adapter.placeOrder({
+                  symbol: trade.asset,
+                  asset: trade.asset,
+                  symbolToken: trade.symbolToken || null,
+                  side: partialExitSide,
+                  type: 'MARKET',
+                  orderType: 'MARKET',
+                  quantity: partialQty,
+                  price: currentPrice
+                });
+              }
+            } catch (pErr) {
+              console.warn(`[MONITOR] Tier 2 exit broker warning: ${pErr.message}`);
+            }
+          }
+
+          try {
+            const remainingQty = Number((trade.quantity - (trade.quantity * 0.5)).toFixed(8));
+            await db.collection('paper_trades').updateOne(
+              { _id: trade._id },
+              {
+                $set: {
+                  tier2Taken: true,
+                  tier2PnlPct: tier2PnlPct,
+                  tier2Price: currentPrice,
+                  tier2ClosedAt: new Date(),
+                  quantity: remainingQty
+                }
+              }
+            );
+            trade.quantity = remainingQty;
+            console.log(`[MONITOR] 🛡️ TIER 2 PROFIT BANKED: ${trade.asset} hit +1.0R ($${tp2Price.toFixed(2)}). Banked +${tier2PnlPct.toFixed(2)}% on another 50% size.`);
+          } catch (err) {
+            console.warn(`[MONITOR] Failed to persist tier 2 lock for ${trade.asset}:`, err.message);
+          }
+        }
+      }
+
       let hitSL = false;
       let hitTP = false;
       let reason = '';
+
+      // ═══════════════════════════════════════════════════════
+      // GHOSTMIND: HUMAN-LIKE CLOSE-BASED STOP LOSS
+      // Doesn't panic on a 1-second wick. Waits for a candle close
+      // unless it's a catastrophic flash crash (1.5x risk distance).
+      // ═══════════════════════════════════════════════════════
+      let isCatastrophic = false;
+      let candleClosedBeyond = false;
 
       if (trade.side === 'LONG' || trade.side === 'BUY') {
         if (trade.stopLoss && currentPrice <= trade.stopLoss) {
           hitSL = true;
           reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS';
+          const riskDist = Math.abs(trade.entryPrice - (trade.initialStopLoss || trade.stopLoss));
+          const catastrophicSl = trade.stopLoss - (riskDist * 0.5); // 1.5R loss threshold
+          
+          if (currentPrice <= catastrophicSl) {
+            isCatastrophic = true; // Bail immediately, freefall
+          } else if (!trade.breakevenLocked) {
+             // It's below SL, but is the 15m candle closed below it?
+             try {
+                const multiData = await fetchMultiTimeframeOHLCV(trade.asset, 5);
+                if (multiData && multiData.timeframes && multiData.timeframes['15m'] && multiData.timeframes['15m'].length > 1) {
+                   const bars = multiData.timeframes['15m'];
+                   const lastClosedCandle = bars[bars.length - 2];
+                   if (lastClosedCandle.close <= trade.stopLoss) {
+                       candleClosedBeyond = true;
+                   }
+                }
+             } catch (e) {
+                // If API fails, default to safety (exit)
+                candleClosedBeyond = true; 
+             }
+          }
+
+          // We exit if:
+          // 1. It's a catastrophic drop
+          // 2. The 15m candle confirmed the break
+          // 3. We are already at breakeven (don't risk profits on wicks)
+          if (isCatastrophic || candleClosedBeyond || trade.breakevenLocked) {
+            hitSL = true;
+            reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : (isCatastrophic ? 'CATASTROPHIC_STOP' : 'CLOSE_BASED_STOP');
+          }
         } else if (trade.takeProfit && currentPrice >= trade.takeProfit) {
           hitTP = true;
           reason = 'TAKE_PROFIT';
@@ -129,6 +348,30 @@ async function checkOpenTrades() {
         if (trade.stopLoss && currentPrice >= trade.stopLoss) {
           hitSL = true;
           reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : 'STOP_LOSS';
+          const riskDist = Math.abs(trade.entryPrice - (trade.initialStopLoss || trade.stopLoss));
+          const catastrophicSl = trade.stopLoss + (riskDist * 0.5); 
+          
+          if (currentPrice >= catastrophicSl) {
+            isCatastrophic = true;
+          } else if (!trade.breakevenLocked) {
+             try {
+                const multiData = await fetchMultiTimeframeOHLCV(trade.asset, 5);
+                if (multiData && multiData.timeframes && multiData.timeframes['15m'] && multiData.timeframes['15m'].length > 1) {
+                   const bars = multiData.timeframes['15m'];
+                   const lastClosedCandle = bars[bars.length - 2];
+                   if (lastClosedCandle.close >= trade.stopLoss) {
+                       candleClosedBeyond = true;
+                   }
+                }
+             } catch (e) {
+                candleClosedBeyond = true; 
+             }
+          }
+
+          if (isCatastrophic || candleClosedBeyond || trade.breakevenLocked) {
+            hitSL = true;
+            reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : (isCatastrophic ? 'CATASTROPHIC_STOP' : 'CLOSE_BASED_STOP');
+          }
         } else if (trade.takeProfit && currentPrice <= trade.takeProfit) {
           hitTP = true;
           reason = 'TAKE_PROFIT';

@@ -18,7 +18,10 @@ import { detectPatterns } from './patternEngine.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST } from './sharedConfig.js';
 import { computeStopLossTakeProfit } from './slTpCalculator.js';
 import { getDb } from './mongoConfig.js';
+
 import { generateSignal } from './signalGenerator.js';
+import { preTradeGate } from './ghostMindEngine.js';
+import { updateGlobalCache } from './globalAnalysisCache.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -126,10 +129,11 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
             logic_version: CURRENT_LOGIC_VERSION
         });
 
-        if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA') {
+        if (stats && stats.confidence_flag !== 'INSUFFICIENT_DATA' && stats.win_rate > 0) {
+            // v3.0: Discrete Kelly using empirical win rate from backtest DB
             dbKellyResult = computeKelly({ 
-               mean_return: stats.mean_return, 
-               variance: stats.variance,
+               winRate: stats.win_rate, 
+               riskRewardRatio: 2.0,
                regime: regime15m.regime
             });
             if (dbKellyResult.action !== 'SHIELD_MODE') {
@@ -161,12 +165,42 @@ async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, aler
     let tradeCard = null;
     try {
       const ofiSource = (flowData && flowData.available) ? 'BINANCE_AGGTRADE' : 'CANDLE_APPROXIMATION';
+      const tf4h = dataResult.timeframes['4h'];
+      const depth = depthData;
+      let btc1d = tf1d;
+      if (ticker.toUpperCase() !== 'BTC-USDT' && ticker.toUpperCase() !== 'BTCUSDT') {
+        try {
+          const btcData = await fetchMultiTimeframeOHLCV('BTC-USDT', 100);
+          if (btcData && btcData.timeframes) {
+            btc1d = btcData.timeframes['1d'] || tf1d;
+          }
+        } catch (e) {
+          btc1d = tf1d;
+        }
+      }
+
       signalData = await generateSignal(ticker, tf1d, {
+        candles1h: tf1h,
+        candles4h: tf4h,
         candles15m: tf15m,
         candles1h: tf1h,
+        macroCandles: btc1d,
+        depthData: depth,
         ofiSource,
         livePrice: price
       });
+
+      // GhostMind v2: Pre-Trade Gate
+      // Pass the generated signal through the intelligence layer before logging/executing
+      const gateResult = await preTradeGate(signalData, ticker);
+      if (gateResult.blocked) {
+        signalData.action = 'SHIELD_MODE';
+        signalData.reason = gateResult.reason;
+        // Merge any additional reasons if present
+        if (gateResult.additionalReasons && gateResult.additionalReasons.length > 0) {
+           signalData.reasons = [...(signalData.reasons || []), ...gateResult.additionalReasons];
+        }
+      }
 
       // Build trade card for both TRADE and SHIELD_MODE with complete telemetry
       if (signalData) {

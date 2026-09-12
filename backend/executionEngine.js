@@ -206,9 +206,10 @@ class UnifiedExecutionEngine {
         }
 
         // 2. Position Sizing — Use signal-level Kelly if provided, otherwise compute from regime
+        // v3.0: Discrete Kelly uses winRate and riskRewardRatio instead of mean_return/variance
         const kellyResult = kellyOverride || computeKelly({
-            mean_return: 0.025,
-            variance: 0.0004,
+            winRate: 0.50,           // Conservative default: 50% implied win rate
+            riskRewardRatio: 2.0,    // Standard 1:2 RRR
             regime
         });
 

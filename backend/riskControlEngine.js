@@ -23,6 +23,14 @@ const RISK_CONFIG = {
   btc_flash_crash_threshold_pct: -2.5 // Block altcoin longs if BTC drops >2.5% in 1h
 };
 
+export const STREAK_RESPONSES = {
+  2: { action: 'REDUCE_SIZE', sizeMultiplier: 0.5, minScore: 75, cooldownMs: 0 },
+  3: { action: 'COOLDOWN_2H', sizeMultiplier: 0.25, minScore: 80, cooldownMs: 2 * 60 * 60 * 1000 },
+  4: { action: 'COOLDOWN_8H', sizeMultiplier: 0, minScore: 999, cooldownMs: 8 * 60 * 60 * 1000 },
+  5: { action: 'COOLDOWN_24H', sizeMultiplier: 0, minScore: 999, cooldownMs: 24 * 60 * 60 * 1000 },
+};
+
+
 /**
  * Calculates Pearson correlation coefficient between two equal-length arrays of returns.
  */
@@ -180,30 +188,68 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
       };
     }
 
-    // CHECK 2b — Consecutive Loss Streak Circuit Breaker (Anti-Tilt & Anti-Chop Freeze)
+    // CHECK 2b — Graduated Streak Response System & Anti-Martingale Boost
     const recentClosedTrades = await tradesColl.find({
       status: { $in: ['CLOSED_TP', 'CLOSED_SL', 'WIN', 'LOSS'] },
       userId
-    }).sort({ closedAt: -1 }).limit(RISK_CONFIG.max_consecutive_losses).toArray();
+    }).sort({ closedAt: -1 }).limit(10).toArray();
 
-    if (recentClosedTrades.length >= RISK_CONFIG.max_consecutive_losses) {
-      const allLosses = recentClosedTrades.every(t => t.status === 'CLOSED_SL' || t.status === 'LOSS' || (t.pnl !== undefined && t.pnl < 0));
-      if (allLosses) {
-        const lastClosedTime = new Date(recentClosedTrades[0].closedAt).getTime();
-        const cooldownMs = RISK_CONFIG.consecutive_loss_cooldown_hours * 3600 * 1000;
-        const timeSinceLastLoss = Date.now() - lastClosedTime;
-        
-        if (timeSinceLastLoss < cooldownMs) {
-          const remainingMinutes = Math.ceil((cooldownMs - timeSinceLastLoss) / 60000);
-          console.warn(`[RISK CONTROL] 🚨 CONSECUTIVE LOSS CIRCUIT BREAKER: ${recentClosedTrades.length} consecutive losses. Cooldown active for ${remainingMinutes}m.`);
-          return {
-            allowed: false,
-            reason: 'CONSECUTIVE_LOSS_CIRCUIT_BREAKER',
-            detail: `${recentClosedTrades.length} consecutive losses detected. ${RISK_CONFIG.consecutive_loss_cooldown_hours}-hour capital preservation cooldown active (${remainingMinutes}m remaining) to protect against chop drawdown.`,
-            consecutiveLosses: recentClosedTrades.length,
-            remainingMinutes
-          };
+    let consecutiveLosses = 0;
+    let consecutiveWins = 0;
+    let streakMultiplier = 1.0;
+    let streakMinScore = 0;
+
+    if (recentClosedTrades.length > 0) {
+      const isLoss = (t) => t.status === 'CLOSED_SL' || t.status === 'LOSS' || (t.pnl !== undefined && t.pnl < 0);
+      const isWin = (t) => t.status === 'CLOSED_TP' || t.status === 'WIN' || (t.pnl !== undefined && t.pnl > 0);
+
+      const firstIsLoss = isLoss(recentClosedTrades[0]);
+      const firstIsWin = isWin(recentClosedTrades[0]);
+
+      if (firstIsLoss) {
+        for (const t of recentClosedTrades) {
+          if (isLoss(t)) consecutiveLosses++;
+          else break;
         }
+      } else if (firstIsWin) {
+        for (const t of recentClosedTrades) {
+          if (isWin(t)) consecutiveWins++;
+          else break;
+        }
+      }
+
+      // Feature 1: Graduated Streak Response
+      if (consecutiveLosses >= 2) {
+        const streakLevel = Math.min(consecutiveLosses, 5);
+        const response = STREAK_RESPONSES[streakLevel];
+        
+        if (response) {
+          streakMultiplier = response.sizeMultiplier;
+          streakMinScore = response.minScore;
+          
+          if (response.cooldownMs > 0) {
+            const lastClosedTime = new Date(recentClosedTrades[0].closedAt).getTime();
+            const timeSinceLastLoss = Date.now() - lastClosedTime;
+            
+            if (timeSinceLastLoss < response.cooldownMs) {
+              const remainingMinutes = Math.ceil((response.cooldownMs - timeSinceLastLoss) / 60000);
+              console.warn(`[GHOSTMIND] 🚨 GRADUATED STREAK COOLDOWN: ${consecutiveLosses} consecutive losses. Cooldown active for ${remainingMinutes}m.`);
+              return {
+                allowed: false,
+                reason: 'STREAK_COOLDOWN_ACTIVE',
+                detail: `${consecutiveLosses} consecutive losses detected. ${response.action} active (${remainingMinutes}m remaining).`,
+                streakInfo: { consecutiveLosses, consecutiveWins, sizeMultiplier: streakMultiplier, minScoreOverride: streakMinScore }
+              };
+            }
+          }
+        }
+      }
+
+      // Feature 2: Win Streak Anti-Martingale Boost
+      if (consecutiveWins >= 5) {
+        streakMultiplier = 1.5;
+      } else if (consecutiveWins >= 3) {
+        streakMultiplier = 1.25;
       }
     }
 
@@ -298,7 +344,15 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
       }
     }
 
-    return { allowed: true };
+    return { 
+      allowed: true,
+      streakInfo: {
+        consecutiveLosses,
+        consecutiveWins,
+        sizeMultiplier: streakMultiplier,
+        minScoreOverride: streakMinScore
+      }
+    };
   } catch (err) {
     console.error('[RISK CONTROL] Error checking portfolio risk:', err);
     return { allowed: false, reason: 'RISK_CHECK_ERROR', detail: err.message }; // Fail CLOSED — never allow unguarded trades

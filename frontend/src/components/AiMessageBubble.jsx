@@ -1,3 +1,4 @@
+import LearningModeBubble from "./learning/LearningModeBubble";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ShieldAlert, 
@@ -585,34 +586,32 @@ const TradeExecutionCard = ({
       )}
     </div>
   );
+
 };
 
-
-
 export default function AiMessageBubble({ message }) {
-  const isFullWidth = message.uiComponent === 'TRADE_CARD';
+  const { isSimpleMode } = useGhostStore();
+  const isFullWidth = message.uiComponent === 'TRADE_CARD' || message.uiComponent === 'LEARNING_MODE' || isSimpleMode;
   
-  // If the component mounts while the message is actively generating, it is a new message.
-  // We force animation for new messages, but skip it for historical messages loaded on mount.
-  // message.isGenerating is reliably set by the backend store to true when created and false when complete.
   const [isNewMessage] = useState(message.isGenerating === true);
-
-  // Apply butter-smooth text streaming
   const smoothedContent = useStreamSmoother(message.content, !isNewMessage);
-  
-  // The UI is actively streaming if the typewriter is still catching up, OR if the message is still generating.
   const isStreaming = (message.content || '') !== smoothedContent || message.isGenerating;
 
   return (
     <div className={`message-wrapper ai ${isFullWidth ? 'full-width' : ''}`}>
       <div className="message-content">
-        {smoothedContent && (
-          <InstitutionalReport content={smoothedContent} isStreaming={isStreaming} />
-        )}
-        
-        {/* Render Generative UI Component if exists */}
-        {message.uiComponent === 'TRADE_CARD' && message.tradeData && (
-          <TradeExecutionCard {...message.tradeData} isParentStreaming={isStreaming} isNewMessage={isNewMessage} />
+        {isSimpleMode && message.tradeData ? (
+           <LearningModeBubble tradeData={message.tradeData} content={smoothedContent} />
+        ) : (
+          <>
+            {smoothedContent && (
+              <InstitutionalReport content={smoothedContent} isStreaming={isStreaming} />
+            )}
+            
+            {message.uiComponent === 'TRADE_CARD' && message.tradeData && (
+              <TradeExecutionCard {...message.tradeData} isParentStreaming={isStreaming} isNewMessage={isNewMessage} />
+            )}
+          </>
         )}
       </div>
     </div>
