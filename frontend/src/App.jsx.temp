@@ -13,7 +13,6 @@ import OAuthCallback from './components/OAuthCallback';
 import { PricingModal } from './components/PricingModal';
 import GhostAbout from './components/GhostAbout';
 import { WhyGhostTrade } from './components/WhyGhostTrade';
-import { TermsOfServicePage, PrivacyPolicyPage, RiskDisclosurePage, MasterServiceAgreementPage, ApiDocsPage, BrokerIntegrationsPage, StatusDashboardPage, ArchitecturePage } from './components/FooterPages';
 
 // Layout wrapper for authenticated routes to share the Navbar
 const ProtectedLayout = ({ children }) => {
@@ -34,6 +33,10 @@ const ProtectedLayout = ({ children }) => {
 
   return (
     <div className="app-container">
+      <TerminalNavbar
+        isConnected={isConnected}
+        onLockTerminal={() => logout()}
+      />
       <div className={isAuditPage ? "hide-navbar-mobile" : ""}>
         <TerminalNavbar
           isConnected={isConnected}
@@ -80,21 +83,6 @@ export default function App() {
         
         {/* Public Why Us Route */}
         <Route path="/why-us" element={<WhyGhostTrade />} />
-
-        {/* Public Footer Pages */}
-        <Route path="/architecture/oracle" element={<ArchitecturePage title="Oracle Engine" type="oracle" />} />
-        <Route path="/architecture/router" element={<ArchitecturePage title="Direct Market Router" type="router" />} />
-        <Route path="/architecture/risk" element={<ArchitecturePage title="Risk Sentinel" type="risk" />} />
-        <Route path="/architecture/ledger" element={<ArchitecturePage title="Verified Ledger" type="ledger" />} />
-        
-        <Route path="/terms" element={<TermsOfServicePage />} />
-        <Route path="/privacy" element={<PrivacyPolicyPage />} />
-        <Route path="/risk" element={<RiskDisclosurePage />} />
-        <Route path="/msa" element={<MasterServiceAgreementPage />} />
-        
-        <Route path="/api-docs" element={<ApiDocsPage />} />
-        <Route path="/broker-integrations" element={<BrokerIntegrationsPage />} />
-        <Route path="/status" element={<StatusDashboardPage />} />
 
         {/* Protected Terminal Workspace Route */}
         <Route 

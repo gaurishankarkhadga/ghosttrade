@@ -128,7 +128,7 @@ export function WhyGhostTrade() {
             viewport={{ once: true, margin: "-50px" }}
           >
             <motion.h1 variants={itemVariants} className="why-title">
-              <span className="nowrap-mobile">Algorithmic Precision.</span><br />
+              <span className="nowrap-mobile">Algorithmic Precision.</span><br className="mobile-break" />
               <span className="text-highlight">Zero Emotion.</span>
             </motion.h1>
             <motion.p variants={itemVariants} className="why-subtitle">

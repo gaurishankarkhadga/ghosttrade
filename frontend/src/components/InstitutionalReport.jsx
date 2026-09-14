@@ -125,8 +125,8 @@ export default function InstitutionalReport({ content, isStreaming }) {
           <div className="verdict-item highlight">
             <span className="verdict-label">BASE CASE</span>
             <span className={`verdict-value ${dirColorClass}`}>
-              {isShield ? <ShieldAlert size={16} /> : isBullish ? <TrendingUp size={16} /> : isBearish ? <TrendingDown size={16} /> : <Activity size={16} />}
-              {baseCase || (isShield ? 'SHIELD MODE ACTIVE' : 'Analyzing...')}
+              {isShield ? <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : isBullish ? <TrendingUp size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : isBearish ? <TrendingDown size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <Activity size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
+              <span style={{ flex: 1, overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }}>{baseCase || (isShield ? 'SHIELD MODE ACTIVE' : 'Analyzing...')}</span>
             </span>
           </div>
           <div className="verdict-item">
@@ -352,8 +352,8 @@ export default function InstitutionalReport({ content, isStreaming }) {
               const isBlock = item.includes('SHIELD MODE ACTIVATED');
               return (
                 <li key={idx} className={`stream-anim ${isBlock ? 'shield-block-item' : ''}`}>
-                  {isBlock && <ShieldAlert size={14} style={{ marginRight: '6px' }} />}
-                  <span>{item}</span>
+                  {isBlock && <ShieldAlert size={14} style={{ marginRight: '6px', flexShrink: 0, marginTop: '2px' }} />}
+                  <span style={{ flex: 1 }}>{item}</span>
                 </li>
               );
             })}

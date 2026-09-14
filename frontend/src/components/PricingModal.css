@@ -74,6 +74,7 @@
   color: var(--text-primary);
   margin: 0 0 16px 0;
   letter-spacing: -1px;
+  text-transform: uppercase;
 }
 
 .pricing-header p {
@@ -268,6 +269,7 @@
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 12px 0;
+  text-transform: uppercase;
 }
 
 .plan-description {
@@ -376,4 +378,43 @@
   color: var(--text-muted);
   opacity: 0.8;
   padding: 20px 0;
+}
+@media (max-width: 768px) {
+  .pricing-page-wrapper {
+    padding: 100px 16px 60px 16px;
+  }
+  .pricing-header {
+    margin-bottom: 24px;
+  }
+  .pricing-header h2 {
+    font-size: clamp(28px, 8vw, 36px);
+    line-height: 1.25;
+    letter-spacing: -0.5px;
+  }
+  .pricing-header p {
+    font-size: 15px;
+    padding: 0 8px;
+    margin-bottom: 24px;
+  }
+  .pricing-card {
+    padding: 30px 24px;
+  }
+  .plan-title {
+    font-size: 20px;
+  }
+  .plan-description {
+    font-size: 14px;
+    min-height: auto;
+    margin-bottom: 24px;
+  }
+  .plan-price-box {
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+  }
+  .plan-price-box .price-number {
+    font-size: 40px;
+  }
+  .subscribe-btn {
+    padding: 16px;
+  }
 }

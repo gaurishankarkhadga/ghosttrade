@@ -134,6 +134,7 @@
   letter-spacing: -1px;
   width: 100%;
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .mobile-break {
@@ -239,6 +240,7 @@
   color: var(--text-primary);
   margin: 0 0 16px 0;
   letter-spacing: -0.5px;
+  text-transform: uppercase;
 }
 
 .section-header p {
@@ -313,6 +315,7 @@
   font-weight: 700;
   margin: 0 0 16px 0;
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .tab-info p {
@@ -625,7 +628,6 @@
 .equity-curve-container {
   width: 100%;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 30px 20px;
   margin-bottom: 40px;
@@ -744,6 +746,7 @@
   text-align: left;
   cursor: pointer;
   gap: 16px;
+  text-transform: uppercase;
 }
 
 .faq-chevron {
@@ -806,6 +809,7 @@
   font-size: 18px;
   color: var(--text-primary);
   margin: 0 0 12px 0;
+  text-transform: uppercase;
 }
 
 .security-card p {
@@ -847,6 +851,7 @@
   color: var(--text-primary);
   text-align: center;
   width: 100%;
+  text-transform: uppercase;
 }
 
 .final-cta-section p {
@@ -1039,7 +1044,6 @@
     font-size: clamp(28px, 8vw, 36px);
     line-height: 1.25;
     white-space: normal;
-    word-break: keep-all;
     letter-spacing: 1.5px; /* Added slightly more letter spacing for mobile legibility */
   }
 
@@ -1055,6 +1059,8 @@
   .ghost-about-page .hero-cta-group {
     flex-direction: column;
     width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
     gap: 12px;
   }
   

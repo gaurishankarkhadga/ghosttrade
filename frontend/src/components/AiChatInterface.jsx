@@ -114,7 +114,7 @@ export default function AiChatInterface() {
           <div className="chat-empty-state">
 
             <h1 className="chat-hero-title">
-              WHAT WILL YOU <span className="chat-hero-highlight">TRADE</span> TODAY?
+              COMMAND THE <span className="chat-hero-highlight">ENGINE</span>
             </h1>
             <p className="chat-hero-subtitle">
               Ask GhostTrade to analyze any asset or strategy.

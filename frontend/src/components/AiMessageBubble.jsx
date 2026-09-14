@@ -1,7 +1,7 @@
 import LearningModeBubble from "./learning/LearningModeBubble";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  ShieldAlert, 
+  Shield, 
   Zap, 
   GraduationCap, 
   Lightbulb, 
@@ -27,11 +27,11 @@ import './AiMessageBubble.css';
 // as visual bar gauges. All data comes from the backend engine.
 // =====================================================
 const FACTOR_META = {
-  regime:     { label: 'Fractal Regime (Hurst DFA)',   color: '#34d399', icon: <Crosshair size={14}/> },
-  confluence: { label: 'Technical Confluence (RSI+MA)', color: '#60a5fa', icon: <Zap size={14}/> },
-  orderFlow:  { label: 'Order Flow & L2 Imbalance',    color: '#f59e0b', icon: <Activity size={14}/> },
-  volume:     { label: 'Volume Confirmation & CVD',    color: '#a78bfa', icon: <BarChart3 size={14}/> },
-  winRate:    { label: 'Historical Backtest Win Rate', color: '#38bdf8', icon: <TrendingUp size={14}/> },
+  regime:     { label: 'Fractal Regime',   color: '#34d399', icon: <Crosshair size={14}/> },
+  confluence: { label: 'Tech Confluence', color: '#60a5fa', icon: <Zap size={14}/> },
+  orderFlow:  { label: 'Order Flow & L2', color: '#f59e0b', icon: <Activity size={14}/> },
+  volume:     { label: 'Volume & CVD', color: '#a78bfa', icon: <BarChart3 size={14}/> },
+  winRate:    { label: 'Hist. Win Rate', color: '#38bdf8', icon: <TrendingUp size={14}/> },
 };
 
 function useProgressAnimation(trigger) {
@@ -99,7 +99,7 @@ function SignalScoreCard({ scoreBreakdown, totalScore, direction, regime, isAnim
       <div className="score-card-header">
         <span className="score-card-title">
           <Brain size={14} style={{ display: 'inline', marginRight: 6 }} />
-          DETERMINISTIC ENGINE BREAKDOWN
+          ENGINE BREAKDOWN
         </span>
         <span className="score-card-total" style={{ color: grade.color }}>
           {safeTotal}/100 &nbsp;<span className="score-grade">{grade.label}</span>
@@ -347,7 +347,7 @@ const TradeExecutionCard = ({
   );
 
   const shieldReasonText = shieldReason || (
-    "Quantitative engine restricted capital allocation to 0% due to negative expected value or random walk chop. Capital safely preserved."
+    "Capital deployment restricted to 0% (Negative EV / Random Walk). Capital preserved."
   );
 
   const guidedRiskText = `Risking ${actualRiskPct}% to gain ${actualRewardPct}% (Strict 1:${rrrRatio} RRR).\nProtective Stop Loss: $${fStop} | Target: $${fTarget}.`;
@@ -407,7 +407,7 @@ const TradeExecutionCard = ({
             </span>
           </div>
           <p className="trade-success-msg" style={{ color: '#f87171' }}>
-            Risk engine denied execution: {tradeResult.reason || 'Portfolio risk limit exceeded'}. Your capital is protected.
+            EXECUTION BLOCKED: {tradeResult.reason || 'Portfolio risk limit exceeded'}. Capital preserved.
           </p>
         </div>
       );
@@ -446,13 +446,13 @@ const TradeExecutionCard = ({
           <div className="terminal-brand">
             <Activity size={16} className="brand-icon" />
             <span className="terminal-title">
-              {isShield ? 'RISK TERMINAL (SHIELD ACTIVE)' : 'AI ANALYSIS TERMINAL'}
+              {isShield ? 'RISK ENGINE' : 'AI ANALYSIS'}
             </span>
           </div>
           <div className="trade-header-info" style={{ display: 'flex', gap: '12px', fontSize: '11px', fontWeight: 'bold' }}>
              <span className="trade-asset" style={{ color: '#fff' }}>{asset}</span>
              <span className={`trade-kelly ${isShield ? 'shield-text' : ''}`}>
-               {isShield ? <><ShieldAlert size={14} className="inline-icon"/> SHIELD: 0%</> : `KELLY: ${kellySize}%`}
+               {isShield ? `SHIELD: 0%` : `KELLY: ${kellySize}%`}
              </span>
              <span style={{ color: '#9ca3af' }}>|</span>
              <span style={{ color: '#fff' }}>${fEntry}</span>
@@ -464,9 +464,11 @@ const TradeExecutionCard = ({
         <div className="terminal-guided" style={{ paddingBottom: '0' }}>
           <p className="guided-text">
             {isShield ? (
-              <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ShieldAlert size={14} />
-                <strong>SHIELD MODE ACTIVE:</strong> {smoothedShieldReason}
+              <span style={{ color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                <Shield size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span style={{ flex: 1, overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                  <strong>SHIELD ACTIVE:</strong> {smoothedShieldReason}
+                </span>
               </span>
             ) : (
               <span style={{ whiteSpace: 'pre-line' }}>
@@ -482,7 +484,7 @@ const TradeExecutionCard = ({
           <div className="visual-trading-grid ghosttrade-seq-step-anim">
             <div className="visual-gauge-card">
               <div className="gauge-label">
-                <span>ORDER FLOW IMBALANCE</span>
+                <span>ORDER FLOW</span>
                 <span className="gauge-val">{dBuyerPercent}% BUY / {sellerPercent}% SELL</span>
               </div>
               <div className="ofi-bar-container">
@@ -493,7 +495,7 @@ const TradeExecutionCard = ({
 
             <div className="visual-gauge-card">
               <div className="gauge-label">
-                <span>MARKET REGIME INERTIA (HURST)</span>
+                <span>REGIME INERTIA (HURST)</span>
                 <span className="gauge-val">H = {dHurstScore} ({regime || 'TRENDING'})</span>
               </div>
               <div className="hurst-meter-container">
@@ -514,7 +516,7 @@ const TradeExecutionCard = ({
                     {smoothedBeginner}
                   </p>
                 )}
-                {step >= 6 && (
+                {step >= 6 && !isShield && (
                   <div className="rr-visualizer ghosttrade-seq-step-anim">
                     <div className="rr-pill stop">SL: ${fStop}</div>
                     <div className="rr-arrow"><ArrowRight size={12}/> Risk {safeRisk}% <ArrowRight size={12}/></div>
@@ -531,7 +533,7 @@ const TradeExecutionCard = ({
                   <div className="pro-card-view">
                     <div className="quant-proof-header ghosttrade-seq-step-anim">
                       <Zap size={16} className="proof-icon" />
-                      <span className="proof-title">INSTITUTIONAL QUANTITATIVE PROOF</span>
+                      <span className="proof-title">QUANTITATIVE PROOF</span>
                     </div>
 
                     <SignalScoreCard
@@ -574,10 +576,10 @@ const TradeExecutionCard = ({
                 style={{ opacity: isShield ? 0.4 : 1, cursor: isShield ? 'not-allowed' : 'pointer', flex: 1, margin: 0 }}
                >
                 {isShield 
-                  ? <><ShieldAlert size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</>
+                  ? <><Shield size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</>
                   : isLiveMode
                     ? <><Zap size={16} className="btn-icon"/> Confirm & Execute Trade (Dual-Verification)</>
-                    : <><CheckCircle size={16} className="btn-icon"/> Log Signal to Audit Dashboard</>
+                    : <><CheckCircle size={16} className="btn-icon"/> KEEP IT</>
                 }
                </button>
             </div>

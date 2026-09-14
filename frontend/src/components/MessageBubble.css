@@ -1,3 +1,4 @@
+/* Force Reload */
 /* AiMessageBubble and UserMessageBubble Shared Styles */
 
 .message-wrapper {
@@ -1093,3 +1094,187 @@
   align-items: center;
 }
 
+
+
+@media (max-width: 767px) {
+  .pro-actions .trade-btn {
+    padding: 12px 16px;
+    line-height: 1.4;
+    min-height: 44px;
+    height: auto;
+  }
+}
+.btn-icon {
+  flex-shrink: 0;
+}
+
+/* Safe mobile text wrapping fix without breaking words mid-string */
+
+.mono-list li span,
+.reasoning-item span,
+.level-item span,
+.verdict-value span {
+  /* Prevent flex-items from enforcing min-content width */
+  min-width: 0;
+}
+
+.score-card-header, .report-card-header {
+  flex-wrap: wrap;
+}
+
+.mentor-text, .trade-success-msg {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+@media (max-width: 768px) {
+  /* Drastically reduce nested horizontal padding to reclaim screen space */
+  .message-wrapper.ai {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  
+  .trade-card, .trade-card.expanded {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  
+  .report-list {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .report-card-header, .score-card-header {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Clean up SL/TP visualizer */
+  .rr-visualizer {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px !important;
+  }
+  
+  /* Prevent score text from wrapping awkwardly */
+  .score-card-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 8px;
+  }
+  
+  .score-card-title {
+    font-size: 0.65rem !important; /* Slightly smaller to fit cleanly */
+  }
+
+  .score-card-total {
+    font-size: 1rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .rr-visualizer {
+    padding: 6px 4px !important;
+    gap: 2px !important;
+  }
+  .rr-pill {
+    padding: 4px 6px !important;
+    font-size: 0.6rem !important;
+  }
+  .rr-arrow {
+    font-size: 0.55rem !important;
+    margin: 0 !important;
+  }
+  .rr-badge {
+    padding: 4px 6px !important;
+    font-size: 0.6rem !important;
+  }
+}
+
+
+@media (max-width: 767px) {
+  .score-card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+  
+  .score-card-title {
+    font-size: 0.55rem !important;
+    line-height: 1.2 !important;
+    width: 100% !important;
+  }
+  
+  .score-card-total {
+    font-size: 0.85rem !important;
+    line-height: 1.2 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Remove nested card borders on mobile */
+  .report-card, .rr-visualizer {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  
+  /* Keep only the outer border on the trade card */
+  .trade-card {
+    /* Keep its border, maybe make it slightly subtle */
+  }
+}
+
+@media (max-width: 767px) {
+  .score-card {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Remove outermost chat bubble border on mobile */
+  .message-wrapper.ai {
+    border: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Comprehensive flattening of all inner nested boxes */
+  .visual-gauge-card, 
+  .mentor-content-box {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .trade-card-header {
+    gap: 4px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .score-card, .report-card, .visual-gauge-card, .mentor-content-box {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .report-card-header, .score-card-header {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}

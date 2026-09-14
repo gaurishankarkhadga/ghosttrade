@@ -84,7 +84,9 @@
   font-size: 2.25rem;
   color: #f1f5f9;
   margin-bottom: 0.75rem;
+  letter-spacing: 0.08em;
   letter-spacing: -0.05em;
+  letter-spacing: 0.1em;
 }
 
 .chat-hero-highlight {
@@ -379,5 +381,11 @@
 
   100% {
     text-shadow: 0 0 5px rgba(56, 189, 248, 0.4);
+  }
+}
+@media (max-width: 768px) {
+  .chat-scroll-container {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
   }
 }

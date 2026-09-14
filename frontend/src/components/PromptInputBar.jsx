@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Zap, ChevronDown, Activity, ArrowRight, Globe, BookOpen, MessageSquare } from 'lucide-react';
+import { Plus, Zap, ChevronDown, Activity, Brain, ArrowRight, Globe, BookOpen, MessageSquare } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
@@ -241,7 +241,7 @@ export default function PromptInputBar({ onSend, disabled }) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask GhostTrade anything..."
+          placeholder="Analyze any asset..."
           disabled={disabled}
           rows={1}
           className="bolt-prompt-textarea"
@@ -326,7 +326,7 @@ export default function PromptInputBar({ onSend, disabled }) {
           </div>
           <div className="bolt-right-actions">
             <button type="button" onClick={handleDeepScan} className="bolt-text-btn" disabled={disabled} style={{ paddingLeft: '0.9rem', paddingRight: '0.9rem' }}>
-              <Activity size={14} strokeWidth={2.5} className="think-icon" /> <span>Deep Scan</span>
+              <Brain size={14} strokeWidth={2.5} className="think-icon" /> <span>Deep Think</span>
             </button>
             <button
               type="submit"

@@ -152,3 +152,11 @@ body::-webkit-scrollbar {
     margin-top: 40px;
   }
 }
+
+@media (max-width: 768px) {
+  .mobile-solid-btn {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
+  }
+}

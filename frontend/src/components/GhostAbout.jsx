@@ -287,7 +287,7 @@ export default function GhostAbout() {
         <section className="about-hero-section">
           <div className="hero-content">
             <h1 className="scroll-reveal">
-              TRADE SMARTER <span className="text-highlight">WITH AI</span>
+              TRADE SMARTER <br className="mobile-break" /><span className="text-highlight">WITH AI</span>
             </h1>
 
             <p className="hero-subtext scroll-reveal delay-100">
@@ -819,19 +819,19 @@ export default function GhostAbout() {
                   <h4>PLATFORM</h4>
                   <ul>
                     <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/connect'); }}>Terminal Access</a></li>
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/connect'); }}>API Documentation</a></li>
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/connect'); }}>Broker Integrations</a></li>
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/connect'); }}>Status Dashboard</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/api-docs'); }}>API Documentation</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/broker-integrations'); }}>Broker Integrations</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/status'); }}>Status Dashboard</a></li>
                   </ul>
                 </div>
 
                 <div className="footer-col scroll-reveal delay-300">
                   <h4>LEGAL & COMPLIANCE</h4>
                   <ul>
-                    <li><a href="#">Terms of Service</a></li>
-                    <li><a href="#">Privacy Policy</a></li>
-                    <li><a href="#">Risk Disclosure</a></li>
-                    <li><a href="#">Master Service Agreement</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/terms'); }}>Terms of Service</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}>Privacy Policy</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/risk'); }}>Risk Disclosure</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/msa'); }}>Master Service Agreement</a></li>
                   </ul>
                 </div>
               </div>

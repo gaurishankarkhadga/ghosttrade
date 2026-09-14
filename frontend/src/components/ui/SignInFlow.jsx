@@ -333,7 +333,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
                       <button 
                         type="button"
                         onClick={() => { setStep('signup'); setErrorMsg(''); }}
-                        className="google-btn justify-center outline-btn"
+                        className="google-btn justify-center outline-btn mobile-solid-btn"
                       >
                         Create Quant Account
                       </button>
