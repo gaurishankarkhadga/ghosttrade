@@ -1,3 +1,5 @@
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useGhostStore from './store/ghostStore';
@@ -31,10 +33,18 @@ const ProtectedLayout = ({ children }) => {
   }
 
   const isAuditPage = location.pathname === '/audit';
+  const isSettingsPage = location.pathname === '/settings';
 
   return (
     <div className="app-container">
-      <div className={isAuditPage ? "hide-navbar-mobile" : ""}>
+      <div 
+        className={isAuditPage ? "hide-navbar-mobile" : ""}
+        style={{
+          opacity: isSettingsPage ? 0 : 1,
+          pointerEvents: isSettingsPage ? 'none' : 'auto',
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      >
         <TerminalNavbar
           isConnected={isConnected}
           onLockTerminal={() => logout()}
@@ -61,6 +71,8 @@ export default function App() {
   }, [isAuthenticated, connectWebSocket, initAuditData, fetchBrokerStatus, fetchMarketStatus]);
 
   return (
+    <>
+    <ToastContainer position="top-right" theme="dark" />
     <Routes>
         {/* Public Route */}
         <Route 
@@ -150,5 +162,6 @@ export default function App() {
           element={<Navigate to="/" replace />} 
         />
       </Routes>
+    </>
   );
 }

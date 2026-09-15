@@ -12,7 +12,7 @@ export default function UserMessageBubble({ content, imageBase64 }) {
       </div>
       <div className="message-content" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
         {imageBase64 && (
-          <img src={imageBase64} alt="Attached Chart" style={{ maxWidth: '300px', borderRadius: '8px', border: '1px solid var(--ghost-border)' }} />
+          <img src={imageBase64} alt="Attached Chart" className="user-attached-image" />
         )}
         <p className="message-text">
           {content}

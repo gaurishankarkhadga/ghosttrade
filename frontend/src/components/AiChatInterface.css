@@ -62,7 +62,7 @@
   .chat-horizon-glow {
     width: 100%;
     max-width: 100vw;
-    top: calc(35% + 6rem);
+    top: calc(32lvh + 6rem);
     bottom: 0;
     height: auto;
     border-radius: 50% 50% 0 0 / 6rem 6rem 0 0;
@@ -248,7 +248,7 @@
   .chat-horizon-glow {
     width: 100%;
     max-width: 100vw;
-    top: calc(35% + 6rem);
+    top: calc(32lvh + 6rem);
     bottom: 0;
     height: auto;
     border-radius: 50% 50% 0 0 / 6rem 6rem 0 0;

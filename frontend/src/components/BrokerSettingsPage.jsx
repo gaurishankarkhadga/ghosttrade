@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Zap, Globe, CheckCircle, AlertTriangle, Trash2, Eye, EyeOff, Link2, ArrowLeft } from 'lucide-react';
+import { X, Shield, Zap, Globe, CheckCircle, AlertTriangle, Trash2, Eye, EyeOff, Link2, ArrowLeft, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import useGhostStore from '../store/ghostStore';
 import './BrokerSettingsPage.css';
 
@@ -36,7 +37,7 @@ const BROKER_INFO = {
   }
 };
 
-function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
+function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect, onLockClick }) {
   const info = BROKER_INFO[brokerKey];
   const [isEditing, setIsEditing] = useState(false);
   
@@ -54,6 +55,7 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
   const handleConnectClick = () => {
     if (isConnected) return;
     setIsEditing(!isEditing);
+    alert("it will enable in 15days");
   };
 
   const handleConnectSubmit = async (e) => {
@@ -132,82 +134,7 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
         </div>
       </div>
 
-      <AnimatePresence>
-        {isEditing && !isConnected && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="broker-manual-connect-form"
-            style={{ overflow: 'hidden' }}
-          >
-            <form className="broker-form" onSubmit={handleConnectSubmit}>
-              <div className="broker-guide">
-                <Shield size={14} /> {info.guide}
-              </div>
-              
-              {brokerKey === 'ANGEL_ONE' ? (
-                <>
-                  <div className="broker-field">
-                    <label>Client ID</label>
-                    <div className="broker-input-wrapper">
-                      <input type="text" value={clientCode} onChange={(e) => setClientCode(e.target.value)} placeholder="Enter Angel One Client ID" required />
-                    </div>
-                  </div>
-                  <div className="broker-field">
-                    <label>Login PIN / Password</label>
-                    <div className="broker-input-wrapper">
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter login PIN or password" required />
-                    </div>
-                  </div>
-                  <div className="broker-field">
-                    <label>Authenticator TOTP Secret</label>
-                    <div className="broker-input-wrapper">
-                      <input type="password" value={totpSecret} onChange={(e) => setTotpSecret(e.target.value)} placeholder="Paste authenticator TOTP setup key" required />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="broker-field">
-                    <label>API Key</label>
-                    <div className="broker-input-wrapper">
-                      <input 
-                        type="text" 
-                        value={apiKey} 
-                        onChange={(e) => setApiKey(e.target.value)} 
-                        placeholder="Paste your API key here" 
-                        required 
-                      />
-                    </div>
-                  </div>
-                  <div className="broker-field">
-                    <label>API Secret</label>
-                    <div className="broker-input-wrapper">
-                      <input 
-                        type="password" 
-                        value={apiSecret} 
-                        onChange={(e) => setApiSecret(e.target.value)} 
-                        placeholder="Paste your API secret here" 
-                        required 
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="broker-submit-btn"
-                style={{ background: info.color }}
-              >
-                {isSubmitting ? 'Connecting...' : `Connect ${info.name}`}
-              </button>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      
 
       {isConnected && (
         <div className="broker-connected-info">
@@ -224,6 +151,7 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect }) {
 export default function BrokerSettingsPage() {
   const { connectedBrokers, connectBroker, disconnectBroker, executionMode, setExecutionMode, fetchBrokerStatus, globalMarkets, fetchMarketStatus } = useGhostStore();
   const navigate = useNavigate();
+  
 
   useEffect(() => {
     fetchBrokerStatus();
@@ -295,6 +223,7 @@ export default function BrokerSettingsPage() {
                 isConnected={!!connectedMap[key]}
                 connectedAt={connectedMap[key]?.connectedAt}
                 onDisconnect={disconnectBroker}
+                onLockClick={() => toast.error('Live Trading Locked. It will enable in 15 days.', { icon: '🔒' })}
               />
             ))}
           </div>
@@ -325,6 +254,8 @@ export default function BrokerSettingsPage() {
           <span>Your API keys are encrypted with AES-256-GCM. GhostTrade never stores plaintext credentials. We never have access to your funds.</span>
         </div>
       </div>
+      
+      
     </div>
   );
 }
