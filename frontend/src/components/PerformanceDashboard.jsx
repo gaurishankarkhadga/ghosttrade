@@ -419,7 +419,7 @@ export default function PerformanceDashboard() {
                   </td>
                   <td>
                     <span style={{ fontSize: '11px', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
-                      {trade.source === 'SCANNER' ? '🤖 SCANNER' : '👁️ SCREENSHOT'}
+                      {trade.source === 'SCANNER' ? ' SCANNER' : ' SCREENSHOT'}
                     </span>
                   </td>
                   <td>

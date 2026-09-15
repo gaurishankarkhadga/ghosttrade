@@ -195,7 +195,7 @@ export async function getCacheInfo() {
  * @returns {string} Formatted analysis text for the chat UI
  */
 export function formatCachedAnalysisAsChat(asset) {
-  if (!asset) return '❌ No data available for this asset yet. The scanner is still warming up.';
+  if (!asset) return ' No data available for this asset yet. The scanner is still warming up.';
   
   const signal = asset.signalData;
   const ticker = asset.ticker;
@@ -203,7 +203,7 @@ export function formatCachedAnalysisAsChat(asset) {
   const fPrice = (p) => p !== undefined && p !== null ? (typeof p === 'number' ? p.toFixed(p > 100 ? 2 : 4) : p) : 'N/A';
 
   if (!signal || signal.action === 'NO_SIGNAL') {
-    return `PREDICTION VERDICT:\nBASE CASE: NEUTRAL (0%)\nTimeframe: Intraday (15m / 1h)\nCurrent Price: $${fPrice(price)}\nmatched_setup_id: NONE\nEngine Action: NO_SIGNAL\n\n⚠️ Insufficient historical market data to generate a deterministic signal.`;
+    return `PREDICTION VERDICT:\nBASE CASE: NEUTRAL (0%)\nTimeframe: Intraday (15m / 1h)\nCurrent Price: $${fPrice(price)}\nmatched_setup_id: NONE\nEngine Action: NO_SIGNAL\n\n Insufficient historical market data to generate a deterministic signal.`;
   }
 
   const isTrade = signal.action === 'TRADE';
@@ -241,17 +241,17 @@ export function formatCachedAnalysisAsChat(asset) {
   text += `Engine Action: ${isTrade ? 'ACTIONABLE_TRADE' : 'SHIELD_MODE_PROTECTION'}\n\n`;
 
   // 1. Beginner Takeaway
-  text += `🎯 BEGINNER TAKEAWAY:\n`;
+  text += `BEGINNER TAKEAWAY:\n`;
   if (isTrade) {
     text += `• Action: High-probability ${dir} trade verified by quantitative models.\n`;
     text += `• Execution Guidance: Buy/Enter at $${fPrice(entry)} with protective Stop Loss at $${fPrice(sl)}. Target $${fPrice(tp2)} for a 1:2.0 reward ratio.\n\n`;
   } else {
-    text += `• Action: 🛡️ DO NOT TRADE. Capital Preservation is actively engaged.\n`;
+    text += `• Action: DO NOT TRADE. Capital Preservation is actively engaged.\n`;
     text += `• Guidance: Market conditions on ${ticker} lack a statistical edge (${signal.reason || 'Negative mathematical expectancy'}). Keep your money safe until high-probability conditions appear.\n\n`;
   }
 
   // 2. Mathematical Asymmetry & EV
-  text += `⚖️ MATHEMATICAL ASYMMETRY (1:2.0 RRR) & EXPECTED VALUE:\n`;
+  text += `MATHEMATICAL ASYMMETRY (1:2.0 RRR) & EXPECTED VALUE:\n`;
   text += `• Reference Entry: $${fPrice(entry)}\n`;
   text += `• Protective Stop Loss: $${fPrice(sl)} (Risk: $${fPrice(riskDist)} | -${riskPct}%)\n`;
   if (tp1) text += `• Take Profit 1 (1:1 RRR): $${fPrice(tp1)} (+${riskPct}%)\n`;
@@ -265,7 +265,7 @@ export function formatCachedAnalysisAsChat(asset) {
   text += `\n`;
 
   // 3. Fractal Mathematics Proof (Hurst Regime)
-  text += `🔬 FRACTAL MATHEMATICS PROOF (HURST REGIME):\n`;
+  text += `FRACTAL MATHEMATICS PROOF (HURST REGIME):\n`;
   text += `• Hurst Exponent (Mean H): ${hurstMean} (R/S = ${hurstRS}, DFA = ${hurstDFA})\n`;
   text += `• 95% Confidence Interval: [${ciLower}, ${ciUpper}]\n`;
   if (Number(hurstMean) > 0.55) {
@@ -278,7 +278,7 @@ export function formatCachedAnalysisAsChat(asset) {
   text += `\n`;
 
   // 4. Level 2 Order Book & Order Flow Matrix
-  text += `🌊 LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX:\n`;
+  text += `LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX:\n`;
   text += `• Volume Delta Aggression: ${buyerPct}% Buyers / ${sellerPct}% Sellers (OFI: ${ofiVal})\n`;
   text += `• OFI Telemetry Source: ${ofiSource}\n`;
   if (l2Depth && l2Depth.source === 'BINANCE_L2_DEPTH') {
@@ -289,7 +289,7 @@ export function formatCachedAnalysisAsChat(asset) {
   text += `\n`;
 
   // 5. Multi-Timeframe Confluence Matrix
-  text += `🌐 MULTI-TIMEFRAME CONFLUENCE MATRIX:\n`;
+  text += `MULTI-TIMEFRAME CONFLUENCE MATRIX:\n`;
   text += `• 15m Micro Execution: ${signal.pattern || 'Consolidation'} | Momentum: ${signal.rsi ? 'RSI ' + signal.rsi.value?.toFixed(1) : 'Neutral'}\n`;
   text += `• 1H Meso Trend: ${signal.smaAlignment || 'Neutral'} (${asset.microRegime || 'Active'})\n`;
   text += `• 1D Macro Structure: ${asset.macroRegime || 'Macro Neutral'}\n`;
@@ -298,8 +298,8 @@ export function formatCachedAnalysisAsChat(asset) {
   // 5b. Smart Money Liquidity Sweep & Stop-Hunt Radar
   if (signal.liquiditySweep) {
     const sw = signal.liquiditySweep;
-    text += `🎯 SMART MONEY LIQUIDITY SWEEP & STOP-HUNT RADAR:\n`;
-    text += `• Sweep State: ${sw.detected ? '🚨 ' + sw.sweepType + ' CONFIRMED' : sw.sweepType === 'UNSWEPT_POOL_TRAP' ? '⚠️ UNSWEPT LIQUIDITY TRAP' : 'Inactive (No Sweeps)'}\n`;
+    text += `SMART MONEY LIQUIDITY SWEEP & STOP-HUNT RADAR:\n`;
+    text += `• Sweep State: ${sw.detected ? ' ' + sw.sweepType + ' CONFIRMED' : sw.sweepType === 'UNSWEPT_POOL_TRAP' ? ' UNSWEPT LIQUIDITY TRAP' : 'Inactive (No Sweeps)'}\n`;
     text += `• Detail: ${sw.description}\n`;
     if (sw.poolLevel) text += `• Reference Pool Level: $${fPrice(sw.poolLevel)}\n`;
     if (sw.wickRatio) text += `• Wick Absorption Ratio: ${Math.round(sw.wickRatio * 100)}% (Smart Money Footprint)\n`;
@@ -311,14 +311,14 @@ export function formatCachedAnalysisAsChat(asset) {
   }
 
   // 6. Shield Mode Forensic Audit
-  text += `🛡️ CAPITAL PRESERVATION SHIELD PROOF:\n`;
+  text += `CAPITAL PRESERVATION SHIELD PROOF:\n`;
   if (!isTrade) {
-    text += `• Shield Status: 🚨 ACTIVATED (Zero Capital Allocated — 100% Protected)\n`;
+    text += `• Shield Status:  ACTIVATED (Zero Capital Allocated — 100% Protected)\n`;
     text += `• Gate Triggered: ${signal.forensicGate || 'MATHEMATICAL_RISK_FILTER'}\n`;
     text += `• Retail Trader Trap: ${signal.retailTrap || 'Trading in low conviction setups leads to fee burn and chop drawdown.'}\n`;
     text += `• Capital Defense: ${signal.capitalDefense || signal.reason || 'Protected capital from negative expectancy.'}\n`;
   } else {
-    text += `• Shield Status: ✅ STANDBY (All 5 Quantitative Gates Cleared)\n`;
+    text += `• Shield Status:  STANDBY (All 5 Quantitative Gates Cleared)\n`;
     text += `• Risk Validation: Positive Expected Value verified with strict 1:2.0 RRR bounds.\n`;
   }
   text += `\n`;

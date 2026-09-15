@@ -28,7 +28,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * Scans a single ticker using Phase 1, 2, and 6 logic
  */
-async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, alerts: [], bias: 'NEUTRAL' }) {
+export async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.0, alerts: [], bias: 'NEUTRAL' }) {
   try {
     // [PHASE 1] Multi-Dimensional Data
     const dataResult = await fetchMultiTimeframeOHLCV(ticker, 300);

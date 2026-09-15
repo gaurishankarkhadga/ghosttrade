@@ -389,7 +389,7 @@ const TradeExecutionCard = ({
       return (
         <div className={`trade-card executed`}>
           <div className="trade-header">
-            <span className="trade-asset">⏳ {asset} PROCESSING...</span>
+            <span className="trade-asset"> {asset} PROCESSING...</span>
           </div>
           <p className="trade-success-msg">Routing to execution engine...</p>
         </div>
@@ -401,7 +401,7 @@ const TradeExecutionCard = ({
       return (
         <div className={`trade-card executed`} style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
           <div className="trade-header">
-            <span className="trade-asset">🛡️ {asset} RISK BLOCKED</span>
+            <span className="trade-asset"> {asset}RISK BLOCKED</span>
             <span className="trade-status-badge" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}>
               BLOCKED
             </span>
@@ -417,9 +417,9 @@ const TradeExecutionCard = ({
     return (
       <div className={`trade-card executed`}>
         <div className="trade-header">
-          <span className="trade-asset">⚡ {asset} ACTIVE</span>
+          <span className="trade-asset"> {asset} ACTIVE</span>
           <span className="trade-status-badge" style={{ background: isLiveMode ? 'rgba(239,68,68,0.2)' : 'rgba(148,163,184,0.2)', color: isLiveMode ? '#ef4444' : '#94a3b8' }}>
-            {isLiveMode ? '🔴 LIVE (DUAL)' : '📝 PAPER'}
+            {isLiveMode ? ' LIVE (DUAL)' : ' PAPER'}
           </span>
         </div>
         <p className="trade-success-msg">
@@ -591,9 +591,256 @@ const TradeExecutionCard = ({
 
 };
 
+// =====================================================
+// DEEP SCAN RESULTS CARD — Premium Deep Think Visualization
+// Renders real-time scan results: profitable trades or honest "no opportunity" state.
+// Zero hardcoded data — all values from the quantitative scanner engine.
+// =====================================================
+const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
+  const [step, setStep] = useState(isNewMessage ? 0 : 10);
+
+  useEffect(() => {
+    if (!isNewMessage) return;
+    const t1 = setTimeout(() => setStep(1), 200);
+    const t2 = setTimeout(() => setStep(2), 600);
+    const t3 = setTimeout(() => setStep(3), 1000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [isNewMessage]);
+
+  if (!scanData) return null;
+
+  const fPrice = (p) => {
+    if (p === undefined || p === null) return 'N/A';
+    if (typeof p !== 'number') return p;
+    return p > 100 ? p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.toFixed(4);
+  };
+
+  // === NO OPPORTUNITIES STATE ===
+  if (!scanData.found || scanData.assets.length === 0) {
+    return (
+      <div className="deep-scan-card no-opportunities" style={{
+        background: 'linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95))',
+        border: '1px solid rgba(251,191,36,0.2)',
+        borderRadius: 16,
+        padding: '28px 24px',
+        marginTop: 16,
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+          background: 'linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b)',
+          opacity: 0.7
+        }} />
+
+        {step >= 1 && (
+          <div className="ghosttrade-seq-step-anim" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Shield size={24} color="#fbbf24" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#fbbf24', letterSpacing: '0.5px' }}>
+                CAPITAL PRESERVATION ACTIVE
+              </div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                No profitable opportunities at this time
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step >= 2 && (
+          <div className="ghosttrade-seq-step-anim" style={{
+            background: 'rgba(251,191,36,0.06)',
+            border: '1px solid rgba(251,191,36,0.12)',
+            borderRadius: 10, padding: '14px 16px', marginBottom: 16
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: 13 }}>
+              <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Scan Time</span></div>
+              <div style={{ color: '#fbbf24', fontWeight: 500, textAlign: 'right' }}>{scanData.scanTime}</div>
+              <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Market</span></div>
+              <div style={{ color: '#e2e8f0', fontWeight: 500, textAlign: 'right' }}>{scanData.market}</div>
+              <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Assets Scanned</span></div>
+              <div style={{ color: '#e2e8f0', fontWeight: 500, textAlign: 'right' }}>{scanData.totalScanned}</div>
+              {scanData.dataAge !== null && (
+                <>
+                  <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Data Age</span></div>
+                  <div style={{ color: '#e2e8f0', fontWeight: 500, textAlign: 'right' }}>{scanData.dataAge}s</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step >= 3 && (
+          <div className="ghosttrade-seq-step-anim" style={{
+            fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6
+          }}>
+            Every asset is currently in Shield Mode — the mathematical expectancy is negative or neutral.
+            This is the system protecting your capital. Run Deep Think again when market conditions shift.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // === PROFITABLE ASSETS FOUND STATE ===
+  return (
+    <div className="deep-scan-card has-opportunities" style={{
+      marginTop: 16,
+      display: 'flex', flexDirection: 'column', gap: 12
+    }}>
+      {/* Header Card */}
+      {step >= 1 && (
+        <div className="ghosttrade-seq-step-anim" style={{
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(6,78,59,0.2))',
+          border: '1px solid rgba(52,211,153,0.25)',
+          borderRadius: 14, padding: '16px 20px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Zap size={20} color="#34d399" />
+            <span style={{ fontWeight: 700, fontSize: 15, color: '#34d399', letterSpacing: '0.3px' }}>
+              {scanData.assets.length} PROFITABLE {scanData.assets.length === 1 ? 'TRADE' : 'TRADES'}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+            {scanData.scanTime} · {scanData.totalScanned} scanned
+          </div>
+        </div>
+      )}
+
+      {/* Individual Trade Cards */}
+      {step >= 2 && scanData.assets.map((asset, idx) => {
+        const isBull = asset.direction === 'BULLISH';
+        const accentColor = isBull ? '#34d399' : '#f87171';
+        const accentBg = isBull ? 'rgba(52,211,153,0.08)' : 'rgba(248,113,113,0.08)';
+        const accentBorder = isBull ? 'rgba(52,211,153,0.2)' : 'rgba(248,113,113,0.2)';
+        const dirIcon = isBull ? '▲' : '▼';
+
+        return (
+          <div key={asset.ticker} className="ghosttrade-seq-step-anim" style={{
+            background: 'linear-gradient(135deg, rgba(30,41,59,0.85), rgba(15,23,42,0.95))',
+            border: `1px solid ${accentBorder}`,
+            borderRadius: 14, padding: '20px',
+            position: 'relative', overflow: 'hidden',
+            animationDelay: `${idx * 150}ms`
+          }}>
+            {/* Top accent line */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+              background: accentColor, opacity: 0.6
+            }} />
+
+            {/* Ticker + Score Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9', letterSpacing: '0.5px' }}>
+                  {dirIcon} {asset.ticker}
+                </span>
+                <span style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                  background: accentBg, color: accentColor, fontWeight: 600,
+                  border: `1px solid ${accentBorder}`
+                }}>
+                  {asset.direction}
+                </span>
+              </div>
+              <div style={{
+                fontSize: 14, fontWeight: 700, color: accentColor,
+                background: accentBg, padding: '4px 10px', borderRadius: 8,
+                border: `1px solid ${accentBorder}`
+              }}>
+                {asset.score}/100
+              </div>
+            </div>
+
+            {/* Trade Levels Grid */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12
+            }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px 12px', textAlign: 'center'
+              }}>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.5px' }}>Entry</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>${fPrice(asset.entry)}</div>
+              </div>
+              <div style={{
+                background: 'rgba(52,211,153,0.06)', borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+                border: '1px solid rgba(52,211,153,0.1)'
+              }}>
+                <div style={{ fontSize: 10, color: 'rgba(52,211,153,0.6)', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.5px' }}>Target</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#34d399' }}>
+                  ${fPrice(asset.takeProfit)}
+                  {asset.tpPercent !== null && <span style={{ fontSize: 11, opacity: 0.7 }}> +{asset.tpPercent}%</span>}
+                </div>
+              </div>
+              <div style={{
+                background: 'rgba(248,113,113,0.06)', borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+                border: '1px solid rgba(248,113,113,0.1)'
+              }}>
+                <div style={{ fontSize: 10, color: 'rgba(248,113,113,0.6)', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.5px' }}>Stop</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#f87171' }}>
+                  ${fPrice(asset.stopLoss)}
+                  {asset.slPercent !== null && <span style={{ fontSize: 11, opacity: 0.7 }}> -{asset.slPercent}%</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Meta Row */}
+            <div style={{
+              display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'
+            }}>
+              {asset.kellySize > 0 && (
+                <span style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                  background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
+                  border: '1px solid rgba(96,165,250,0.2)'
+                }}>
+                  Kelly {asset.kellySize}%
+                </span>
+              )}
+              {asset.expectedValue !== undefined && asset.expectedValue !== null && (
+                <span style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                  background: asset.expectedValue >= 0 ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)',
+                  color: asset.expectedValue >= 0 ? '#34d399' : '#f87171',
+                  border: `1px solid ${asset.expectedValue >= 0 ? 'rgba(52,211,153,0.2)' : 'rgba(248,113,113,0.2)'}`
+                }}>
+                  EV: {asset.expectedValue >= 0 ? '+' : ''}${typeof asset.expectedValue === 'number' ? asset.expectedValue.toFixed(2) : asset.expectedValue}
+                </span>
+              )}
+              <span style={{
+                fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)',
+                border: '1px solid rgba(255,255,255,0.08)'
+              }}>
+                {asset.side}
+              </span>
+              {asset.macroRegime && (
+                <span style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                  background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  {asset.macroRegime}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function AiMessageBubble({ message }) {
   const { isSimpleMode } = useGhostStore();
-  const isFullWidth = message.uiComponent === 'TRADE_CARD' || message.uiComponent === 'LEARNING_MODE' || isSimpleMode;
+  const isFullWidth = message.uiComponent === 'TRADE_CARD' || message.uiComponent === 'DEEP_SCAN_RESULTS' || message.uiComponent === 'LEARNING_MODE' || isSimpleMode;
   
   const [isNewMessage] = useState(message.isGenerating === true);
   const smoothedContent = useStreamSmoother(message.content, !isNewMessage);
@@ -606,12 +853,16 @@ export default function AiMessageBubble({ message }) {
            <LearningModeBubble tradeData={message.tradeData} content={smoothedContent} />
         ) : (
           <>
-            {smoothedContent && (
+            {smoothedContent && message.uiComponent !== 'DEEP_SCAN_RESULTS' && (
               <InstitutionalReport content={smoothedContent} isStreaming={isStreaming} />
             )}
             
             {message.uiComponent === 'TRADE_CARD' && message.tradeData && (
               <TradeExecutionCard {...message.tradeData} isParentStreaming={isStreaming} isNewMessage={isNewMessage} />
+            )}
+
+            {message.uiComponent === 'DEEP_SCAN_RESULTS' && message.scanData && (
+              <DeepScanResultsCard scanData={message.scanData} isNewMessage={isNewMessage} />
             )}
           </>
         )}

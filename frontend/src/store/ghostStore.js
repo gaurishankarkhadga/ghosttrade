@@ -409,6 +409,12 @@ const useGhostStore = create(
                     msg.id === aiMessageId ? { ...msg, uiComponent: 'TRADE_CARD', tradeData: data.tradeData } : msg
                  )
                }));
+            } else if (data.status === 'deep_scan_results') {
+               set((state) => ({
+                 chatHistory: state.chatHistory.map(msg => 
+                    msg.id === aiMessageId ? { ...msg, uiComponent: 'DEEP_SCAN_RESULTS', scanData: data.scanData } : msg
+                 )
+               }));
             } else if (data.status === 'complete') {
                chatWs.close();
                set(state => ({ 

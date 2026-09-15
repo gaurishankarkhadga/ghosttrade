@@ -64,16 +64,16 @@ export default function InstitutionalReport({ content, isStreaming }) {
     return match ? match[1].trim() : '';
   };
 
-  const nextHeaderPattern = '(?:🎯 BEGINNER TAKEAWAY:|⚖️ MATHEMATICAL ASYMMETRY|🔬 FRACTAL MATHEMATICS|🌊 LEVEL 2 ORDER BOOK|🌐 MULTI-TIMEFRAME|🎯 SMART MONEY LIQUIDITY|🛡️ CAPITAL PRESERVATION|TRADE LEVELS:|INSTITUTIONAL REASONING:|MODULE 14|$)';
+  const nextHeaderPattern = '(?:BEGINNER TAKEAWAY:|MATHEMATICAL ASYMMETRY|FRACTAL MATHEMATICS|LEVEL 2 ORDER BOOK|MULTI-TIMEFRAME|SMART MONEY LIQUIDITY|CAPITAL PRESERVATION|TRADE LEVELS:|INSTITUTIONAL REASONING:|MODULE 14|$)';
 
   const verdictText = extractSection(new RegExp(`PREDICTION VERDICT:([\\s\\S]*?)${nextHeaderPattern}`));
-  const beginnerText = extractSection(new RegExp(`🎯 BEGINNER TAKEAWAY:([\\s\\S]*?)${nextHeaderPattern}`));
-  const asymmetryText = extractSection(new RegExp(`⚖️ MATHEMATICAL ASYMMETRY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
-  const fractalText = extractSection(new RegExp(`🔬 FRACTAL MATHEMATICS[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
-  const orderBookText = extractSection(new RegExp(`🌊 LEVEL 2 ORDER BOOK[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
-  const confluenceText = extractSection(new RegExp(`🌐 MULTI-TIMEFRAME[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
-  const liquidityText = extractSection(new RegExp(`🎯 SMART MONEY LIQUIDITY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
-  const shieldProofText = extractSection(new RegExp(`🛡️ CAPITAL PRESERVATION[^:]*:([\\s\\S]*?)(?:_Data Telemetry|$)`));
+  const beginnerText = extractSection(new RegExp(`BEGINNER TAKEAWAY:([\\s\\S]*?)${nextHeaderPattern}`));
+  const asymmetryText = extractSection(new RegExp(`MATHEMATICAL ASYMMETRY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const fractalText = extractSection(new RegExp(`FRACTAL MATHEMATICS[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const orderBookText = extractSection(new RegExp(`LEVEL 2 ORDER BOOK[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const confluenceText = extractSection(new RegExp(`MULTI-TIMEFRAME[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const liquidityText = extractSection(new RegExp(`SMART MONEY LIQUIDITY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
+  const shieldProofText = extractSection(new RegExp(`CAPITAL PRESERVATION[^:]*:([\\s\\S]*?)(?:_Data Telemetry|$)`));
 
   // Legacy sections (for chart image mode / custom AI prompts)
   const levelsText = extractSection(new RegExp(`TRADE LEVELS:([\\s\\S]*?)${nextHeaderPattern}`));
@@ -148,7 +148,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       </div>
 
-      {/* 2. BEGINNER TAKEAWAY CARD */}
+      {/* 2.BEGINNER TAKEAWAY CARD */}
       {beginnerText && (
         <div className="report-card beginner-takeaway-card">
           <div className="report-card-header" style={{ color: '#38bdf8' }}>
@@ -166,7 +166,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 3. MATHEMATICAL ASYMMETRY (1:2.0 RRR) & EXPECTED VALUE CARD */}
+      {/* 3.MATHEMATICAL ASYMMETRY (1:2.0 RRR) & EXPECTED VALUE CARD */}
       {asymmetryText && (
         <div className="report-card asymmetry-ev-card">
           <div className="report-card-header" style={{ color: '#34d399' }}>
@@ -196,7 +196,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 4. FRACTAL MATHEMATICS PROOF (HURST REGIME) CARD */}
+      {/* 4.FRACTAL MATHEMATICS PROOF (HURST REGIME) CARD */}
       {fractalText && (
         <div className="report-card fractal-proof-card">
           <div className="report-card-header" style={{ color: '#c084fc' }}>
@@ -214,7 +214,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 5. LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX CARD */}
+      {/* 5.LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX CARD */}
       {orderBookText && (
         <div className="report-card order-book-card">
           <div className="report-card-header" style={{ color: '#fbbf24' }}>
@@ -232,7 +232,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 6. MULTI-TIMEFRAME CONFLUENCE MATRIX CARD */}
+      {/* 6.MULTI-TIMEFRAME CONFLUENCE MATRIX CARD */}
       {confluenceText && (
         <div className="report-card confluence-matrix-card">
           <div className="report-card-header" style={{ color: '#60a5fa' }}>
@@ -250,7 +250,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 6. SMART MONEY LIQUIDITY SWEEP & BREAKEVEN RADAR */}
+      {/* 6.SMART MONEY LIQUIDITY SWEEP & BREAKEVEN RADAR */}
       {liquidityText && (
         <div className="report-card liquidity-sweep-card" style={{
           borderColor: 'rgba(168,85,247,0.35)',
@@ -271,7 +271,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 7. CAPITAL PRESERVATION SHIELD PROOF CARD */}
+      {/* 7.CAPITAL PRESERVATION SHIELD PROOF CARD */}
       {shieldProofText && (
         <div className="report-card shield-proof-card" style={{
           borderColor: isShield ? 'rgba(239,68,68,0.35)' : 'rgba(52,211,153,0.35)',
