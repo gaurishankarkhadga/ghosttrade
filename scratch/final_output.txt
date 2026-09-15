@@ -1,0 +1,114 @@
+Fetching NEPAL data (300 bars to satisfy institutional engines)...
+[NEPSE] Local data file missing for NABILNP. Returning simulated historical data.
+Fetched 300 bars successfully via nepseAdapter!
+Running Deep Institutional Signal Generator...
+[HURST] TRENDING | R/S=0.604 DFA=0.522 Mean=0.563 Stable=true
+[REGIME] TRENDING | Heuristic Score=13% | Actionable=false
+
+=== ACTUAL AI OUTPUT FOR NABIL.NP ===
+{
+  "action": "SHIELD_MODE",
+  "reason": "Composite score 50/100 below minimum threshold (65)",
+  "ticker": "NABIL.NP",
+  "direction": "BULLISH",
+  "tradeSide": "LONG",
+  "score": 50,
+  "scoreBreakdown": {
+    "regimeAlignment": 13,
+    "technicalConfluence": 67,
+    "orderFlow": 58,
+    "ofiSource": "CANDLE_APPROXIMATION",
+    "volumeConfirmation": 75,
+    "historicalWinRate": 50,
+    "regimePoints": 3,
+    "confluencePoints": 13,
+    "orderFlowPoints": 9,
+    "volumePoints": 8,
+    "winRatePoints": 18,
+    "totalScore": 50,
+    "orderBookImbalance": 0
+  },
+  "regime": {
+    "regime": "TRENDING",
+    "hurstMean": 0.5630115538611207,
+    "heuristicScore": 13,
+    "isActionable": false,
+    "ciWidth": 0.227,
+    "isStable": true,
+    "strategyNote": "Heuristic Score (13.0%) below 60% threshold. Signal confidence insufficient for actionable output. SHIELD MODE enforced.",
+    "warning": null,
+    "summaryForAI": "HURST ANALYSIS: NON-ACTIONABLE | Regime=TRENDING | H=0.563 | Heuristic Score=13.0% — below 60% actionability threshold | Heuristic Score (13.0%) below 60% threshold. Signal confidence insufficient for actionable output. SHIELD MODE enforced."
+  },
+  "hurst": {
+    "rsH": 0.6044756578075834,
+    "rsR2": 0.9906774332644335,
+    "dfaH": 0.5215474499146578,
+    "dfaR2": 0.9913445288190678,
+    "meanH": 0.5630115538611207,
+    "disagreement": 0.08292820789292554,
+    "isStable": true,
+    "ci95": {
+      "lower": 0.4496618271957376,
+      "upper": 0.6763612805265038
+    },
+    "regime": "TRENDING",
+    "interpretation": "H=0.563 — Market exhibits momentum persistence. Trend-following strategies have a statistical edge.",
+    "barsUsed": 299,
+    "warning": null
+  },
+  "ofi": {
+    "ofi": 0.3152,
+    "netDelta": 262360,
+    "flowBias": "MODERATE_BUY_AGGRESSION",
+    "cumulativeDelta": 262360
+  },
+  "buyerPercent": 66,
+  "pattern": "doji",
+  "reasons": [
+    "Doji indecision candle — no directional bias",
+    "SMA alignment: Golden Cross (SMA20 > SMA50 > SMA200)",
+    "RSI(14) = 60.77 — bullish momentum",
+    "MACD bearish: histogram=-1.0374",
+    "Order Flow: Buy aggression detected (OFI=0.315)",
+    "Momentum Not Confirmed: Predictive engine shows CONSOLIDATION_SIDEWAYS (score: 50), but trade requires BULLISH momentum. Blocking entry until volume confirms direction."
+  ],
+  "currentPrice": 710.4478345754696,
+  "stopLoss": 683.4508168616018,
+  "takeProfit": 764.4418700032053,
+  "takeProfit1": 737.4448522893375,
+  "takeProfit2": 764.4418700032053,
+  "riskDistance": 26.997017713867844,
+  "rewardDistance": 53.99403542773569,
+  "riskRewardRatio": 2,
+  "breakEvenWinRate": 33.33,
+  "expectedValue": 48.5,
+  "depthData": {
+    "available": true,
+    "source": "CANDLE_APPROXIMATION",
+    "buyWall": 705.3003,
+    "sellWall": 722.051,
+    "wallStrength": "HIGH_INSTITUTIONAL",
+    "orderBookImbalance": 0,
+    "buyWalls": [
+      705.3003
+    ],
+    "sellWalls": [
+      722.051
+    ]
+  },
+  "liquiditySweep": {
+    "detected": false,
+    "sweepType": "NONE",
+    "poolsCount": 0,
+    "description": "No active liquidity sweeps detected in the immediate lookback window."
+  },
+  "forensicGate": "MOMENTUM_STALL_GATE",
+  "retailTrap": "Retail traders enter trades when volume is dead — no institutional participation means the move has no fuel.",
+  "capitalDefense": "Shield Engine detected no volume acceleration. Entry blocked until momentum confirms direction.",
+  "kelly": {
+    "action": "SHIELD_MODE",
+    "halfKelly": 0,
+    "kellyF": 0,
+    "reason": "Shield Mode — capital preserved"
+  }
+}

@@ -223,6 +223,21 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
       return { error: 'NO_DATA', message: `Angel One failed to return data for ${ticker}. Yahoo fallback disabled.` };
     }
 
+    // 0.5 Try Local DB (for Nepal Stocks)
+    if (ticker.toUpperCase().endsWith('.NP')) {
+      const { fetchNepseOHLCV } = await import('./adapters/nepseAdapter.js').catch(() => ({ fetchNepseOHLCV: null }));
+      if (fetchNepseOHLCV) {
+        const nepseData = await fetchNepseOHLCV(symbol, bars);
+        if (nepseData && nepseData.length > 0) {
+          if (nepseData.length < 50) return { error: 'INSUFFICIENT_DATA', message: `Not enough bars for ${ticker}`, count: nepseData.length };
+          const finalData = { symbol: ticker, bars: nepseData };
+          ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+          return finalData;
+        }
+      }
+      return { error: 'NO_DATA', message: `Local DB has no data for ${ticker}. Background worker needs to sync.` };
+    }
+
     // 1. Try Binance API Next (for crypto)
     const binanceData = await fetchBinanceOHLCV(ticker, '1d', bars);
     if (binanceData && binanceData.length > 0) {
@@ -269,6 +284,25 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
     // 0. Try Angel One (Indian Indices) - Sequential execution via internal queue to strictly respect 3 req/sec limit
     const originalUpper = symbol.toUpperCase().replace(/\s+/g, '');
     const isIndian = ['NIFTY', 'BANKNIFTY', 'NIFTY50'].includes(originalUpper) || originalUpper.endsWith('.NS') || originalUpper.endsWith('.BO');
+    // 0.5 Try Local DB (for Nepal Stocks)
+    if (ticker.toUpperCase().endsWith('.NP')) {
+      const { fetchNepseOHLCV } = await import('./adapters/nepseAdapter.js').catch(() => ({ fetchNepseOHLCV: null }));
+      if (fetchNepseOHLCV) {
+        const nepseData = await fetchNepseOHLCV(symbol, bars);
+        if (nepseData && nepseData.length >= 50) {
+          // Nepal only supports EOD (1D) data for now, so we approximate lower TFs using 1D
+          const finalData = { symbol: ticker, timeframes: { '15m': nepseData, '1h': nepseData, '1d': nepseData } };
+          ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
+          return finalData;
+        }
+      }
+      return { 
+        error: 'UNSUPPORTED_REGION', 
+        message: `Local DB has no data for ${ticker}. Background worker needs to sync.`,
+        status: 'standby'
+      };
+    }
+
     if (isIndian) {
        const angel15m = await fetchAngelOneOHLCV(symbol, bars, 'FIFTEEN_MINUTE').catch(() => null);
        const angel1h  = await fetchAngelOneOHLCV(symbol, bars, 'ONE_HOUR').catch(() => null);

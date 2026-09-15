@@ -16,8 +16,8 @@ export default function PromptInputBar({ onSend, disabled }) {
   const dropdownRef = useRef(null);
   const langDropdownRef = useRef(null);
 
-  const MARKETS = ['Crypto', 'United States', 'India', 'United Kingdom', 'Japan', 'Europe', 'Australia', 'Hong Kong', 'South Korea', 'Canada', 'Brazil', 'Singapore', 'Forex'];
-  const LANGUAGES = ['English', 'Hindi', 'Japanese', 'Spanish', 'Portuguese', 'Arabic', 'Korean', 'French', 'German'];
+  const MARKETS = ['Crypto', 'United States', 'India', 'United Kingdom', 'Japan', 'Europe', 'Australia', 'Hong Kong', 'South Korea', 'Canada', 'Brazil', 'Singapore', 'Forex', 'Nepal'];
+  const LANGUAGES = ['English', 'Hindi', 'Japanese', 'Spanish', 'Portuguese', 'Arabic', 'Korean', 'French', 'German', 'Nepali'];
 
   const MARKET_SHORT_NAMES = {
     'Crypto': 'Crypto',
@@ -32,7 +32,8 @@ export default function PromptInputBar({ onSend, disabled }) {
     'Canada': 'CA',
     'Brazil': 'BR',
     'Singapore': 'SG',
-    'Forex': 'Forex'
+    'Forex': 'Forex',
+    'Nepal': 'NP'
   };
 
   useEffect(() => {
@@ -74,6 +75,8 @@ export default function PromptInputBar({ onSend, disabled }) {
     activeTickers = activeTickers.filter(t => t.endsWith('.SA'));
   } else if (market === 'Singapore') {
     activeTickers = activeTickers.filter(t => t.endsWith('.SI'));
+  } else if (market === 'Nepal') {
+    activeTickers = activeTickers.filter(t => t.endsWith('.NP'));
   } else if (market === 'Forex') {
     activeTickers = activeTickers.filter(t => t.endsWith('=X'));
   } else if (market === 'United States') {

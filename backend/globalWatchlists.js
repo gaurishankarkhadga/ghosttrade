@@ -121,6 +121,10 @@ export const WATCHLIST_FOREX = [
   'USDCHF=X', 'NZDUSD=X', 'EURGBP=X', 'USDINR=X', 'GBPJPY=X',
 ];
 
+export const WATCHLIST_NEPAL = [
+  'NABIL.NP', 'CIT.NP', 'NTC.NP', 'CBBL.NP', 'GBIME.NP', 'HIDCL.NP', 'API.NP', 'UPPER.NP'
+];
+
 // =====================================================
 // REGION METADATA — Market hours, timezone, broker
 // =====================================================
@@ -138,6 +142,7 @@ export const MARKET_REGIONS = {
   BRAZIL:    { name: 'Brazil',        timezone: 'America/Sao_Paulo',open: '10:00', close: '17:00', is24h: false, broker: 'IBKR',     watchlist: WATCHLIST_BRAZIL },
   SINGAPORE: { name: 'Singapore',     timezone: 'Asia/Singapore',   open: '09:00', close: '17:00', is24h: false, broker: 'IBKR',     watchlist: WATCHLIST_SINGAPORE },
   FOREX:     { name: 'Forex',         timezone: 'UTC',              open: '00:00', close: '23:59', is24h: true,  broker: 'IBKR',     watchlist: WATCHLIST_FOREX },
+  NEPAL:     { name: 'Nepal',         timezone: 'Asia/Kathmandu',   open: '11:00', close: '15:00', is24h: false, broker: 'LOCAL_DB', watchlist: WATCHLIST_NEPAL },
 };
 
 /**

@@ -26,6 +26,7 @@
     "mongodb": "^6.12.0",
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.14",
+    "puppeteer": "^25.11.0",
     "smartapi-javascript": "^1.0.27",
     "speakeasy": "^2.0.0",
     "totp-generator": "^0.0.14",
