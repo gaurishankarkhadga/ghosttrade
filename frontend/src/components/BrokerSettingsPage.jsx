@@ -55,19 +55,19 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect, onLockC
   const handleConnectClick = () => {
     if (isConnected) return;
     setIsEditing(!isEditing);
-    alert("it will enable in 15days");
+    toast.info("it will enable in 15days");
   };
 
   const handleConnectSubmit = async (e) => {
     e.preventDefault();
     if (brokerKey === 'ANGEL_ONE') {
       if (!clientCode || !password || !totpSecret) {
-        alert('Client ID, Password, and TOTP Secret are required for Angel One.');
+        toast.error('Client ID, Password, and TOTP Secret are required for Angel One.');
         return;
       }
     } else {
       if (!apiKey || !apiSecret) {
-        alert('API Key and Secret are required.');
+        toast.error('API Key and Secret are required.');
         return;
       }
     }
@@ -95,11 +95,11 @@ function BrokerCard({ brokerKey, isConnected, connectedAt, onDisconnect, onLockC
         setApiSecret('');
         await fetchBrokerStatus();
       } else {
-        alert(data.error || 'Failed to connect broker');
+        toast.error(data.error || 'Failed to connect broker');
       }
     } catch (err) {
       console.error('Connection failed:', err);
-      alert('Network error while connecting');
+      toast.error('Network error while connecting');
     } finally {
       setIsSubmitting(false);
     }
@@ -197,7 +197,7 @@ export default function BrokerSettingsPage() {
                   className={`mode-btn ${isActive ? 'active' : ''} ${!hasBroker && m.requires ? 'disabled' : ''}`}
                   onClick={() => {
                     if (hasBroker) setExecutionMode(m.key);
-                    else alert(`Please connect ${m.requires} below to enable ${m.label}.`);
+                    else toast.warning(`Please connect ${m.requires} below to enable ${m.label}.`);
                   }}
                   style={isActive ? { borderColor: m.color, boxShadow: `0 0 20px ${m.color}22`, background: `${m.color}0a` } : {}}
                 >
