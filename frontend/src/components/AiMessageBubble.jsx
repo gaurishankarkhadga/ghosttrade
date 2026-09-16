@@ -163,7 +163,6 @@ function useStreamSmoother(rawContent, skipAnimation = false) {
         
         setDisplayedContent(rawContent.slice(0, currentIndex + charsToAdd));
         currentIndex += charsToAdd;
-        window.dispatchEvent(new Event('chat-scroll'));
       } else {
         clearInterval(interval);
       }
@@ -230,7 +229,6 @@ function useControlledTypewriter(text, isActiveStep, isPastStep, skipAnimation, 
         charsToAdd = Math.min(charsToAdd, 3); 
         
         const nextContent = text.slice(0, current.length + charsToAdd);
-        window.dispatchEvent(new Event('chat-scroll'));
         
         if (nextContent === text) {
           clearInterval(interval);
@@ -298,14 +296,13 @@ const TradeExecutionCard = ({
   useEffect(() => {
     if (!isNewMessage) return;
     let timer;
-    const scroll = () => window.dispatchEvent(new Event('chat-scroll'));
     
-    if (step === 1) timer = setTimeout(() => { setStep(2); scroll(); }, 400); // Wait for headers
-    else if (step === 3) timer = setTimeout(() => { setStep(4); scroll(); }, 800); // Wait for gauges
-    else if (step === 4) timer = setTimeout(() => { setStep(5); scroll(); }, 300); // Wait for concept pill
-    else if (step === 6) timer = setTimeout(() => { setStep(7); scroll(); }, 400); // Wait for RR visualizer
-    else if (step === 7) timer = setTimeout(() => { setStep(8); scroll(); }, 600); // Wait for score card
-    else if (step === 9) timer = setTimeout(() => { setStep(10); scroll(); }, 300); // Wait for actions
+    if (step === 1) timer = setTimeout(() => { setStep(2); }, 400); // Wait for headers
+    else if (step === 3) timer = setTimeout(() => { setStep(4); }, 800); // Wait for gauges
+    else if (step === 4) timer = setTimeout(() => { setStep(5); }, 300); // Wait for concept pill
+    else if (step === 6) timer = setTimeout(() => { setStep(7); }, 400); // Wait for RR visualizer
+    else if (step === 7) timer = setTimeout(() => { setStep(8); }, 600); // Wait for score card
+    else if (step === 9) timer = setTimeout(() => { setStep(10); }, 300); // Wait for actions
     
     return () => clearTimeout(timer);
   }, [step, isNewMessage]);
@@ -849,8 +846,8 @@ export default function AiMessageBubble({ message }) {
   return (
     <div className={`message-wrapper ai ${isFullWidth ? 'full-width' : ''}`}>
       <div className="message-content">
-        {isSimpleMode && message.tradeData ? (
-           <LearningModeBubble tradeData={message.tradeData} content={smoothedContent} />
+        {isSimpleMode ? (
+           <LearningModeBubble tradeData={message.tradeData} content={smoothedContent} isGenerating={isStreaming} />
         ) : (
           <>
             {smoothedContent && message.uiComponent !== 'DEEP_SCAN_RESULTS' && (

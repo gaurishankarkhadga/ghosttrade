@@ -65,19 +65,20 @@ function DynamicThinkingIndicator() {
 export default function AiChatInterface() {
   const { chatHistory, isThinking, sendPrompt, assets, clearChat } = useGhostStore();
   const chatEndRef = useRef(null);
+  const lastMessageCount = useRef(0);
 
   // Auto-scroll to the bottom when a new message arrives or when text is streaming
   useEffect(() => {
     const scrollToBottom = () => {
       if (chatEndRef.current) {
-        // Use 'auto' instead of 'smooth' to prevent jittery queued animations during rapid stream updates
-        chatEndRef.current.scrollIntoView({ behavior: 'auto' });
+        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     };
     
-    // Scroll whenever the dependency array changes (e.g. new message added)
-    if (chatEndRef.current) {
+    // Only auto-scroll on brand new messages, not during every rapid stream tick
+    if (chatEndRef.current && chatHistory.length > lastMessageCount.current) {
        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+       lastMessageCount.current = chatHistory.length;
     }
 
     window.addEventListener('chat-scroll', scrollToBottom);

@@ -1,0 +1,136 @@
+.lm-sp-container {
+  width: 100%;
+  padding: 24px 0;
+  animation: lm-sp-fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.lm-sp-progress-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.lm-sp-line-bg {
+  position: absolute;
+  top: 15px;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  background-color: rgba(255, 255, 255, 0.15);
+  z-index: 1;
+}
+
+.lm-sp-line-fill {
+  position: absolute;
+  top: 15px;
+  left: 16px;
+  height: 2px;
+  background-color: #facc15;
+  z-index: 2;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: lm-sp-draw-line 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: left;
+}
+
+.lm-sp-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 3;
+  flex: 1;
+}
+
+.lm-sp-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #090b10;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition: all 0.3s ease;
+}
+
+.lm-sp-circle.lm-sp-completed {
+  background-color: #facc15;
+  border-color: #facc15;
+  color: #090b10;
+}
+
+.lm-sp-circle.lm-sp-active {
+  border-color: #facc15;
+  color: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.2);
+  animation: lm-sp-pulse 2s infinite;
+}
+
+.lm-sp-label {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-family: var(--font-sans, sans-serif);
+  text-align: center;
+}
+
+.lm-sp-active + .lm-sp-label, .lm-sp-completed + .lm-sp-label {
+  color: #f8fafc;
+}
+
+@keyframes lm-sp-fadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lm-sp-draw-line {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes lm-sp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(250, 204, 21, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+  }
+}
+
+@media (max-width: 768px) {
+  .lm-sp-label {
+    display: none;
+  }
+  
+  .lm-sp-circle {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .lm-sp-line-bg, .lm-sp-line-fill {
+    top: 11px;
+    left: 12px;
+    right: 12px;
+  }
+  
+  .lm-sp-icon {
+    width: 12px;
+    height: 12px;
+  }
+}

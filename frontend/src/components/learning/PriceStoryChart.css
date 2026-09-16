@@ -1,0 +1,92 @@
+.lm-psc-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.lm-psc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lm-psc-icon {
+  color: #facc15;
+}
+
+.lm-psc-title {
+  color: #facc15;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lm-psc-subtitle {
+  color: #94a3b8;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.lm-psc-container {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  height: 260px;
+  width: 100%;
+  padding: 1rem 0;
+  animation: lm-psc-fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.lm-psc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.lm-psc-tooltip {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
+
+.lm-psc-tooltip-time {
+  color: #94a3b8;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.lm-psc-tooltip-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+@keyframes lm-psc-fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .lm-psc-container {
+    height: 200px;
+  }
+}
