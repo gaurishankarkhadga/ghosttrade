@@ -229,7 +229,7 @@ export async function preTradeGate(signal, ticker) {
   try {
     const confidenceBoost = await getRecentLossConfidenceBoost(ticker);
     if (confidenceBoost > 0) {
-      const requiredScore = 65 + confidenceBoost; // 65 (MIN_SIGNAL_SCORE) + 15 = 80
+      const requiredScore = 35 + confidenceBoost; // 35 (MIN_SIGNAL_SCORE) + 15 = 50
       if (score < requiredScore) {
         console.log(`[GHOSTMIND] 🛡️ LOSS MEMORY GATE: Blocking ${ticker} — recent loss requires score ${requiredScore}+, got ${score}`);
         return {

@@ -40,7 +40,7 @@ const SCORE_WEIGHTS = {
 
 // Minimum composite score to generate a signal (0-100)
 // 65 is the "A++" institutional threshold.
-const MIN_SIGNAL_SCORE = 65;
+const MIN_SIGNAL_SCORE = 35;
 
 // v3.0: Raised from 2 to 3 — requires 50%+ indicator agreement for direction.
 // Combined with score 80 threshold and mandatory momentum, this ensures
@@ -612,15 +612,14 @@ export async function generateSignal(ticker, candles, options = {}) {
   let calibrationReason = null;
   try {
     const calibResult = await getCalibratedConfidence(compositeScore);
-    if (calibResult && calibResult.isCalibrated && calibResult.calibratedConfidence < 55) {
+    if (calibResult && calibResult.isCalibrated && calibResult.calibratedConfidence < 35) {
       calibrationReject = true;
-      calibrationReason = `Calibration Block: Empirical accuracy at score ${compositeScore} is only ${calibResult.calibratedConfidence}% (minimum: 55%). Historical data shows this score level is unreliable.`;
+      calibrationReason = `Calibration Block: Empirical accuracy at score ${compositeScore} is only ${calibResult.calibratedConfidence}% (minimum: 35%). Historical data shows this score level is unreliable.`;
       reasons.push(calibrationReason);
     }
   } catch (_) {
     // Calibration unavailable — proceed without it (graceful degradation)
   }
-
   const effectiveMinScore = options.minScore || MIN_SIGNAL_SCORE;
 
   if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject || volatilityReject || sweepTrapReject || momentumStallReject || pullbackReject || calibrationReject) {

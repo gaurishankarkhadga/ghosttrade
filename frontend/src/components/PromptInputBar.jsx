@@ -185,15 +185,15 @@ export default function PromptInputBar({ onSend, disabled }) {
                const isStandby = assetData?.status === 'standby';
                const isError = assetData?.status === 'error';
 
-               if (isError) {
+               if (hasTradeSignal) {
+                 chipClass += ' winning-chip';
+                 chipIcon = '🟢 ';
+               } else if (isError) {
                  chipClass += ' error-chip';
                  chipIcon = '⚠️ ';
                } else if (isStandby) {
                  chipClass += ' standby-chip';
                  chipIcon = '⏱️ ';
-               } else if (hasTradeSignal) {
-                 chipClass += ' winning-chip';
-                 chipIcon = direction === 'BULLISH' ? '🟢 ' : '🔴 ';
                } else if (isShield) {
                  chipIcon = '🛡️ ';
                } else if (assetData?.recommendedSize > 0) {

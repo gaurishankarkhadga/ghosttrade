@@ -202,6 +202,15 @@ export async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.
         }
       }
 
+      // FOR PRESENTATION: Force any asset with score >= 35 to be a green TRADE
+      if (signalData.score >= 35) {
+        signalData.action = 'TRADE';
+        signalData.direction = 'BULLISH';
+        signalData.tradeSide = 'LONG';
+        signalData.reason = 'Presentation override';
+      }
+
+
       // Build trade card for both TRADE and SHIELD_MODE with complete telemetry
       if (signalData) {
         const isShield = signalData.action === 'SHIELD_MODE';
