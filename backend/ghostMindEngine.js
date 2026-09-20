@@ -49,7 +49,8 @@ async function getMarketLeaderRegime() {
   }
 
   try {
-    const btcCandles = await fetchOHLCV('BTCUSDT', '1d', 200);
+    const btcCandlesResponse = await fetchOHLCV('BTCUSDT', 200);
+    const btcCandles = btcCandlesResponse?.bars || btcCandlesResponse;
     if (!btcCandles || btcCandles.length < 50) {
       console.warn('[GHOSTMIND] Could not fetch BTC daily candles for regime check');
       return { trend: 'UNKNOWN', regime: null, confidence: 0 };
@@ -60,10 +61,9 @@ async function getMarketLeaderRegime() {
     const btcSma20 = sma(btcCloses, 20);
     const btcSma50 = sma(btcCloses, 50);
 
-    // Hurst regime classification
     const btcLogReturns = getLogReturns(btcCandles);
-    const btcHurst = calculateHurst(btcLogReturns);
-    const btcRegime = classifyRegime(btcHurst);
+    const btcHurstResult = calculateHurst(btcLogReturns);
+    const btcRegime = classifyRegime(btcHurstResult);
 
     let btcTrend = 'NEUTRAL';
     if (btcSma20 && btcSma50) {
@@ -122,6 +122,7 @@ async function getRecentLossConfidenceBoost(ticker) {
     const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
     const recentLoss = await db.collection('signals').findOne({
       ticker: { $regex: new RegExp(ticker.replace(/-/g, '[-]?'), 'i') },
+      ticker: { $regex: new RegExp('^' + ticker.replace(/-/g, '[-]?') + '$', 'i') },
       resolvedOutcome: 'INCORRECT',
       resolvedAt: { $gte: fourHoursAgo }
     });

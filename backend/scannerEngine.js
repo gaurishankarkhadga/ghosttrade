@@ -211,6 +211,7 @@ export async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.
       }
 
 
+
       // Build trade card for both TRADE and SHIELD_MODE with complete telemetry
       if (signalData) {
         const isShield = signalData.action === 'SHIELD_MODE';

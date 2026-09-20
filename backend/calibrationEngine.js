@@ -172,6 +172,7 @@ export async function generateCalibrationReport(days = 90) {
 
 let cachedCurve = null;
 let curveCacheTimestamp = 0;
+let cachedSignalCount = 0;
 const CURVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -185,18 +186,15 @@ export async function getCalibratedConfidence(rawConfidence) {
   try {
     const now = Date.now();
     let signals;
+    let cachedSignalCount;
     if (!cachedCurve || now - curveCacheTimestamp > CURVE_CACHE_TTL_MS) {
-      const signals = await fetchResolvedSignals(365); // Use max history for calibration
-      signals = await fetchResolvedSignals(365); // Use max history for calibration
-      cachedCurve = buildCalibrationCurve(signals);
-      curveCacheTimestamp = now;
-    } else {
-      // For the early data penalty check, we need the count. In a real system we'd cache the count too.
-      // Fetching here for simplicity, but it's fast on a small collection.
       signals = await fetchResolvedSignals(365);
+      cachedCurve = buildCalibrationCurve(signals);
+      cachedSignalCount = signals.length;
+      curveCacheTimestamp = now;
     }
     
-    const totalResolvedSignals = signals.length;
+    const totalResolvedSignals = cachedSignalCount || 0;
     
     // GhostMind v2: Early Stage Penalty
     // If the system hasn't seen enough live trades to be confident in itself, penalize confidence.

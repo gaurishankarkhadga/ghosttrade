@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Shield, Zap, CheckCircle } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import PromptInputBar from './PromptInputBar';
 import AiMessageBubble from './AiMessageBubble';
@@ -63,9 +63,35 @@ function DynamicThinkingIndicator() {
 }
 
 export default function AiChatInterface() {
-  const { chatHistory, isThinking, sendPrompt, assets, clearChat } = useGhostStore();
+  const { chatHistory, isThinking, sendPrompt, assets, clearChat, executionMode, executeTrade } = useGhostStore();
   const chatEndRef = useRef(null);
   const lastMessageCount = useRef(0);
+
+  const [executedTradeIds, setExecutedTradeIds] = useState(new Set());
+  
+  const lastMessage = chatHistory[chatHistory.length - 1];
+  const isActiveTrade = lastMessage?.role === 'ai' && lastMessage?.uiComponent === 'TRADE_CARD' && lastMessage?.tradeData && !executedTradeIds.has(lastMessage.id);
+  const tradeData = isActiveTrade ? lastMessage.tradeData : null;
+  const isShield = tradeData?.signalBlocked === true;
+  const sideLower = tradeData?.side ? tradeData.side.toLowerCase() : 'buy';
+  const isLiveMode = executionMode !== 'PAPER';
+
+  const handleFloatingExecute = async () => {
+    if (isShield || !tradeData) return;
+    setExecutedTradeIds(prev => new Set(prev).add(lastMessage.id));
+    await executeTrade({
+      asset: tradeData.asset,
+      side: tradeData.side,
+      entryPrice: tradeData.entryPrice || 0,
+      stopLoss: tradeData.stopLoss || 0,
+      takeProfit: tradeData.takeProfit || 0,
+      riskPercentage: tradeData.riskPercentage || 2.0,
+      kellySize: tradeData.kellySize,
+      pattern: tradeData.pattern || 'AUTO_DETECTED',
+      regime: tradeData.regime || 'DYNAMIC_REGIME',
+      source: tradeData.source || 'AI_AGENT'
+    });
+  };
 
   // Auto-scroll to the bottom when a new message arrives or when text is streaming
   useEffect(() => {
@@ -75,10 +101,14 @@ export default function AiChatInterface() {
       }
     };
     
-    // Only auto-scroll on brand new messages, not during every rapid stream tick
-    if (chatEndRef.current && chatHistory.length > lastMessageCount.current) {
-       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-       lastMessageCount.current = chatHistory.length;
+    const lastMessage = chatHistory[chatHistory.length - 1];
+    const isStreaming = lastMessage?.isGenerating;
+    
+    if (chatEndRef.current) {
+      if (chatHistory.length > lastMessageCount.current || isStreaming) {
+         chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+         lastMessageCount.current = chatHistory.length;
+      }
     }
 
     window.addEventListener('chat-scroll', scrollToBottom);
@@ -149,7 +179,68 @@ export default function AiChatInterface() {
       {/* Solid Apple-Grade Dock Area (Only when chatting) */}
       {chatHistory.length > 0 && (
         <div className="chat-dock">
-          <div className="chat-dock-container">
+          <div className="chat-dock-container" style={{ position: 'relative' }}>
+            
+            {/* Floating Action Button */}
+            {isActiveTrade && (
+              <div className="ghosttrade-seq-step-anim-down" style={{ 
+                position: 'absolute', 
+                bottom: '100%', 
+                left: 0, 
+                right: 0, 
+                marginBottom: '14px',
+                display: 'flex', 
+                justifyContent: 'center',
+                zIndex: 50,
+                pointerEvents: 'none'
+              }}>
+                <button 
+                  onClick={handleFloatingExecute}
+                  disabled={isShield}
+                  style={{ 
+                    pointerEvents: 'auto',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px',
+                    padding: '10px 24px', 
+                    borderRadius: '30px', 
+                    fontSize: '12px', 
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    color: 'var(--text-primary)',
+                    background: 'var(--surface-strong)',
+                    border: '1px solid var(--border-strong)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                    cursor: isShield ? 'not-allowed' : 'pointer',
+                    transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s',
+                    whiteSpace: 'nowrap',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)'
+                  }}
+                  onMouseEnter={(e) => { 
+                    if(!isShield) {
+                      e.currentTarget.style.transform = 'scale(1.04)';
+                      e.currentTarget.style.background = 'var(--color-ghost-obsidian)';
+                    }
+                  }}
+                  onMouseLeave={(e) => { 
+                    if(!isShield) {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.background = 'var(--surface-strong)';
+                    }
+                  }}
+                >
+                  {isShield 
+                    ? <><Shield size={16} style={{ color: 'var(--text-muted)' }} /> Shield Mode</>
+                    : isLiveMode
+                      ? <><Zap size={16} style={{ color: 'var(--text-muted)' }} /> Execute Live</>
+                      : <><CheckCircle size={16} style={{ color: 'var(--text-muted)' }} /> Keep It</>
+                  }
+                </button>
+              </div>
+            )}
+
             <PromptInputBar onSend={sendPrompt} disabled={isThinking} />
           </div>
         </div>

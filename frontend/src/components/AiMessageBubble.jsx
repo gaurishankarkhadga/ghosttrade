@@ -277,7 +277,7 @@ const TradeExecutionCard = ({
   isParentStreaming,
   isNewMessage
 }) => {
-  const isShield = kellySize === 0 || kellySize === '0' || kellySize === '0.00' || signalBlocked === true;
+  const isShield = signalBlocked === true;
   const [isExecuted, setIsExecuted] = useState(false);
   
   const [step, setStep] = useState(0);
@@ -314,11 +314,15 @@ const TradeExecutionCard = ({
   const sideLower = side ? side.toLowerCase() : 'buy';
   const isLong = side === 'LONG';
   
-  const safeEntryPrice = entryPrice || (typeof price === 'string' ? parseFloat(price.replace(/,/g, '')) : price) || 0;
-  const safeStopLoss = stopLoss || (isLong ? safeEntryPrice * 0.98 : safeEntryPrice * 1.02);
-  const safeTakeProfit = takeProfit || (isLong ? safeEntryPrice * 1.04 : safeEntryPrice * 0.96);
+  const parsedPrice = typeof price === 'string' ? parseFloat(price.replace(/,/g, '')) : Number(price);
+  const safeEntryPrice = (!isNaN(entryPrice) && entryPrice > 0) ? entryPrice : (!isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : 0);
+  const safeStopLoss = stopLoss || (safeEntryPrice > 0 ? (isLong ? safeEntryPrice * 0.98 : safeEntryPrice * 1.02) : 0);
+  const safeTakeProfit = takeProfit || (safeEntryPrice > 0 ? (isLong ? safeEntryPrice * 1.04 : safeEntryPrice * 0.96) : 0);
   
-  const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '0.00';
+  const formatPrice = (p) => {
+    const n = Number(p);
+    return (!isNaN(n) && n > 0) ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '0.00';
+  };
   const fEntry = formatPrice(safeEntryPrice);
   const fStop = formatPrice(safeStopLoss);
   const fTarget = formatPrice(safeTakeProfit);
@@ -564,23 +568,6 @@ const TradeExecutionCard = ({
             </div>
           )}
           
-          {step >= 9 && (
-            <div className="pro-actions ghosttrade-seq-step-anim-down" style={{ marginTop: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-               <button 
-                className={`trade-btn ${sideLower} pulse`} 
-                onClick={handleExecute}
-                disabled={isShield}
-                style={{ opacity: isShield ? 0.4 : 1, cursor: isShield ? 'not-allowed' : 'pointer', flex: 1, margin: 0 }}
-               >
-                {isShield 
-                  ? <><Shield size={16} className="btn-icon"/> Shield Mode Active (Execution Blocked)</>
-                  : isLiveMode
-                    ? <><Zap size={16} className="btn-icon"/> Confirm & Execute Trade (Dual-Verification)</>
-                    : <><CheckCircle size={16} className="btn-icon"/> KEEP IT</>
-                }
-               </button>
-            </div>
-          )}
         </div>
       )}
     </div>

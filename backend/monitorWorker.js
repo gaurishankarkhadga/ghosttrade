@@ -1,5 +1,4 @@
 import { getDb, closeDb } from './mongoConfig.js';
-import { fetchLivePrice, fetchOHLCV } from './dataFetcher.js';
 import { fetchLivePrice, fetchOHLCV, fetchMultiTimeframeOHLCV } from './dataFetcher.js';
 import { ObjectId } from 'mongodb';
 import { executionManager } from './executionEngine.js';
@@ -32,6 +31,35 @@ async function checkOpenTrades() {
       }
 
       // ═══════════════════════════════════════════════════════
+      // FEATURE 0: BLACK SWAN LAMBORGHINI SAVER (Auto-Cutoff)
+      // Instant execution kill-switch if a massive dump happens
+      // ═══════════════════════════════════════════════════════
+      try {
+        const isLong = (trade.side === 'LONG' || trade.side === 'BUY');
+        if (isLong) {
+          const multiData = await fetchMultiTimeframeOHLCV(assetToTrack, 2);
+          if (multiData && multiData.timeframes && multiData.timeframes['15m']) {
+            const candles15m = multiData.timeframes['15m'];
+            const last15m = candles15m[candles15m.length - 1];
+            // If asset dumped > 2.5% in just 15 minutes, this is a flash crash
+            const dumpPct = ((last15m.high - currentPrice) / last15m.high) * 100;
+            if (dumpPct > 2.5) {
+              console.log(`[🚨 LAMBO SAVER] FLASH CRASH DETECTED on ${assetToTrack} (-${dumpPct.toFixed(2)}%). AUTO-CUTTING OFF TRADE!`);
+              // Force immediate liquidation regardless of SL
+              trade.forceLamboCutoff = true; 
+              trade.stopLoss = currentPrice; 
+              await db.collection('paper_trades').updateOne(
+                { _id: trade._id },
+                { $set: { stopLoss: currentPrice, closeReason: 'BLACK_SWAN_AUTO_CUTOFF' } }
+              );
+            }
+          }
+        }
+      } catch (err) {
+        // Silently continue if fetch fails
+      }
+
+      // ═══════════════════════════════════════════════════════
       // FEATURE 1: Early Warning Cut at -0.3R
       // ═══════════════════════════════════════════════════════
       if (!trade.thesisChecked && !trade.breakevenLocked && trade.entryPrice && trade.stopLoss) {
@@ -49,8 +77,6 @@ async function checkOpenTrades() {
 
         if (hitWarning && riskDist > 0) {
           try {
-            const candles = await fetchOHLCV(assetToTrack, '1h', 1);
-            if (candles && candles.length > 0) {
             const multiData = await fetchMultiTimeframeOHLCV(assetToTrack, 5);
             if (multiData && multiData.timeframes && multiData.timeframes['1h'] && multiData.timeframes['1h'].length > 0) {
               const candles = multiData.timeframes['1h'];
@@ -336,9 +362,9 @@ async function checkOpenTrades() {
           // 1. It's a catastrophic drop
           // 2. The 15m candle confirmed the break
           // 3. We are already at breakeven (don't risk profits on wicks)
-          if (isCatastrophic || candleClosedBeyond || trade.breakevenLocked) {
+          if (isCatastrophic || candleClosedBeyond || trade.breakevenLocked || trade.forceLamboCutoff) {
             hitSL = true;
-            reason = trade.breakevenLocked ? 'BREAKEVEN_EXIT' : (isCatastrophic ? 'CATASTROPHIC_STOP' : 'CLOSE_BASED_STOP');
+            reason = trade.forceLamboCutoff ? 'BLACK_SWAN_AUTO_CUTOFF' : (trade.breakevenLocked ? 'BREAKEVEN_EXIT' : (isCatastrophic ? 'CATASTROPHIC_STOP' : 'CLOSE_BASED_STOP'));
           }
         } else if (trade.takeProfit && currentPrice >= trade.takeProfit) {
           hitTP = true;
@@ -387,6 +413,9 @@ async function checkOpenTrades() {
         const frictionPct = 0.10;
         let pnlPct = remainingExitPnlPct;
         if (trade.partialTaken) {
+        if (trade.tier2Taken) {
+          pnlPct = (trade.partialPnlPct * 0.5) + (trade.tier2PnlPct * 0.25) + (remainingExitPnlPct * 0.25);
+        } else if (trade.partialTaken) {
           pnlPct = (trade.partialPnlPct * 0.5) + (remainingExitPnlPct * 0.5);
         }
         pnlPct = Math.max(-100, pnlPct - frictionPct);

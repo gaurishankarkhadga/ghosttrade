@@ -84,7 +84,7 @@ export default function PromptInputBar({ onSend, disabled }) {
   }
 
   // Show ALL assets, sorted by profitability (TRADE signals first), then by score (descending)
-  let displayTickers = activeTickers.sort((a, b) => {
+  let displayTickers = [...activeTickers].sort((a, b) => {
     const assetA = assets[a]?.signalData;
     const assetB = assets[b]?.signalData;
     

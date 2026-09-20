@@ -132,7 +132,7 @@ export function startWebSocketPipeline(tickers = []) {
             
             // V8 Garbage Collector - Ring Buffer for AggTrades
             // Runs every 10 seconds to forcefully evict trades older than 15 minutes, preventing RAM overflow
-            setInterval(() => {
+            const gcInterval = setInterval(() => {
                 const cutoff = Date.now() - (15 * 60 * 1000); // 15 mins
                 for (const ticker of Object.keys(liveMemoryState.aggTrades)) {
                     const trades = liveMemoryState.aggTrades[ticker];
@@ -150,6 +150,7 @@ export function startWebSocketPipeline(tickers = []) {
 
             ws.on('close', () => {
                 liveMemoryState.status = 'DISCONNECTED';
+                clearInterval(gcInterval);
                 ws = null;
                 
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -157,7 +158,6 @@ export function startWebSocketPipeline(tickers = []) {
                     console.log(`[WEBSOCKET] Connection dropped. Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in 5s...`);
                     setTimeout(() => startWebSocketPipeline(tickers), 5000);
                 } else {
-                    console.warn(`[WEBSOCKET] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}). Remaining in REST/Yahoo Fallback Mode.`);
                     console.warn(`[WEBSOCKET] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}). Remaining in REST Polling Mode.`);
                 }
             });

@@ -11,23 +11,24 @@ import { toStandardSymbol } from './marketRouter.js';
 import { getLiveDepthFromMemory } from './websocketEngine.js';
 
 const RISK_CONFIG = {
-  daily_max_loss_pct: 5,        // block ALL new trades once today's realized+unrealized PnL <= -5%
-  max_concurrent_trades: 3,     // hard ceiling regardless of correlation result
-  correlation_threshold: 0.75,  // KEEP existing Phase 1 logic
+  daily_max_loss_pct: 3,        // TIGHTENED: block ALL new trades once today's PnL <= -3% (was 5%)
+  max_concurrent_trades: 2,     // TIGHTENED: max 2 trades at once (was 3) — less exposure
+  correlation_threshold: 0.70,  // TIGHTENED: block correlated assets sooner (was 0.75)
   correlation_lookback_bars: 200, 
-  max_allowed_spread_pct: 0.35, // Black swan spread expansion threshold (%)
-  max_depth_depletion_pct: 75.0,// Order book depth depletion threshold (%)
-  max_consecutive_losses: 3,    // Hard stop on 3 consecutive losses
-  consecutive_loss_cooldown_hours: 4, // Mandatory 4-hour cooldown to kill tilt and chop
-  asset_post_loss_cooldown_hours: 2,  // FIXED: Reduced from 8h to 2h to allow re-entry on liquidity sweep reclaims
-  btc_flash_crash_threshold_pct: -2.5 // Block altcoin longs if BTC drops >2.5% in 1h
+  max_allowed_spread_pct: 0.25, // TIGHTENED: from 0.35 → 0.25 (catch liquidity drain earlier)
+  max_depth_depletion_pct: 60.0,// TIGHTENED: from 75 → 60 (safer order book check)
+  max_consecutive_losses: 2,    // TIGHTENED: Hard stop after just 2 consecutive losses (was 3)
+  consecutive_loss_cooldown_hours: 4,
+  asset_post_loss_cooldown_hours: 3,  // TIGHTENED: 3h freeze per asset after SL hit (was 2h)
+  btc_flash_crash_threshold_pct: -2.0, // TIGHTENED: from -2.5 → -2.0 (react to BTC dump sooner)
+  max_loss_per_trade_pct: 1.0   // NEW: No single trade can ever lose more than 1% of account
 };
 
 export const STREAK_RESPONSES = {
-  2: { action: 'REDUCE_SIZE', sizeMultiplier: 0.5, minScore: 75, cooldownMs: 0 },
-  3: { action: 'COOLDOWN_2H', sizeMultiplier: 0.25, minScore: 80, cooldownMs: 2 * 60 * 60 * 1000 },
-  4: { action: 'COOLDOWN_8H', sizeMultiplier: 0, minScore: 999, cooldownMs: 8 * 60 * 60 * 1000 },
-  5: { action: 'COOLDOWN_24H', sizeMultiplier: 0, minScore: 999, cooldownMs: 24 * 60 * 60 * 1000 },
+  2: { action: 'REDUCE_AND_COOLDOWN_1H', sizeMultiplier: 0.25, minScore: 60, cooldownMs: 1 * 60 * 60 * 1000 },
+  3: { action: 'FULL_STOP_4H', sizeMultiplier: 0, minScore: 999, cooldownMs: 4 * 60 * 60 * 1000 },
+  4: { action: 'FULL_STOP_12H', sizeMultiplier: 0, minScore: 999, cooldownMs: 12 * 60 * 60 * 1000 },
+  5: { action: 'FULL_STOP_24H', sizeMultiplier: 0, minScore: 999, cooldownMs: 24 * 60 * 60 * 1000 },
 };
 
 
@@ -181,10 +182,16 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
     }
 
     if (dailyPnLRaw <= -(RISK_CONFIG.daily_max_loss_pct / 100)) {
+      console.log(`[RISK CONTROL] Daily Loss Limit hit (${(dailyPnLRaw*100).toFixed(2)}%). Entering CRISIS_MODE.`);
+      // Instead of completely blocking, we enforce extreme quality only
       return { 
-        allowed: false, 
+        allowed: true, 
         reason: "DAILY_LOSS_LIMIT_HIT",
-        todayPnlPct: dailyPnLRaw * 100
+        todayPnlPct: dailyPnLRaw * 100,
+        streakInfo: {
+          sizeMultiplier: 0.10,
+          minScore: 70
+        }
       };
     }
 

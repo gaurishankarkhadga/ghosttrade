@@ -22,7 +22,7 @@
 export function computeKelly({ winRate, riskRewardRatio, regime = 'UNKNOWN' }) {
   // Validate inputs — shield if missing or clearly unprofitable
   if (typeof winRate !== 'number' || typeof riskRewardRatio !== 'number' ||
-      winRate <= 0 || winRate >= 1 || riskRewardRatio <= 0) {
+      winRate <= 0 || winRate > 1 || riskRewardRatio <= 0) {
     return {
       action: 'SHIELD_MODE',
       reason: `Invalid Kelly inputs: winRate=${winRate}, RRR=${riskRewardRatio}. Shield Mode active.`,

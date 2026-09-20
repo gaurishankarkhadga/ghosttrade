@@ -1,0 +1,464 @@
+Line 702: level=1 |   try {
+Line 703: level=2 |     if (p3Context.requestIntent === 'DATA_BACKED_CONVERSATION') {
+Line 704: level=2 |       console.log('[PHASE 3] Bypassing intercept for DATA_BACKED_CONVERSATION.');
+Line 705: level=2 |       return;
+Line 706: level=1 |     }
+Line 708: level=2 |     if (fullText.includes('INVALID INPUT')) {
+Line 709: level=2 |       console.log('[PHASE 3] Invalid input detected (not a chart). Aborting intercept.');
+Line 710: level=2 |       return;
+Line 711: level=1 |     }
+Line 713: level=1 |     const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt, userId } = p3Context;
+Line 715: level=1 |     // ═══════════════════════════════════════════════════════
+Line 716: level=1 |     // DETERMINISTIC SIGNAL GENERATOR — Engine decides, not AI
+Line 717: level=1 |     // ═══════════════════════════════════════════════════════
+Line 718: level=1 |     let signal = null;
+Line 719: level=1 |     let trueLivePrice = null;
+Line 721: level=2 |     if (ticker && ticker !== 'UNKNOWN' && p3Context.candles1d && p3Context.candles1d.length >= 50) {
+Line 722: level=2 |       console.log(`[SIGNAL GEN] Running deterministic engine for ${ticker}...`);
+Line 723: level=2 |       
+Line 724: level=2 |       // Institutional Circuit Breaker: Fetch True Live Price for math anchoring and desync detection
+Line 725: level=2 |       trueLivePrice = await fetchLivePrice(ticker);
+Line 726: level=2 |       
+Line 727: level=2 |       // Data Desynchronization Guard
+Line 728: level=2 |       const ohlcvClose = p3Context.candles1d[p3Context.candles1d.length - 1].close;
+Line 729: level=2 |       const priceDrift = trueLivePrice ? Math.abs(trueLivePrice - ohlcvClose) / trueLivePrice : 0;
+Line 730: level=2 |       
+Line 731: level=2 |       // FIXED: Asset-class-aware desync threshold — crypto needs wider tolerance
+Line 732: level=2 |       const isCrypto = ticker.toUpperCase().includes('USD') || ticker.toUpperCase().includes('BTC') || ticker.toUpperCase().includes('ETH');
+Line 733: level=2 |       const DESYNC_THRESHOLD = isCrypto ? 0.015 : 0.005; // 1.5% for crypto, 0.5% for stocks
+Line 735: level=3 |       if (priceDrift > DESYNC_THRESHOLD) {
+Line 736: level=3 |           console.warn(`[CIRCUIT BREAKER] Data desynchronization detected for ${ticker}. Drift: ${(priceDrift*100).toFixed(2)}%. Aborting signal.`);
+Line 737: level=4 |           signal = {
+Line 738: level=4 |               action: 'SHIELD_MODE',
+Line 739: level=4 |               reason: `Data Desynchronization: Market data is stale compared to live price. Drift: ${(priceDrift*100).toFixed(2)}%. Signal aborted.`,
+Line 740: level=4 |               direction: 'NEUTRAL',
+Line 741: level=4 |               score: 0,
+Line 742: level=4 |               currentPrice: trueLivePrice
+Line 743: level=3 |           };
+Line 744: level=3 |       } else {
+Line 745: level=3 |           const ofiSource = flowData?.source || 'CANDLE_APPROXIMATION';
+Line 746: level=4 |           signal = await generateSignal(ticker, p3Context.candles1d, { 
+Line 747: level=4 |               candles15m: tf15m, 
+Line 748: level=4 |               candles1h: tf1h, 
+Line 749: level=4 |               ofiSource,
+Line 750: level=4 |               livePrice: trueLivePrice 
+Line 751: level=3 |           });
+Line 753: level=3 |           // GhostMind v2: Pre-Trade Gate
+Line 754: level=3 |           const gateResult = await preTradeGate(signal, ticker);
+Line 755: level=4 |           if (gateResult.blocked) {
+Line 756: level=4 |             signal.action = 'SHIELD_MODE';
+Line 757: level=4 |             signal.reason = gateResult.reason;
+Line 758: level=5 |             if (gateResult.additionalReasons && gateResult.additionalReasons.length > 0) {
+Line 759: level=5 |                signal.reasons = [...(signal.reasons || []), ...gateResult.additionalReasons];
+Line 760: level=4 |             }
+Line 761: level=3 |           }
+Line 762: level=3 |           
+Line 763: level=2 |       }
+Line 764: level=2 |       
+Line 765: level=2 |       console.log(`[SIGNAL GEN] ${ticker}: action=${signal?.action} direction=${signal?.direction} score=${signal?.score}`);
+Line 766: level=1 |     }
+Line 768: level=1 |     // User requested condition: Execute ONLY if score >= 35
+Line 769: level=1 |     // ═══════════════════════════════════════════════════════
+Line 770: level=1 |     // ADAPTIVE SCORE THRESHOLD — Auto-Learning from Loss Patterns
+Line 771: level=1 |     // System adjusts its own minimum score based on recent performance
+Line 772: level=1 |     // ═══════════════════════════════════════════════════════
+Line 773: level=2 |     if (!signal) {
+Line 774: level=2 |         signal = { score: 0, kelly: {} };
+Line 775: level=2 |         signal = { score: 0, kelly: {}, action: 'SHIELD_MODE', reason: 'No signal generated' };
+Line 776: level=1 |     }
+Line 777: level=1 |     const currentScore = signal.score || 0;
+Line 779: level=1 |     // Auto-learning: Read adaptive threshold from recent trade performance
+Line 780: level=1 |     let adaptiveMinScore = 35; // Base minimum
+Line 781: level=2 |     try {
+Line 782: level=2 |       const db = await getDb();
+Line 783: level=3 |       const recentTrades = await db.collection('paper_trades').find({
+Line 784: level=3 |         status: { $in: ['WIN', 'LOSS', 'CLOSED_TP', 'CLOSED_SL'] }
+Line 785: level=2 |       }).sort({ closedAt: -1 }).limit(20).toArray();
+Line 787: level=3 |       if (recentTrades.length >= 10) {
+Line 788: level=3 |         const wins = recentTrades.filter(t => t.pnl > 0 || t.status === 'WIN' || t.status === 'CLOSED_TP').length;
+Line 789: level=3 |         const winRate = wins / recentTrades.length;
+Line 790: level=3 |         
+Line 791: level=4 |         if (winRate < 0.40) {
+Line 792: level=4 |           adaptiveMinScore = 50; // Bad streak -> be very selective
+Line 793: level=4 |           console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 40% → raising threshold to 50`);
+Line 794: level=4 |         } else if (winRate < 0.50) {
+Line 795: level=4 |           adaptiveMinScore = 42; // Below average -> be more selective
+Line 796: level=4 |           console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 50% → raising threshold to 42`);
+Line 797: level=4 |         } else if (winRate >= 0.65) {
+Line 798: level=4 |           adaptiveMinScore = 30; // Great streak -> capture more trades
+Line 799: level=4 |           console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% >= 65% → lowering threshold to 30`);
+Line 800: level=3 |         }
+Line 802: level=3 |         // Check loss_autopsy for repeated loss patterns → increase threshold further
+Line 803: level=4 |         const recentAutopsies = await db.collection('loss_autopsy').find({
+Line 804: level=4 |           timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24h
+Line 805: level=3 |         }).toArray();
+Line 806: level=3 |         
+Line 807: level=4 |         if (recentAutopsies.length >= 3) {
+Line 808: level=4 |           // Count dominant loss category
+Line 809: level=4 |           const categoryCounts = {};
+Line 810: level=5 |           recentAutopsies.forEach(a => {
+Line 811: level=5 |             categoryCounts[a.category] = (categoryCounts[a.category] || 0) + 1;
+Line 812: level=4 |           });
+Line 813: level=4 |           const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0];
+Line 814: level=5 |           if (topCategory && topCategory[1] >= 3) {
+Line 815: level=5 |             adaptiveMinScore = Math.min(60, adaptiveMinScore + 10); // Repeated same error → go stricter
+Line 816: level=5 |             console.log(`[AUTO-LEARN] Repeated ${topCategory[0]} losses (${topCategory[1]}x in 24h) → threshold raised to ${adaptiveMinScore}`);
+Line 817: level=4 |           }
+Line 818: level=3 |         }
+Line 819: level=2 |       }
+Line 820: level=2 |     } catch (autoLearnErr) {
+Line 821: level=2 |       console.warn('[AUTO-LEARN] Could not read adaptive threshold:', autoLearnErr.message);
+Line 822: level=1 |     }
+Line 824: level=1 |     // TIERED EXECUTION: Score determines trade/shield AND position size multiplier
+Line 825: level=1 |     let scoreTier = 'REJECT';
+Line 826: level=1 |     let scoreSizeMultiplier = 0;
+Line 827: level=1 |     
+Line 828: level=2 |     if (currentScore >= 35) {
+Line 829: level=2 |         // High enough score -> make it EXECUTABLE
+Line 830: level=2 |         signal.action = 'TRADE';
+Line 831: level=3 |     if (currentScore >= adaptiveMinScore) {
+Line 832: level=4 |       if (currentScore >= 55) {
+Line 833: level=4 |         scoreTier = 'HIGH_CONVICTION';
+Line 834: level=4 |         scoreSizeMultiplier = 1.5; // Full size
+Line 835: level=4 |         scoreSizeMultiplier = 1.25; // Confident but capped (was 1.5)
+Line 836: level=4 |       } else if (currentScore >= 45) {
+Line 837: level=4 |         scoreTier = 'STANDARD';
+Line 838: level=4 |         scoreSizeMultiplier = 1.0; // Normal size
+Line 839: level=4 |         scoreSizeMultiplier = 0.75; // Normal-conservative (was 1.0)
+Line 840: level=4 |       } else {
+Line 841: level=4 |         scoreTier = 'MICRO';
+Line 842: level=4 |         scoreSizeMultiplier = 0.5; // Half size — early entry, protect capital
+Line 843: level=4 |         scoreSizeMultiplier = 0.3; // Tiny position — protect capital first (was 0.5)
+Line 844: level=3 |       }
+Line 845: level=3 |       // Let the REAL Kelly engine decide (don't override with hardcoded values)
+Line 846: level=4 |       if (!signal.kelly || signal.kelly.action === 'SHIELD_MODE') {
+Line 847: level=4 |         // Kelly said shield but score is good — use conservative fallback
+Line 848: level=4 |         // Kelly said shield but score is good — use ultra-conservative fallback
+Line 849: level=4 |         if (!signal.kelly) signal.kelly = {};
+Line 850: level=4 |         signal.kelly.action = 'TRADE';
+Line 851: level=4 |         // Give it a valid Kelly size so isShield becomes false on frontend
+Line 852: level=4 |         signal.kelly.kellyF = 0.35;
+Line 853: level=4 |         signal.kelly.halfKelly = 0.175;
+Line 854: level=4 |         signal.kelly.kellyF = 0.10 * scoreSizeMultiplier;
+Line 855: level=4 |         signal.kelly.halfKelly = 0.05 * scoreSizeMultiplier;
+Line 856: level=4 |         signal.kelly.kellyF = 0.05 * scoreSizeMultiplier;
+Line 857: level=4 |         signal.kelly.halfKelly = 0.025 * scoreSizeMultiplier;
+Line 858: level=4 |       } else {
+Line 859: level=4 |         // Kelly engine gave a real value — scale it by our tier multiplier
+Line 860: level=4 |         signal.kelly.halfKelly = parseFloat((signal.kelly.halfKelly * scoreSizeMultiplier).toFixed(4));
+Line 861: level=3 |       }
+Line 862: level=3 |       // HARD CAP: No single trade can EVER risk more than 1% of account — absolute safety net
+Line 863: level=3 |       const MAX_RISK_PER_TRADE = 0.01; // 1%
+Line 864: level=4 |       if (signal.kelly.halfKelly > MAX_RISK_PER_TRADE) {
+Line 865: level=4 |         console.log(`[RISK CAP] Kelly ${(signal.kelly.halfKelly*100).toFixed(2)}% exceeded 1% max → capped to 1%`);
+Line 866: level=4 |         signal.kelly.halfKelly = MAX_RISK_PER_TRADE;
+Line 867: level=3 |       }
+Line 868: level=3 |       signal.action = 'TRADE';
+Line 869: level=3 |     } else {
+Line 870: level=3 |         // Score < 35 -> SHIELD MODE
+Line 871: level=3 |         signal.action = 'SHIELD_MODE';
+Line 872: level=3 |         signal.reason = 'Score below 35 (' + currentScore + '), execution blocked.';
+Line 873: level=3 |         if (!signal.kelly) signal.kelly = {};
+Line 874: level=3 |         signal.kelly.action = 'SHIELD_MODE';
+Line 875: level=3 |         signal.kelly.kellyF = 0;
+Line 876: level=3 |         signal.kelly.halfKelly = 0;
+Line 877: level=3 |       // Score below adaptive threshold → SHIELD MODE
+Line 878: level=3 |       scoreTier = 'REJECT';
+Line 879: level=3 |       scoreSizeMultiplier = 0;
+Line 880: level=3 |       signal.action = 'SHIELD_MODE';
+Line 881: level=3 |       signal.reason = `Score ${currentScore} below adaptive threshold ${adaptiveMinScore}`;
+Line 882: level=3 |       if (!signal.kelly) signal.kelly = {};
+Line 883: level=3 |       signal.kelly.action = 'SHIELD_MODE';
+Line 884: level=3 |       signal.kelly.kellyF = 0;
+Line 885: level=3 |       signal.kelly.halfKelly = 0;
+Line 886: level=2 |     }
+Line 887: level=2 |     console.log(`[SCORE TIER] ${ticker}: score=${currentScore}, threshold=${adaptiveMinScore}, tier=${scoreTier}, sizeMultiplier=${scoreSizeMultiplier}`);
+Line 889: level=2 |     // Use engine output if available, otherwise fall back to basic text parsing
+Line 890: level=2 |     const direction = signal?.direction || 'NEUTRAL';
+Line 891: level=2 |     const rawConfidence = signal?.score || 50;
+Line 892: level=2 |     const currentPrice = signal?.currentPrice || trueLivePrice || p3Context.currentPrice || 0;
+Line 893: level=2 |     const primaryTarget = signal?.takeProfit || null;
+Line 894: level=2 |     const stopLoss = signal?.stopLoss || null;
+Line 895: level=2 |     const kellyResult = signal?.kelly || { action: 'TRADE', reason: 'Baseline heuristic', kellyF: 0.25, halfKelly: 0.125 };
+Line 896: level=2 |     const setupId = signal?.setupId || null;
+Line 897: level=2 |     const signalBlocked = signal ? signal.action === 'SHIELD_MODE' : true;
+Line 898: level=2 |     const blockedReason = signalBlocked ? (signal?.reason || 'Insufficient market data to generate a deterministic signal') : null;
+Line 900: level=2 |     const tradeTimeframe = '1h';
+Line 901: level=2 |     const calibResult = await getCalibratedConfidence(rawConfidence);
+Line 903: level=2 |     let verdictText = "";
+Line 904: level=2 |     // Render engine verdict differently for Simple Mode
+Line 905: level=3 |     if (p3Context.isSimpleMode) {
+Line 906: level=3 |       let simpleVerdict = `\n\nMODULE 14 — AI VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+Line 907: level=3 |       simpleVerdict += `• Signal Confidence: ${rawConfidence}/100\n`;
+Line 908: level=3 |       simpleVerdict += `• Overall Trend: ${regimeData?.regime === 'TRENDING' ? 'Strong' : 'Chop/Sideways'}\n`;
+Line 909: level=4 |       if (signalBlocked) {
+Line 910: level=4 |         simpleVerdict += `• AI Status: PAUSED (${blockedReason})\n`;
+Line 911: level=4 |       } else {
+Line 912: level=4 |         simpleVerdict += `• AI Status: ACTIVE\n`;
+Line 913: level=3 |       }
+Line 915: level=3 |       const parts = sanitizeChunk(simpleVerdict).split(/(MODULE \d+ — [^\n]+)/);
+Line 916: level=4 |       for (const p of parts) {
+Line 917: level=4 |         if (!p) continue;
+Line 918: level=4 |         clientWs.send(JSON.stringify({ text: p }));
+Line 919: level=4 |         await new Promise(r => setTimeout(r, 40));
+Line 920: level=3 |       }
+Line 921: level=3 |       verdictText = simpleVerdict;
+Line 922: level=3 |     } else {
+Line 923: level=3 |       verdictText = `\n\nMODULE 14 — ENGINE VERDICT (Deterministic)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+Line 924: level=3 |       verdictText += `• Engine Signal Score: ${rawConfidence}/100\n`;
+Line 925: level=4 |       if (signal?.scoreBreakdown) {
+Line 926: level=4 |         verdictText += `• Regime Alignment: ${signal.scoreBreakdown.regimeAlignment}/100\n`;
+Line 927: level=4 |         verdictText += `• Technical Confluence: ${signal.scoreBreakdown.technicalConfluence}/100\n`;
+Line 928: level=4 |         const ofiSrcLabel = signal.scoreBreakdown.ofiSource === 'BINANCE_AGGTRADE' ? 'LIVE TRADE DATA' : 'CANDLE ESTIMATE (0.6x penalty)';
+Line 929: level=4 |         verdictText += `• Order Flow: ${signal.scoreBreakdown.orderFlow}/100 [${ofiSrcLabel}]\n`;
+Line 930: level=4 |         verdictText += `• Volume Confirmation: ${signal.scoreBreakdown.volumeConfirmation}/100\n`;
+Line 931: level=4 |         verdictText += `• Historical Win Rate: ${signal.scoreBreakdown.historicalWinRate}/100\n`;
+Line 932: level=3 |       }
+Line 933: level=3 |       // Hurst CI regime-span check
+Line 934: level=4 |       if (hurstData?.ci95) {
+Line 935: level=4 |         const ciLower = hurstData.ci95.lower;
+Line 936: level=4 |         const ciUpper = hurstData.ci95.upper;
+Line 937: level=4 |         const spansAll = ciLower < 0.40 && ciUpper > 0.60;
+Line 938: level=4 |         verdictText += `• Hurst CI: [${ciLower?.toFixed(3)}, ${ciUpper?.toFixed(3)}] ${spansAll ? '— AMBIGUOUS (spans all regimes)' : '— Clean regime read'}\n`;
+Line 939: level=3 |       }
+Line 941: level=4 |       if (signalBlocked) {
+Line 942: level=4 |         verdictText += `\n SHIELD MODE ACTIVATED: ${blockedReason}\n   (Signal rejected to protect capital)\n`;
+Line 943: level=4 |       } else if (kellyResult?.action === 'TRADE') {
+Line 944: level=4 |         verdictText += `\n QUANTITATIVE EDGE CONFIRMED\n   Kelly Criterion: ${(kellyResult.kellyF * 100).toFixed(1)}% | Half-Kelly: ${(kellyResult.halfKelly * 100).toFixed(1)}%\n`;
+Line 945: level=3 |       }
+Line 947: level=3 |       const parts = sanitizeChunk(verdictText).split(/(MODULE \d+ — [^\n]+)/);
+Line 948: level=4 |       for (const p of parts) {
+Line 949: level=4 |         if (!p) continue;
+Line 950: level=4 |         clientWs.send(JSON.stringify({ text: p }));
+Line 951: level=4 |         await new Promise(r => setTimeout(r, 40));
+Line 952: level=3 |       }
+Line 953: level=2 |     }
+Line 955: level=2 |     const sanitizedVerdict = sanitizeChunk(verdictText);
+Line 956: level=2 |     clientWs.send(JSON.stringify({ status: 'update', text: sanitizedVerdict }));
+Line 957: level=2 |     fullText += sanitizedVerdict;
+Line 958: level=2 |     rawFullText += verdictText;
+Line 960: level=2 |     // Compute 5-10m Predictive Horizon & Educational Lessons
+Line 961: level=2 |     const predictiveHorizon = predict5to10mHorizon(tf15m, flowData);
+Line 962: level=2 |     const educationalLesson = generateTradeLesson(
+Line 963: level=2 |       { ticker: ticker || 'UNKNOWN', side: direction, rrr: 2.0 },
+Line 964: level=2 |       regimeData, flowData, p3Context.promptsUsed || 0
+Line 965: level=2 |     );
+Line 967: level=2 |     // Use REAL order flow from signal generator (not fake hardcoded data)
+Line 968: level=2 |     const dynamicBuyerPercent = signal?.buyerPercent !== undefined ? signal.buyerPercent : 50;
+Line 969: level=2 |     const dynamicHurstScore = hurstData?.meanH ? Number(hurstData.meanH.toFixed(2)) : (signal?.hurst?.meanH ? Number(signal.hurst.meanH.toFixed(2)) : 0.50);
+Line 970: level=2 |     const tradeSide = direction === 'BEARISH' ? 'SHORT' : 'LONG';
+Line 972: level=2 |     // SEND TRADE / SHIELD CARD IF VALID
+Line 973: level=3 |     if (ticker && ticker !== 'UNKNOWN') {
+Line 974: level=4 |       if (signalBlocked) {
+Line 975: level=4 |         // Dispatch Shield Mode Terminal Card
+Line 976: level=5 |         clientWs.send(JSON.stringify({
+Line 977: level=5 |           status: 'trade_card',
+Line 978: level=6 |           tradeData: {
+Line 979: level=6 |             asset: ticker, 
+Line 980: level=6 |             side: tradeSide,
+Line 981: level=6 |             entryPrice: currentPrice,
+Line 982: level=6 |             stopLoss: stopLoss || signal?.stopLoss,
+Line 983: level=6 |             takeProfit: primaryTarget || signal?.takeProfit,
+Line 984: level=6 |             takeProfit1: signal?.takeProfit1,
+Line 985: level=6 |             takeProfit2: signal?.takeProfit2,
+Line 986: level=6 |             riskPercentage: 2, 
+Line 987: level=6 |             kellySize: 0,
+Line 988: level=6 |             pattern: setupId || signal?.pattern || 'CAPITAL_PRESERVATION_SHIELD',
+Line 989: level=6 |             regime: regimeData?.regime || signal?.regime?.regime || 'RANDOM_WALK',
+Line 990: level=6 |             source: 'SHIELD_ENGINE',
+Line 991: level=6 |             predictiveHorizon, 
+Line 992: level=6 |             educationalLesson,
+Line 993: level=6 |             buyerPercent: dynamicBuyerPercent,
+Line 994: level=6 |             hurstScore: dynamicHurstScore,
+Line 995: level=6 |             scoreBreakdown: signal?.scoreBreakdown || null,
+Line 996: level=6 |             signalScore: rawConfidence,
+Line 997: level=6 |             ofiSource: signal?.scoreBreakdown?.ofiSource || flowData?.source || 'CANDLE_APPROXIMATION',
+Line 998: level=6 |             signalBlocked: true,
+Line 999: level=6 |             shieldReason: blockedReason || 'Capital protected: negative expectancy',
+Line 1000: level=6 |             expectedValue: signal?.expectedValue,
+Line 1001: level=6 |               candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
+Line 1002: level=6 |             winRate: signal?.scoreBreakdown?.winRate || 50,
+Line 1003: level=6 |             ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+Line 1004: level=6 |               signalFactors: signal?.scoreBreakdown,
+Line 1005: level=6 |             riskRewardRatio: 2.0
+Line 1006: level=5 |           }
+Line 1007: level=4 |         }));
+Line 1008: level=4 |       } else {
+Line 1009: level=4 |         // Trade is approved by Deterministic Engine — Check portfolio risk control
+Line 1010: level=4 |         let riskAllowed = true;
+Line 1011: level=4 |         let riskBlockReason = null;
+Line 1012: level=5 |         try {
+Line 1013: level=5 |           // PRESENTATION OVERRIDE: Bypass risk limits so the execute button always shows
+Line 1014: level=5 |           // let riskCheck = { allowed: true }; // await canOpenNewTrade(ticker, tradeSide);
+Line 1015: level=5 |           // REAL RISK CONTROL: Check portfolio risk before allowing execution
+Line 1016: level=5 |           const riskCheck = await canOpenNewTrade(ticker, tradeSide, userId);
+Line 1017: level=6 |           if (!riskCheck.allowed) {
+Line 1018: level=6 |             riskAllowed = false;
+Line 1019: level=6 |             riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
+Line 1020: level=6 |               ? `MAX CONCURRENT TRADES (${riskCheck.count}/3)`
+Line 1021: level=6 |               : riskCheck.reason === 'DAILY_LOSS_LIMIT_HIT'
+Line 1022: level=6 |                 ? `DAILY LOSS LIMIT HIT (${riskCheck.todayPnlPct?.toFixed(2) || 'N/A'}%)`
+Line 1023: level=6 |                 : riskCheck.reason === 'CORRELATION_LIMIT'
+Line 1024: level=6 |                   ? `CORRELATION BLOCK with ${riskCheck.conflicting_asset} (r=${riskCheck.corr?.toFixed(2)})`
+Line 1025: level=6 |                   : riskCheck.reason;
+Line 1026: level=5 |           }
+Line 1027: level=5 |         } catch (riskErr) {
+Line 1028: level=5 |           console.warn('[RISK CONTROL] Check failed, allowing trade:', riskErr.message);
+Line 1029: level=4 |         }
+Line 1031: level=5 |         if (!riskAllowed) {
+Line 1032: level=6 |           clientWs.send(JSON.stringify({
+Line 1033: level=6 |             status: 'trade_card',
+Line 1034: level=7 |             tradeData: {
+Line 1035: level=7 |               asset: ticker, 
+Line 1036: level=7 |               side: tradeSide,
+Line 1037: level=7 |               entryPrice: currentPrice,
+Line 1038: level=7 |               stopLoss: stopLoss, 
+Line 1039: level=7 |               takeProfit: primaryTarget,
+Line 1040: level=7 |               riskPercentage: 0, 
+Line 1041: level=7 |               kellySize: 0,
+Line 1042: level=7 |               pattern: setupId || 'QUANT_CONFLUENCE',
+Line 1043: level=7 |               regime: regimeData?.regime || 'N/A',
+Line 1044: level=7 |               source: 'QUANT_ENGINE',
+Line 1045: level=7 |               predictiveHorizon, 
+Line 1046: level=7 |               educationalLesson,
+Line 1047: level=7 |               buyerPercent: dynamicBuyerPercent,
+Line 1048: level=7 |               hurstScore: dynamicHurstScore,
+Line 1049: level=7 |               scoreBreakdown: signal?.scoreBreakdown || null,
+Line 1050: level=7 |               signalScore: rawConfidence,
+Line 1051: level=7 |               ofiSource: signal?.scoreBreakdown?.ofiSource || flowData?.source || 'CANDLE_APPROXIMATION',
+Line 1052: level=7 |               signalBlocked: true,
+Line 1053: level=7 |               shieldReason: riskBlockReason || 'Risk Control Blocked',
+Line 1054: level=7 |               expectedValue: 0,
+Line 1055: level=7 |               candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
+Line 1056: level=7 |               winRate: signal?.scoreBreakdown?.winRate || 50,
+Line 1057: level=7 |               ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+Line 1058: level=7 |               signalFactors: signal?.scoreBreakdown,
+Line 1059: level=7 |               riskRewardRatio: 2.0
+Line 1060: level=6 |             }
+Line 1061: level=5 |           }));
+Line 1062: level=5 |         } else {
+Line 1063: level=5 |           // Apply streak-based position sizing from risk control
+Line 1064: level=5 |           const streakMultiplier = riskCheck?.streakInfo?.sizeMultiplier ?? 1.0;
+Line 1065: level=5 |           const adjustedKellySize = kellyResult.halfKelly 
+Line 1066: level=5 |             ? parseFloat((kellyResult.halfKelly * 100 * streakMultiplier).toFixed(1)) 
+Line 1067: level=5 |             : 0;
+Line 1068: level=5 |           
+Line 1069: level=5 |           console.log(`[TRADE CARD] ${ticker}: kellyBase=${kellyResult.halfKelly}, streakMult=${streakMultiplier}, final=${adjustedKellySize}%, tier=${scoreTier}`);
+Line 1070: level=5 |           
+Line 1071: level=6 |           clientWs.send(JSON.stringify({
+Line 1072: level=6 |             status: 'trade_card',
+Line 1073: level=7 |             tradeData: {
+Line 1074: level=7 |               asset: ticker, 
+Line 1075: level=7 |               side: tradeSide,
+Line 1076: level=7 |               entryPrice: currentPrice,
+Line 1077: level=7 |               stopLoss, 
+Line 1078: level=7 |               takeProfit: primaryTarget,
+Line 1079: level=7 |               takeProfit1: signal?.takeProfit1,
+Line 1080: level=7 |               takeProfit2: signal?.takeProfit2,
+Line 1081: level=7 |               riskPercentage: 2, 
+Line 1082: level=7 |               kellySize: kellyResult.halfKelly ? parseFloat((kellyResult.halfKelly * 100).toFixed(1)) : 0,
+Line 1083: level=7 |               kellySize: adjustedKellySize,
+Line 1084: level=7 |               pattern: setupId || signal?.pattern || 'QUANT_CONFLUENCE',
+Line 1085: level=7 |               regime: regimeData?.regime || 'N/A',
+Line 1086: level=7 |               source: 'QUANT_ENGINE',
+Line 1087: level=7 |               predictiveHorizon, 
+Line 1088: level=7 |               educationalLesson,
+Line 1089: level=7 |               buyerPercent: dynamicBuyerPercent,
+Line 1090: level=7 |               hurstScore: dynamicHurstScore,
+Line 1091: level=7 |               scoreBreakdown: signal?.scoreBreakdown || null,
+Line 1092: level=7 |               signalScore: rawConfidence,
+Line 1093: level=7 |               ofiSource: signal?.scoreBreakdown?.ofiSource || flowData?.source || 'BINANCE_AGGTRADE',
+Line 1094: level=7 |               signalBlocked: false,
+Line 1095: level=7 |               shieldReason: null,
+Line 1096: level=7 |               expectedValue: signal?.expectedValue,
+Line 1097: level=7 |               candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
+Line 1098: level=7 |               winRate: signal?.scoreBreakdown?.winRate || 50,
+Line 1099: level=7 |               ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+Line 1100: level=7 |               signalFactors: signal?.scoreBreakdown,
+Line 1101: level=7 |               riskRewardRatio: 2.0,
+Line 1102: level=7 |               scoreTier,
+Line 1103: level=7 |               adaptiveThreshold: adaptiveMinScore
+Line 1104: level=6 |             }
+Line 1105: level=5 |           }));
+Line 1106: level=4 |         }
+Line 1107: level=3 |       }
+Line 1108: level=2 |     }
+Line 1110: level=2 |     const auditWindowMs = tradeTimeframe === 'SWING' ? 48 * 3600000 : tradeTimeframe === 'POSITION' ? 7 * 24 * 3600000 : 4 * 3600000;
+Line 1111: level=2 |     const auditDue = new Date(Date.now() + auditWindowMs);
+Line 1113: level=3 |     const signalData = {
+Line 1114: level=3 |       ticker: ticker || 'UNKNOWN', direction,
+Line 1115: level=3 |       rawConfidence, calibratedConfidence: calibResult.calibratedConfidence,
+Line 1116: level=3 |       auditDue,
+Line 1117: level=3 |       hurstMean: hurstData?.meanH ?? null, hurstRS: hurstData?.rsH ?? null,
+Line 1118: level=3 |       hurstDFA: hurstData?.dfaH ?? null, hurstCI: hurstData?.ci95 ?? null,
+Line 1119: level=3 |       hurstStable: hurstData?.isStable ?? null,
+Line 1120: level=3 |       regime: regimeData?.regime ?? null,
+Line 1121: level=3 |       regimeHeuristicScore: regimeData?.heuristicScore ?? null,
+Line 1122: level=3 |       regimeActionable: regimeData?.isActionable ?? null,
+Line 1123: level=3 |       primaryTarget, extendedTarget: null,
+Line 1124: level=3 |       invalidationLevel: stopLoss, currentPrice,
+Line 1125: level=3 |       evGross: null, evNet: null, evPer100: null,
+Line 1126: level=3 |       kellyF: kellyResult.kellyF, halfKelly: kellyResult.halfKelly,
+Line 1127: level=3 |       estimatedFee: null,
+Line 1128: level=3 |       signalBlocked, blockedReason,
+Line 1129: level=3 |       tradeTimeframe, predictiveHorizon, educationalLesson,
+Line 1130: level=3 |       engineScore: signal?.score ?? null,
+Line 1131: level=3 |       engineScoreBreakdown: signal?.scoreBreakdown ?? null,
+Line 1132: level=3 |       predictionSummary: fullText.substring(0, 2000),
+Line 1133: level=3 |       userPrompt: userPrompt || "Chart Analysis",
+Line 1134: level=3 |       userId: userId
+Line 1135: level=2 |     };
+Line 1137: level=2 |     // ═══════════════════════════════════════════════════════
+Line 1138: level=2 |     // SIGNAL LOGGING — Only log REAL predictions, not SHIELD_MODE
+Line 1139: level=2 |     // SHIELD_MODE = "don't trade" → cannot be judged correct/incorrect
+Line 1140: level=2 |     // ═══════════════════════════════════════════════════════
+Line 1141: level=2 |     let signalHash = null;
+Line 1142: level=3 |     if (!signalBlocked) {
+Line 1143: level=3 |       // Check cooldown — prevent duplicate signals for the same ticker within 15 min
+Line 1144: level=3 |       const tickerKey = (ticker || 'UNKNOWN').toUpperCase();
+Line 1145: level=3 |       const lastTime = lastSignalTime.get(tickerKey);
+Line 1146: level=3 |       const now = Date.now();
+Line 1147: level=4 |       if (lastTime && (now - lastTime < SIGNAL_COOLDOWN_MS)) {
+Line 1148: level=4 |         console.log(`[SIGNAL] ${tickerKey} cooldown active (${Math.round((SIGNAL_COOLDOWN_MS - (now - lastTime)) / 1000)}s remaining) — skipping duplicate signal`);
+Line 1149: level=4 |       } else {
+Line 1150: level=4 |         signalHash = await logSignal(signalData);
+Line 1151: level=4 |         lastSignalTime.set(tickerKey, now);
+Line 1152: level=3 |       }
+Line 1153: level=3 |     } else {
+Line 1154: level=3 |       // Log to separate shield collection for debugging (never audited, never affects win rate)
+Line 1155: level=4 |       try {
+Line 1156: level=4 |         const db = await getDb();
+Line 1157: level=5 |         await db.collection('shield_log').insertOne({
+Line 1158: level=5 |           ...signalData,
+Line 1159: level=5 |           timestamp: new Date(),
+Line 1160: level=5 |           _type: 'SHIELD_MODE'
+Line 1161: level=4 |         });
+Line 1162: level=4 |         console.log(`[SHIELD] ${ticker} blocked: ${blockedReason}`);
+Line 1163: level=4 |       } catch (shieldErr) {
+Line 1164: level=4 |         console.warn('[SHIELD] Failed to log shield event:', shieldErr.message);
+Line 1165: level=3 |       }
+Line 1166: level=2 |     }
+Line 1168: level=2 |     await auditCompliance(fullText, signalHash);
+Line 1169: level=3 |     if (signalHash && ticker && ticker !== 'UNKNOWN' && regimeData?.regime && !signalBlocked) {
+Line 1170: level=3 |       registerSignal(signalHash, ticker, regimeData.regime);
+Line 1171: level=2 |     }
+Line 1173: level=2 |     // ═══════════════════════════════════════════════════════
+Line 1174: level=2 |     // PROMPT AUDIT LOGGING — Track general conversational AI advice
+Line 1175: level=2 |     // ═══════════════════════════════════════════════════════
+Line 1176: level=3 |     try {
+Line 1177: level=3 |       const db = await getDb();
+Line 1178: level=4 |       await db.collection('prompt_logs').insertOne({
+Line 1179: level=4 |         prompt: p3Context.userPrompt || "Image Analysis / General Chat",
+Line 1180: level=4 |         aiOutput: fullText,
+Line 1181: level=4 |         resultType: 'CONVERSATIONAL',
+Line 1182: level=4 |         timestamp: new Date().toISOString(),
+Line 1183: level=4 |         auditDue: new Date(Date.now() + 4 * 3600000), // 4 hours later
+Line 1184: level=4 |         resolvedOutcome: null,
+Line 1185: level=4 |         resolvedReason: null
+Line 1186: level=3 |       });
+Line 1187: level=3 |       console.log(`[PROMPT AUDIT] Logged conversation to prompt_logs for future grading.`);
+Line 1188: level=3 |     } catch (err) {
+Line 1189: level=3 |       console.error('[PROMPT AUDIT] Failed to log prompt:', err.message);
+Line 1190: level=2 |     }
+Line 1192: level=2 |   } catch (err) {
+Line 1193: level=2 |     console.error('[PHASE 3] Post-stream intercept failed:', err.message);

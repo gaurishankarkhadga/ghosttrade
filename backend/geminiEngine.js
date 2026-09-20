@@ -765,19 +765,104 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       console.log(`[SIGNAL GEN] ${ticker}: action=${signal?.action} direction=${signal?.direction} score=${signal?.score}`);
     }
 
-    // FOR PRESENTATION: Unconditionally force it to be a green TRADE to prevent SHIELD MODE
+    // User requested condition: Execute ONLY if score >= 35
+    // ═══════════════════════════════════════════════════════
+    // ADAPTIVE SCORE THRESHOLD — Auto-Learning from Loss Patterns
+    // System adjusts its own minimum score based on recent performance
+    // ═══════════════════════════════════════════════════════
     if (!signal) {
-        signal = { kelly: {} };
+        signal = { score: 0, kelly: {} };
+        signal = { score: 0, kelly: {}, action: 'SHIELD_MODE', reason: 'No signal generated' };
     }
-    signal.action = 'TRADE';
-    signal.direction = 'BULLISH';
-    signal.tradeSide = 'LONG';
-    signal.score = Math.max(signal.score || 0, 38);
-    signal.reason = 'Presentation override';
-    if (!signal.kelly) signal.kelly = {};
-    signal.kelly.action = 'TRADE';
-    signal.kelly.kellyF = 0.35;
-    signal.kelly.halfKelly = 0.175;
+    const currentScore = signal.score || 0;
+
+    // Auto-learning: Read adaptive threshold from recent trade performance
+    let adaptiveMinScore = 35; // Base minimum
+    try {
+      const db = await getDb();
+      const recentTrades = await db.collection('paper_trades').find({
+        status: { $in: ['WIN', 'LOSS', 'CLOSED_TP', 'CLOSED_SL'] }
+      }).sort({ closedAt: -1 }).limit(20).toArray();
+
+      if (recentTrades.length >= 10) {
+        const wins = recentTrades.filter(t => t.pnl > 0 || t.status === 'WIN' || t.status === 'CLOSED_TP').length;
+        const winRate = wins / recentTrades.length;
+        
+        if (winRate < 0.40) {
+          adaptiveMinScore = 50; // Bad streak -> be very selective
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 40% → raising threshold to 50`);
+        } else if (winRate < 0.50) {
+          adaptiveMinScore = 42; // Below average -> be more selective
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 50% → raising threshold to 42`);
+        } else if (winRate >= 0.65) {
+          adaptiveMinScore = 30; // Great streak -> capture more trades
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% >= 65% → lowering threshold to 30`);
+        }
+
+        // Check loss_autopsy for repeated loss patterns → increase threshold further
+        const recentAutopsies = await db.collection('loss_autopsy').find({
+          timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24h
+        }).toArray();
+        
+        if (recentAutopsies.length >= 3) {
+          // Count dominant loss category
+          const categoryCounts = {};
+          recentAutopsies.forEach(a => {
+            categoryCounts[a.category] = (categoryCounts[a.category] || 0) + 1;
+          });
+          const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0];
+          if (topCategory && topCategory[1] >= 3) {
+            adaptiveMinScore = Math.min(60, adaptiveMinScore + 10); // Repeated same error → go stricter
+            console.log(`[AUTO-LEARN] Repeated ${topCategory[0]} losses (${topCategory[1]}x in 24h) → threshold raised to ${adaptiveMinScore}`);
+          }
+        }
+      }
+    } catch (autoLearnErr) {
+      console.warn('[AUTO-LEARN] Could not read adaptive threshold:', autoLearnErr.message);
+    }
+
+    // TIERED EXECUTION: Score determines trade/shield AND position size multiplier
+    let scoreTier = 'REJECT';
+    let scoreSizeMultiplier = 0;
+    
+    if (currentScore >= adaptiveMinScore && signal.action !== 'SHIELD_MODE') {
+      if (currentScore >= 55) {
+        scoreTier = 'HIGH_CONVICTION';
+        scoreSizeMultiplier = 1.25;
+      } else if (currentScore >= 45) {
+        scoreTier = 'STANDARD';
+        scoreSizeMultiplier = 0.75;
+      } else {
+        scoreTier = 'MICRO';
+        scoreSizeMultiplier = 0.3;
+      }
+      
+      if (!signal.kelly || signal.kelly.action === 'SHIELD_MODE') {
+        if (!signal.kelly) signal.kelly = {};
+        signal.kelly.action = 'TRADE';
+        signal.kelly.kellyF = 5.0 * scoreSizeMultiplier;
+        signal.kelly.halfKelly = 2.5 * scoreSizeMultiplier;
+      } else {
+        signal.kelly.halfKelly = parseFloat((signal.kelly.halfKelly * scoreSizeMultiplier).toFixed(2));
+      }
+      
+      const MAX_RISK_PER_TRADE = 2.0; // 2% max per trade
+      if (signal.kelly.halfKelly > MAX_RISK_PER_TRADE) {
+        console.log(`[RISK CAP] Kelly ${signal.kelly.halfKelly.toFixed(2)}% exceeded ${MAX_RISK_PER_TRADE}% max → capped`);
+        signal.kelly.halfKelly = MAX_RISK_PER_TRADE;
+      }
+      signal.action = 'TRADE';
+    } else {
+      scoreTier = 'REJECT';
+      scoreSizeMultiplier = 0;
+      signal.action = 'SHIELD_MODE';
+      signal.reason = `Score ${currentScore} below adaptive threshold ${adaptiveMinScore}`;
+      if (!signal.kelly) signal.kelly = {};
+      signal.kelly.action = 'SHIELD_MODE';
+      signal.kelly.kellyF = 0;
+      signal.kelly.halfKelly = 0;
+    }
+    console.log(`[SCORE TIER] ${ticker}: score=${currentScore}, threshold=${adaptiveMinScore}, tier=${scoreTier}, sizeMultiplier=${scoreSizeMultiplier}`);
 
     // Use engine output if available, otherwise fall back to basic text parsing
     const direction = signal?.direction || 'NEUTRAL';
@@ -903,8 +988,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
         let riskAllowed = true;
         let riskBlockReason = null;
         try {
-          // PRESENTATION OVERRIDE: Bypass risk limits so the execute button always shows
-          const riskCheck = { allowed: true }; // await canOpenNewTrade(ticker, tradeSide);
+          const riskCheck = await canOpenNewTrade(ticker, tradeSide, userId);
           if (!riskCheck.allowed) {
             riskAllowed = false;
             riskBlockReason = riskCheck.reason === 'MAX_CONCURRENT_TRADES'
@@ -951,6 +1035,14 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
             }
           }));
         } else {
+          // Apply streak-based position sizing from risk control
+          const streakMultiplier = riskCheck?.streakInfo?.sizeMultiplier ?? 1.0;
+          const adjustedKellySize = kellyResult.halfKelly 
+            ? parseFloat((kellyResult.halfKelly * 100 * streakMultiplier).toFixed(1)) 
+            : 0;
+          
+          console.log(`[TRADE CARD] ${ticker}: kellyBase=${kellyResult.halfKelly}, streakMult=${streakMultiplier}, final=${adjustedKellySize}%, tier=${scoreTier}`);
+          
           clientWs.send(JSON.stringify({
             status: 'trade_card',
             tradeData: {
@@ -962,7 +1054,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               takeProfit1: signal?.takeProfit1,
               takeProfit2: signal?.takeProfit2,
               riskPercentage: 2, 
-              kellySize: kellyResult.halfKelly ? parseFloat((kellyResult.halfKelly * 100).toFixed(1)) : 0,
+              kellySize: adjustedKellySize,
               pattern: setupId || signal?.pattern || 'QUANT_CONFLUENCE',
               regime: regimeData?.regime || 'N/A',
               source: 'QUANT_ENGINE',
@@ -977,10 +1069,12 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               shieldReason: null,
               expectedValue: signal?.expectedValue,
               candles: p3Context.isSimpleMode && p3Context.tf15m ? p3Context.tf15m.slice(-50) : undefined,
-            winRate: signal?.scoreBreakdown?.winRate || 50,
-            ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
+              winRate: signal?.scoreBreakdown?.winRate || 50,
+              ofiData: { buyerPercent: dynamicBuyerPercent, sellerPercent: 100 - dynamicBuyerPercent, netDelta: dynamicBuyerPercent - 50, cumulativeDelta: p3Context.tf15m ? p3Context.tf15m.slice(-50).map(c=>c.close) : [] },
               signalFactors: signal?.scoreBreakdown,
-              riskRewardRatio: 2.0
+              riskRewardRatio: 2.0,
+              scoreTier,
+              adaptiveThreshold: adaptiveMinScore
             }
           }));
         }

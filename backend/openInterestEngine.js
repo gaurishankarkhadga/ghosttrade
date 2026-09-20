@@ -65,6 +65,10 @@ export async function fetchFuturesData(ticker) {
     const fundingData = await fundingResponse.json();
     const klinesData = await klinesResponse.json();
 
+    if (!Array.isArray(fundingData) || fundingData.length === 0) {
+      return { error: 'Invalid funding data from Binance', available: false };
+    }
+
     return analyzeFuturesData(oiData, fundingData[0], klinesData, symbol);
   } catch (error) {
     console.warn(`[FUTURES] Fetch failed for ${ticker}:`, error.message);
@@ -81,6 +85,9 @@ function analyzeFuturesData(oiData, fundingData, klines, symbol) {
   
   // Calculate annualized funding
   const annualizedFunding = fundingRate * 3 * 365 * 100; // 8h funding -> annualized %
+  if (!Array.isArray(klines) || klines.length === 0) {
+    return { available: false, error: 'Invalid klines data returned from Futures API' };
+  }
 
   // Compare current price to 24h ago
   const currentPrice = parseFloat(klines[klines.length - 1][4]);

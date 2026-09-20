@@ -36,6 +36,10 @@ export async function runBacktest(asset, days = 730) {
       signal.reason = gateResult.reason;
     }
 
+    if (signal.action === 'SHIELD_MODE') {
+      console.log(`[SHIELD] ${signal.reason}`);
+    }
+
     if (signal.action === 'TRADE' || signal.action === 'BUY' || signal.action === 'LONG') {
       tradesTaken++;
       const side = signal.side ? signal.side.toUpperCase() : 'LONG';

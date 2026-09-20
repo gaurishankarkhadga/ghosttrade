@@ -296,6 +296,7 @@ const useGhostStore = create(
         const wsUrl = baseUrl.replace(/^http/, 'ws') + `?token=${token}`;
         
         const ws = new WebSocket(wsUrl);
+        set({ activeWs: ws });
         
         ws.onopen = () => set({ wsStatus: 'CONNECTED' });
         ws.onclose = () => {
@@ -316,10 +317,12 @@ const useGhostStore = create(
               // Each asset now includes signalData and tradeCard (pre-computed for all traders)
               const newAssets = {};
               let withSignals = 0;
-              data.payload.forEach(asset => {
-                 newAssets[asset.ticker] = asset;
-                 if (asset.signalData && asset.signalData.action !== 'NO_SIGNAL') withSignals++;
-              });
+              if (Array.isArray(data.payload)) {
+                data.payload.forEach(asset => {
+                   newAssets[asset.ticker] = asset;
+                   if (asset.signalData && asset.signalData.action !== 'NO_SIGNAL') withSignals++;
+                });
+              }
               
               set((state) => {
                 return { 
@@ -425,15 +428,23 @@ const useGhostStore = create(
                }));
                
                const finalMessage = get().chatHistory.find(m => m.id === aiMessageId);
-               const newPromptLog = {
-                 id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                 timestamp: new Date().toISOString(),
-                 prompt: text,
-                 resultType: finalMessage.uiComponent === 'TRADE_CARD' ? 'TRADE_CARD' : 'TEXT',
-                 aiOutput: finalMessage.content,
-                 priceAtTime: data.priceAtTime || null
-               };
-               set(state => ({ promptLogs: [...state.promptLogs, newPromptLog] }));
+               if (finalMessage) {
+                 const newPromptLog = {
+                   id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                   timestamp: new Date().toISOString(),
+                   prompt: text,
+                   resultType: finalMessage.uiComponent === 'TRADE_CARD' ? 'TRADE_CARD' : 'TEXT',
+                   aiOutput: finalMessage.content,
+                   priceAtTime: data.priceAtTime || null
+                 };
+                 set(state => ({ promptLogs: [...state.promptLogs, newPromptLog] }));
+                 
+                 fetch(`${baseUrl}/api/audit/prompt`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
+                  body: JSON.stringify(newPromptLog)
+                }).catch(e => console.error("Failed to sync prompt audit:", e));
+               }
                
                fetch(`${baseUrl}/api/audit/prompt`, {
                 method: 'POST',
@@ -478,6 +489,9 @@ const useGhostStore = create(
       
       logout: () => {
         set({ isAuthenticated: false, token: null, email: null, role: 'trader', promptsUsed: 0, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [], activePaperTrades: [], closedPaperTrades: [], promptLogs: [] });
+        const { activeWs } = get();
+        if (activeWs) activeWs.close();
+        set({ isAuthenticated: false, token: null, email: null, role: 'trader', promptsUsed: 0, assets: {}, wsStatus: 'DISCONNECTED', chatHistory: [], activePaperTrades: [], closedPaperTrades: [], promptLogs: [], activeWs: null });
       }
     }),
     {

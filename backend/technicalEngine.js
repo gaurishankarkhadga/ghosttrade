@@ -429,6 +429,7 @@ export function vwap(candles) {
   
   let startIndex = 0;
   for (let i = candles.length - 1; i >= 0; i--) {
+    if (!candles[i].date) continue; // Skip invalid dates to prevent RangeError
     const cDate = new Date(candles[i].date);
     if (cDate.toISOString().split('T')[0] !== sessionStartStr) {
       startIndex = i + 1;

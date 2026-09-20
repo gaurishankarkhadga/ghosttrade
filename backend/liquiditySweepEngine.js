@@ -69,6 +69,7 @@ export function findLiquidityPools(swingHighs, swingLows, currentPrice, toleranc
           side: 'BUY_STOP_LIQUIDITY',
           price: Math.max(h1, h2),
           barsAgo: swingHighs.length - 1 - j,
+          barsAgo: candles.length - 1 - swingHighs[j].index,
           formationIndex: swingHighs[j].index,
           description: `Dense retail short stop-loss cluster @ $${Math.max(h1, h2).toFixed(2)}`
         });
@@ -89,6 +90,7 @@ export function findLiquidityPools(swingHighs, swingLows, currentPrice, toleranc
           side: 'SELL_STOP_LIQUIDITY',
           price: Math.min(l1, l2),
           barsAgo: swingLows.length - 1 - j,
+          barsAgo: candles.length - 1 - swingLows[j].index,
           formationIndex: swingLows[j].index,
           description: `Dense retail long stop-loss cluster @ $${Math.min(l1, l2).toFixed(2)}`
         });

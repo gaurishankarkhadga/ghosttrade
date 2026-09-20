@@ -421,7 +421,7 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
         c => (ticker || '').toUpperCase().includes(c)
       );
       const isAltcoin = isCrypto && !['BTC','ETH'].some(
-        c => (ticker || '').toUpperCase() === c
+        c => (ticker || '').toUpperCase().includes(c)
       );
       // BTC/ETH: 3.0% (was 0.8%), Altcoins: 5.0% (was 0.8%), Stocks: 1.5% (was 0.4%)
       const varianceThreshold = isAltcoin ? 5.0 : isCrypto ? 3.0 : 1.5;
@@ -758,6 +758,7 @@ async function runAuditCycle() {
 
     // 3. Verify open Paper Trades
     await verifyPaperTrades();
+    // await verifyPaperTrades(); // Handled by monitorWorker.js now
 
   } catch (error) {
     console.error('[AUDIT DAEMON] Cycle error:', error.message);
@@ -1062,6 +1063,8 @@ Reply strictly in this JSON format:
         } catch (e) {
           if (text.includes('CORRECT')) gradeData.grade = 'CORRECT';
           else if (text.includes('INCORRECT')) gradeData.grade = 'INCORRECT';
+          if (text.includes('INCORRECT')) gradeData.grade = 'INCORRECT';
+          else if (text.includes('CORRECT')) gradeData.grade = 'CORRECT';
           gradeData.reason = text.substring(0, 200);
         }
 
@@ -1083,6 +1086,8 @@ Reply strictly in this JSON format:
   }
 }
 
+let promptIntervalId = null;
+
 /**
  * Start the audit daemon — runs continuously on an interval
  */
@@ -1097,6 +1102,7 @@ export function startAuditDaemon() {
     // Also run prompt audit every 5 mins
     auditPrompts();
     setInterval(auditPrompts, 5 * 60 * 1000);
+    promptIntervalId = setInterval(auditPrompts, 5 * 60 * 1000);
   }, 30000);
 }
 
@@ -1109,4 +1115,9 @@ export function stopAuditDaemon() {
     intervalId = null;
     console.log('[AUDIT DAEMON] Stopped');
   }
+  if (promptIntervalId) {
+    clearInterval(promptIntervalId);
+    promptIntervalId = null;
+  }
+  console.log('[AUDIT DAEMON] Stopped');
 }

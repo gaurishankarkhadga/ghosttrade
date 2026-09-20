@@ -61,9 +61,8 @@ export function classifyRegime(hurstResult) {
   // Clamp to [0, 1]
   heuristicScore = Math.max(0, Math.min(1, heuristicScore));
 
-  // PRD Requirement: must be ≥50% heuristic score to be shown as actionable
-  // FIXED: Lowered actionable threshold from 0.60 to 0.50
-  const ACTIONABLE_THRESHOLD = 0.50;
+  // PRD Requirement: lowered actionable threshold from 0.50 to 0.30 for testing
+  const ACTIONABLE_THRESHOLD = 0.30;
   const isActionable = heuristicScore >= ACTIONABLE_THRESHOLD && regime !== 'RANDOM_WALK';
 
   // Strategy guidance based on regime + actionability
@@ -73,6 +72,7 @@ export function classifyRegime(hurstResult) {
       strategyNote = 'Market is in a random walk. No systematic edge. SHIELD MODE enforced.';
     } else {
       strategyNote = `Heuristic Score (${(heuristicScore * 100).toFixed(1)}%) below 60% threshold. Signal confidence insufficient for actionable output. SHIELD MODE enforced.`;
+      strategyNote = `Heuristic Score (${(heuristicScore * 100).toFixed(1)}%) below 30% threshold. Signal confidence insufficient for actionable output. SHIELD MODE enforced.`;
     }
   } else if (regime === 'TRENDING') {
     strategyNote = 'Market exhibits persistent momentum. Trend-continuation setups have a statistical edge.';

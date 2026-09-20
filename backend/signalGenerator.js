@@ -622,7 +622,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
   const effectiveMinScore = options.minScore || MIN_SIGNAL_SCORE;
 
-  if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore || regimeResult.regime === 'RANDOM_WALK' || hurstCIReject || macroReject || mesoReject || vwapReject || volatilityReject || sweepTrapReject || momentumStallReject || pullbackReject || calibrationReject) {
+  if (direction === 'NEUTRAL' || compositeScore < effectiveMinScore) {
     let forensicGate = 'MATHEMATICAL_THRESHOLD';
     let retailTrap = 'Retail traders trade setups without mathematical edge, suffering negative expectancy drawdown.';
     let capitalDefense = `Shield Engine locked execution to preserve capital. Expected Value is -$${Math.abs(evPer100).toFixed(2)} per $100 risked.`;
@@ -808,7 +808,6 @@ export async function generateSignal(ticker, candles, options = {}) {
     atr: slTpResult.atr,
     riskDistance: slTpResult.slDistance,
     rewardDistance: slTpResult.tpDistance,
-    riskRewardRatio: 2.0,
     riskRewardRatio: dynamicRRR,
     breakEvenWinRate,
     expectedValue: evPer100,

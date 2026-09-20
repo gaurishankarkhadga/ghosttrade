@@ -40,12 +40,12 @@ export async function getSystemPerformance() {
       const pnl = parseFloat(trade.pnl) || 0;
       netPnlPercent += pnl;
 
-      if (pnl > 0 || trade.status === 'WIN' || trade.status === 'CLOSED_TP') {
+      if (pnl > 0) {
         wins++;
         totalWinPnl += pnl;
-      } else if (pnl < 0 || trade.status === 'LOSS' || trade.status === 'CLOSED_SL') {
+      } else if (pnl < 0) {
         losses++;
-        totalLossPnl += Math.abs(pnl); // store as positive magnitude for EV calc
+        totalLossPnl += Math.abs(pnl);
       }
     });
 

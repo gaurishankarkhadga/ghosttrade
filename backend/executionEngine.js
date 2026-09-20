@@ -398,10 +398,14 @@ class UnifiedExecutionEngine {
                 } else {
                     console.warn(`⚠️ [LIVE] Order failed: ${orderResult.message}`);
                     return { success: false, tradeId, mode: activeMode, reason: orderResult.message };
+                    console.warn(`⚠️ [LIVE] Order failed: ${orderResult.message}. Falling back to PAPER.`);
+                    return await this._executePaperFallback(tradeData, userId, orderResult.message);
                 }
             } catch (err) {
                 console.error(`[EXECUTION ENGINE] STRICT LIVE FAILURE: Live execution error:`, err.message);
                 return { success: false, tradeId, mode: activeMode, reason: `Live execution error: ${err.message}` };
+                console.log(`⚠️ [LIVE] Falling back to PAPER execution for trade ${tradeData.ticker}`);
+                return await this._executePaperFallback(tradeData, userId, `Live error: ${err.message}`);
             }
         }
 
