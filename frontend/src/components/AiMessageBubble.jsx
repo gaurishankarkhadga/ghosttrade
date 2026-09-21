@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import InstitutionalReport from './InstitutionalReport';
+import TradingViewChart from './TradingViewChart';
 import './MessageBubble.css';
 import './AiMessageBubble.css';
 
@@ -458,6 +459,11 @@ const SetupTrackerCard = ({
              <span style={{ color: '#9ca3af' }}>|</span>
              <span style={{ color: '#fff' }}>${fEntry}</span>
           </div>
+        </div>
+      )}
+      {step >= 2 && !isShield && (
+        <div className="ghostrade-seq-step-anim" style={{ margin: "15px 0" }}>
+          <TradingViewChart ticker={asset} height={300} />
         </div>
       )}
 
