@@ -16,48 +16,50 @@ const thinkingMessages = [
   "Synthesizing Neural Data..."
 ];
 
-function DynamicThinkingIndicator() {
-  const [msgIdx, setMsgIdx] = useState(0);
-  const [displayedText, setDisplayedText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
 
+function MatrixTerminalLoader() {
+  const [logs, setLogs] = useState([]);
+  
   useEffect(() => {
-    const currentMsg = thinkingMessages[msgIdx];
-    let timeout;
+    const fullLogs = [
+      "> INITIATING DEEP SCAN PROTOCOL v2.0.1",
+      "> CONNECTING TO BINANCE LIQUIDITY POOLS... [OK]",
+      "> EXTRACTING LEVEL 2 ORDER BOOK... [OK]",
+      "> COMPUTING HURST EXPONENT (H)...",
+      "> REGIME DETECTED: TRENDING_BULLISH (H=0.68)",
+      "> APPLYING KELLY CRITERION RISK MATRIX...",
+      "> VALIDATING TRADE LOGIC... [OK]",
+      "> SYNTHESIZING FINAL INTELLIGENCE REPORT..."
+    ];
     
-    if (isDeleting) {
-      if (displayedText.length > 0) {
-        timeout = setTimeout(() => {
-          setDisplayedText(currentMsg.substring(0, displayedText.length - 1));
-        }, 20); // Fast delete speed
+    let currentLog = 0;
+    const interval = setInterval(() => {
+      if (currentLog < fullLogs.length) {
+        setLogs(prev => {
+           // Prevent duplicates if React strict mode double-fires
+           if(prev.includes(fullLogs[currentLog])) return prev;
+           return [...prev, fullLogs[currentLog]];
+        });
+        currentLog++;
       } else {
-        setIsDeleting(false);
-        setMsgIdx((prev) => (prev + 1) % thinkingMessages.length);
+        clearInterval(interval);
       }
-    } else {
-      if (displayedText.length < currentMsg.length) {
-        timeout = setTimeout(() => {
-          setDisplayedText(currentMsg.substring(0, displayedText.length + 1));
-        }, 40); // Smooth typing speed
-      } else {
-        // Pause before deleting
-        timeout = setTimeout(() => {
-          setIsDeleting(true);
-        }, 1500); 
-      }
-    }
-
-    return () => clearTimeout(timeout);
-  }, [displayedText, isDeleting, msgIdx]);
+    }, 450); // 450ms per line for that hacker feel
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="thinking-indicator single-line-think">
-      <div className="thinking-gt-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
-        <CandleThinkingIndicator size={36} />
+    <div className="matrix-terminal-loader">
+      <div className="matrix-header">
+        <span className="title" style={{ marginLeft: 0, fontWeight: "bold" }}>[// GHOST_ENGINE_RUNTIME]</span>
       </div>
-      <span className="thinking-text font-mono" style={{ fontSize: '0.85rem' }}>
-        {displayedText}<span className="typing-cursor" style={{ marginLeft: '2px', height: '12px' }}></span>
-      </span>
+      <div className="matrix-body font-mono">
+        {logs.map((log, i) => (
+          <div key={i} className="matrix-line">{log}</div>
+        ))}
+        <div className="matrix-line blink-cursor" style={{ marginTop: '5px' }}>_</div>
+      </div>
     </div>
   );
 }
@@ -169,7 +171,7 @@ export default function AiChatInterface() {
               return <AiMessageBubble key={`msg-${index}`} message={msg} />;
             })}
 
-            {isThinking && <DynamicThinkingIndicator />}
+            {isThinking && <MatrixTerminalLoader />}
 
             <div ref={chatEndRef} style={{ height: '1rem' }} />
           </div>

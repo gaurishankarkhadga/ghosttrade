@@ -4,6 +4,61 @@ import { AnimatePresence, motion } from 'framer-motion';
 import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
 
+
+// Internal component for Bloomberg-style live flashing ticks
+const LiveFlashingChip = ({ ticker, assetData, onSend, disabled, market, language, title, baseClass, chipIcon }) => {
+  const [flashClass, setFlashClass] = useState('');
+  const prevPriceRef = useRef(assetData?.currentPrice);
+  const prevScoreRef = useRef(assetData?.score);
+
+  useEffect(() => {
+    const currentPrice = assetData?.currentPrice;
+    const currentScore = assetData?.score;
+    const prevPrice = prevPriceRef.current;
+    const prevScore = prevScoreRef.current;
+
+    let shouldFlash = false;
+    let flashType = '';
+
+    // Flash on price change
+    if (currentPrice !== undefined && prevPrice !== undefined && currentPrice !== prevPrice) {
+      shouldFlash = true;
+      flashType = currentPrice > prevPrice ? 'flash-green' : 'flash-red';
+    } 
+    // Fallback: Flash on AI score change
+    else if (currentScore !== undefined && prevScore !== undefined && currentScore !== prevScore) {
+      shouldFlash = true;
+      flashType = currentScore > prevScore ? 'flash-green' : 'flash-red';
+    }
+
+    if (shouldFlash) {
+      setFlashClass(''); // reset to re-trigger animation
+      setTimeout(() => setFlashClass(flashType), 10);
+      const timer = setTimeout(() => setFlashClass(''), 800);
+      
+      prevPriceRef.current = currentPrice;
+      prevScoreRef.current = currentScore;
+      
+      return () => clearTimeout(timer);
+    }
+    
+    prevPriceRef.current = currentPrice;
+    prevScoreRef.current = currentScore;
+  }, [assetData?.currentPrice, assetData?.score]);
+
+  return (
+    <button 
+      type="button"
+      className={`${baseClass} ${flashClass}`}
+      onClick={() => onSend({ text: ticker, imageBase64: null, market, language })}
+      disabled={disabled}
+      title={title}
+    >
+      {chipIcon}{ticker} {assetData?.score !== undefined ? `(${assetData.score})` : ''}
+    </button>
+  );
+};
+
 export default function PromptInputBar({ onSend, disabled, hideLegal }) {
   const [prompt, setPrompt] = useState('');
   const [market, setMarket] = useState(() => localStorage.getItem('ghostrade_market') || 'Crypto');
@@ -212,16 +267,18 @@ export default function PromptInputBar({ onSend, disabled, hideLegal }) {
                        : `Score: ${assetData?.score || 0}/100`;
 
                return (
-                 <button 
+                 <LiveFlashingChip 
                    key={ticker}
-                   type="button"
-                   className={chipClass} 
-                   onClick={() => onSend({ text: ticker, imageBase64: null, market, language })}
+                   ticker={ticker}
+                   assetData={assetData}
+                   onSend={onSend}
                    disabled={disabled}
+                   market={market}
+                   language={language}
                    title={title}
-                 >
-                   {chipIcon}{ticker} {assetData?.score !== undefined ? `(${assetData.score})` : ''}
-                 </button>
+                   baseClass={chipClass}
+                   chipIcon={chipIcon}
+                 />
                );
             })
           ) : (

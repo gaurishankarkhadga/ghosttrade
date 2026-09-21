@@ -464,3 +464,22 @@
   color: #fff;
   text-decoration-color: #fff;
 }
+
+/* LIVE FLASHING ANIMATIONS (Bloomberg Terminal Effect) */
+@keyframes flashGreen {
+  0% { background-color: rgba(52, 211, 153, 0.6); box-shadow: 0 0 10px rgba(52, 211, 153, 0.4); border-color: rgba(52, 211, 153, 1); color: #fff; }
+  100% { } /* Revert to default */
+}
+
+@keyframes flashRed {
+  0% { background-color: rgba(248, 113, 113, 0.6); box-shadow: 0 0 10px rgba(248, 113, 113, 0.4); border-color: rgba(248, 113, 113, 1); color: #fff; }
+  100% { } /* Revert to default */
+}
+
+.flash-green {
+  animation: flashGreen 0.8s ease-out !important;
+}
+
+.flash-red {
+  animation: flashRed 0.8s ease-out !important;
+}
