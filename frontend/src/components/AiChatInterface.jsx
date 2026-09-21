@@ -148,12 +148,12 @@ export default function AiChatInterface() {
               COMMAND THE <span className="chat-hero-highlight">ENGINE</span>
             </h1>
             <p className="chat-hero-subtitle">
-              Ask GhostTrade to analyze any asset or strategy.
+              Ask Ghostrade to analyze any asset or strategy.
             </p>
 
             {/* Input is in the middle of the screen when empty */}
             <div className="chat-empty-input-wrapper">
-              <PromptInputBar onSend={sendPrompt} disabled={isThinking} />
+              <PromptInputBar onSend={sendPrompt} disabled={isThinking} hideLegal={true} />
             </div>
           </div>
         ) : (
@@ -183,7 +183,7 @@ export default function AiChatInterface() {
             
             {/* Floating Action Button */}
             {isActiveTrade && (
-              <div className="ghosttrade-seq-step-anim-down" style={{ 
+              <div className="ghostrade-seq-step-anim-down" style={{ 
                 position: 'absolute', 
                 bottom: '100%', 
                 left: 0, 
@@ -234,7 +234,7 @@ export default function AiChatInterface() {
                   {isShield 
                     ? <><Shield size={16} style={{ color: 'var(--text-muted)' }} /> Shield Mode</>
                     : isLiveMode
-                      ? <><Zap size={16} style={{ color: 'var(--text-muted)' }} /> Execute Live</>
+                      ? <><Zap size={16} style={{ color: 'var(--text-muted)' }} /> Track Setup</>
                       : <><CheckCircle size={16} style={{ color: 'var(--text-muted)' }} /> Keep It</>
                   }
                 </button>

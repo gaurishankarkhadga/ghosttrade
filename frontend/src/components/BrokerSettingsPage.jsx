@@ -163,8 +163,8 @@ export default function BrokerSettingsPage() {
 
   const modes = [
     { key: 'PAPER', label: 'Paper Trading', desc: 'Simulation mode — no real money at risk', icon: <Shield size={18} />, color: '#94a3b8' },
-    { key: 'LIVE_CRYPTO', label: 'Live Crypto', desc: 'Execute via Binance API', icon: <Zap size={18} />, color: '#f0b90b', requires: 'BINANCE' },
-    { key: 'LIVE_FNO', label: 'Live F&O', desc: 'Execute via Angel One SmartAPI', icon: <Globe size={18} />, color: '#ff7b00', requires: 'ANGEL_ONE' },
+    { key: 'LIVE_CRYPTO', label: 'Live Crypto', desc: 'Track via Binance Data', icon: <Zap size={18} />, color: '#f0b90b', requires: 'BINANCE' },
+    { key: 'LIVE_FNO', label: 'Live F&O', desc: 'Track via Angel One Data', icon: <Globe size={18} />, color: '#ff7b00', requires: 'ANGEL_ONE' },
   ];
 
   const openMarkets = globalMarkets?.openNow || [];
@@ -178,8 +178,8 @@ export default function BrokerSettingsPage() {
               <ArrowLeft size={20} />
             </button>
             <div>
-              <h2>Execution Settings</h2>
-              <p className="broker-page-subtitle">Connect your broker to enable live trading</p>
+              <h2>Routing Settings</h2>
+              <p className="broker-page-subtitle">Connect your broker to enable live portfolio tracking</p>
             </div>
           </div>
         </div>
@@ -223,7 +223,7 @@ export default function BrokerSettingsPage() {
                 isConnected={!!connectedMap[key]}
                 connectedAt={connectedMap[key]?.connectedAt}
                 onDisconnect={disconnectBroker}
-                onLockClick={() => toast.error('Live Trading Locked. It will enable in 15 days.', { icon: '🔒' })}
+                onLockClick={() => toast.error('Live Routing Locked. It will enable in 15 days.', { icon: '🔒' })}
               />
             ))}
           </div>
@@ -251,7 +251,7 @@ export default function BrokerSettingsPage() {
         {/* Security Notice */}
         <div className="broker-security-notice">
           <Shield size={14} />
-          <span>Your API keys are encrypted with AES-256-GCM. GhostTrade never stores plaintext credentials. We never have access to your funds.</span>
+          <span>Your API keys are encrypted with AES-256-GCM. Ghostrade never stores plaintext credentials. We never have access to your funds.</span>
         </div>
       </div>
       

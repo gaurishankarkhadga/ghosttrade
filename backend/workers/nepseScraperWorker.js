@@ -52,7 +52,7 @@ async function runScraper() {
         continue;
       }
 
-      // Convert TradingView format into Ghosttrade Object Array
+      // Convert TradingView format into Ghostrade Object Array
       const formattedData = [];
       for (let i = 0; i < rawData.t.length; i++) {
         formattedData.push({

@@ -3,7 +3,7 @@
  * Isolated to prevent global namespace pollution.
  */
 
-@keyframes ghosttradeSeqFadeInUp {
+@keyframes ghostradeSeqFadeInUp {
   from { 
     opacity: 0; 
     transform: translateY(8px); 
@@ -14,11 +14,11 @@
   }
 }
 
-.ghosttrade-seq-step-anim {
-  animation: ghosttradeSeqFadeInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.ghostrade-seq-step-anim {
+  animation: ghostradeSeqFadeInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-@keyframes ghosttradeSeqFadeInDown {
+@keyframes ghostradeSeqFadeInDown {
   from { 
     opacity: 0; 
     transform: translateY(-8px); 
@@ -29,6 +29,6 @@
   }
 }
 
-.ghosttrade-seq-step-anim-down {
-  animation: ghosttradeSeqFadeInDown 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.ghostrade-seq-step-anim-down {
+  animation: ghostradeSeqFadeInDown 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

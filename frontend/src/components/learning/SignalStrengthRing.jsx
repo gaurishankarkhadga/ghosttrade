@@ -47,7 +47,7 @@ const SignalStrengthRing = ({ score = 0 }) => {
         <Gauge className="lm-sr-header-icon" size={24} style={{ color: '#facc15' }} />
         <h2 className="lm-sr-title">Signal Strength</h2>
       </div>
-      <p className="lm-sr-subtitle">How confident is GhostTrade in this setup?</p>
+      <p className="lm-sr-subtitle">How confident is Ghostrade in this setup?</p>
       
       <div className="lm-sr-ring-wrapper">
         <svg 
@@ -83,7 +83,7 @@ const SignalStrengthRing = ({ score = 0 }) => {
           <div className="lm-sr-max">/100</div>
         </div>
       </div>
-      <div className="lm-sr-label">GhostTrade Signal Strength</div>
+      <div className="lm-sr-label">Ghostrade Signal Strength</div>
     </div>
   );
 };

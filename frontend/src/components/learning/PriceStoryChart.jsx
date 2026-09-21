@@ -146,7 +146,7 @@ const PriceStoryChart = ({ candles = [], entryPrice, stopLoss, takeProfit, direc
                 y={ep}
                 stroke="#facc15"
                 strokeDasharray="5 3"
-                label={{ position: 'right', value: 'Entry', fill: '#facc15', fontSize: 11, fontWeight: 600 }}
+                label={{ position: 'right', value: 'Ref Entry', fill: '#facc15', fontSize: 11, fontWeight: 600 }}
               />
             )}
             {!isNaN(sl) && (
@@ -154,7 +154,7 @@ const PriceStoryChart = ({ candles = [], entryPrice, stopLoss, takeProfit, direc
                 y={sl}
                 stroke="#ef4444"
                 strokeDasharray="5 3"
-                label={{ position: 'right', value: 'Stop', fill: '#ef4444', fontSize: 11, fontWeight: 600 }}
+                label={{ position: 'right', value: 'Inv', fill: '#ef4444', fontSize: 11, fontWeight: 600 }}
               />
             )}
             {!isNaN(tp) && (
@@ -162,7 +162,7 @@ const PriceStoryChart = ({ candles = [], entryPrice, stopLoss, takeProfit, direc
                 y={tp}
                 stroke="#10b981"
                 strokeDasharray="5 3"
-                label={{ position: 'right', value: 'Target', fill: '#10b981', fontSize: 11, fontWeight: 600 }}
+                label={{ position: 'right', value: 'Reference', fill: '#10b981', fontSize: 11, fontWeight: 600 }}
               />
             )}
           </ComposedChart>

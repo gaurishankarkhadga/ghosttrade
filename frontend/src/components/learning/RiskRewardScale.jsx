@@ -82,7 +82,7 @@ const RiskRewardScale = ({ riskRewardRatio, winRate, entryPrice, stopLoss, takeP
       </div>
 
       <div className="lm-rrs-ev-box">
-        <div className="lm-rrs-ev-label">Expected Profit</div>
+        <div className="lm-rrs-ev-label">Expected Value</div>
         <div className={`lm-rrs-ev-value ${evColorClass}`}>
           {expectedValue > 0 ? '+' : ''}${(!isNaN(expectedValue) ? expectedValue : 0).toFixed(2)} 
           <span className="lm-rrs-ev-suffix"> per $100 risked</span>
@@ -90,7 +90,7 @@ const RiskRewardScale = ({ riskRewardRatio, winRate, entryPrice, stopLoss, takeP
       </div>
 
       <p className="lm-rrs-note">
-        A good trade risks less than it could gain. GhostTrade only takes trades with positive expected value.
+        A good setup risks less than it could gain. Ghostrade only analyzes setups with positive expected value.
       </p>
     </div>
   );

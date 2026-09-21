@@ -25,7 +25,7 @@ export async function sendDiscordSignal(setup, retries = 0) {
 
     // Construct the Institutional Rich Embed
     const payload = {
-        username: "GhostTrade Quant Engine",
+        username: "Ghostrade Quant Engine",
         avatar_url: "https://i.imgur.com/Affb7X2.png", // Replace with actual logo URL if available
         embeds: [
             {
@@ -55,7 +55,7 @@ export async function sendDiscordSignal(setup, retries = 0) {
                     }
                 ],
                 footer: {
-                    text: "GhostTrade Engine v2.0 • Zero-BS Mathematics"
+                    text: "Ghostrade Engine v2.0 • Zero-BS Mathematics"
                 },
                 timestamp: new Date().toISOString()
             }

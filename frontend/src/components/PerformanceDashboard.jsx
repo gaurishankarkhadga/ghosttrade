@@ -64,9 +64,9 @@ const formatAIProof = (text) => {
   let levels = '';
   let reasoning = '';
   
-  const verdictMatch = text.match(/PREDICTION VERDICT:(.*?)(?=TRADE LEVELS:|$)/is);
-  const levelsMatch = text.match(/TRADE LEVELS:(.*?)(?=SIMPLE REASONING:|$)/is);
-  const reasoningMatch = text.match(/SIMPLE REASONING:(.*)/is);
+  const verdictMatch = text.match(/(?:PREDICTION VERDICT|ANALYSIS SUMMARY):(.*?)(?=(?:TRADE LEVELS|KEY PRICE LEVELS)[^:]*:|$)/is);
+  const levelsMatch = text.match(/(?:TRADE LEVELS|KEY PRICE LEVELS[^:]*):(.*?)(?=(?:SIMPLE REASONING|SIMPLE ANALYSIS|ANALYTICAL REASONING):|$)/is);
+  const reasoningMatch = text.match(/(?:SIMPLE REASONING|SIMPLE ANALYSIS|ANALYTICAL REASONING):(.*)/is);
   
   if (verdictMatch) verdict = verdictMatch[1].trim();
   if (levelsMatch) levels = levelsMatch[1].trim();
@@ -403,7 +403,7 @@ export default function PerformanceDashboard() {
                 <th>Entry Price</th>
                 <th>Target (TP)</th>
                 <th>Invalidation (SL)</th>
-                <th>Recommended Size</th>
+                <th>Kelly Size (Theoretical)</th>
                 <th>Actions</th>
               </tr>
             </thead>

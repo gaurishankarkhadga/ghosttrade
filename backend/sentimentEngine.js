@@ -25,7 +25,7 @@ async function fetchLiveNews(ticker) {
     try {
       const cpUrl = `https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&currencies=${cleanTicker}&kind=news`;
       const cpResponse = await fetch(cpUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GhostTrade/2.0)' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Ghostrade/2.0)' },
         signal: AbortSignal.timeout(6000)
       });
       if (cpResponse.ok) {

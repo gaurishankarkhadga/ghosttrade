@@ -53,7 +53,7 @@ const EdgeRadar = ({ signalFactors }) => {
         <Crosshair className="lm-er-icon" size={20} />
         <h3 className="lm-er-title">Edge Analysis</h3>
       </div>
-      <p className="lm-er-subtitle">GhostTrade checks 5 different factors before every trade</p>
+      <p className="lm-er-subtitle">Ghostrade checks 5 different factors before every setup</p>
       
       <div className="lm-er-container">
         <ResponsiveContainer width="100%" height="100%">

@@ -9,13 +9,13 @@ export async function classifyIntentWithGroq(prompt) {
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) return 'FULL_ANALYSIS'; // Fallback
 
-    const systemPrompt = `You are an Intent Classifier for a quantitative trading AI.
+    const systemPrompt = `You are an Intent Classifier for a quantitative analysis AI.
 Categorize the user's prompt into EXACTLY ONE of the following 4 categories (reply with ONLY the category name):
 
-FULL_ANALYSIS: The user explicitly wants a deep scan, trade setup, or analysis of a specific asset (e.g., "Analyze BTC", "Should I buy Tesla?", "AAPL prediction").
+FULL_ANALYSIS: The user explicitly wants a deep scan, technical setup, or analysis of a specific asset (e.g., "Analyze BTC", "What does the data show for Tesla?", "AAPL technical analysis").
 CLARIFICATION_NEEDED: The user mentions an asset but there is a typo, ambiguity, or it's unclear what they want (e.g., "how is appl", "bitcon", "shoud i buy solna").
 DATA_BACKED_CONVERSATION: The user is asking a conversational question about a specific asset that requires real-time data to answer accurately (e.g., "Why is BTC dumping?", "Is ETH bullish right now?", "What is the RSI on SOL?").
-PURE_CONVERSATION: The user is asking a general trading, finance, or educational question with no specific asset mentioned, OR a non-trading question (e.g., "What is a moving average?", "How do I manage risk?", "Hello").
+PURE_CONVERSATION: The user is asking a general market, finance, or educational question with no specific asset mentioned, OR a non-trading question (e.g., "What is a moving average?", "How do I manage risk?", "Hello").
 
 Reply ONLY with the category name string. No other text.`;
 

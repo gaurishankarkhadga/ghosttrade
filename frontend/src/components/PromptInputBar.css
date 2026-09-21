@@ -442,3 +442,25 @@
 .remove-attachment-btn:hover {
   background: var(--ghost-accent);
 }
+
+/* Legal Footer Under Input Box */
+.prompt-legal-footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-muted, #9ca3af);
+  margin-top: 10px;
+  opacity: 0.8;
+}
+
+.prompt-legal-footer a {
+  color: var(--text-secondary, #d1d5db);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.2);
+  margin: 0 2px;
+  transition: all 0.2s ease;
+}
+
+.prompt-legal-footer a:hover {
+  color: #fff;
+  text-decoration-color: #fff;
+}

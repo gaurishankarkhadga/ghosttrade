@@ -252,7 +252,7 @@ function useControlledTypewriter(text, isActiveStep, isPastStep, skipAnimation, 
   return displayedContent;
 }
 
-const TradeExecutionCard = ({ 
+const SetupTrackerCard = ({ 
   asset, 
   side, 
   entryPrice, 
@@ -340,7 +340,7 @@ const TradeExecutionCard = ({
   const beginnerText = educationalLesson?.beginnerLesson || (
     isShield
       ? `Capital Preservation is active for ${asset}. The market regime (${regime || 'RANDOM_WALK'}) lacks statistical edge. Zero capital is deployed to protect your balance.`
-      : `High-probability ${side} setup detected on ${asset}. We enter at $${fEntry} with strict Stop Loss at $${fStop} targeting $${fTarget} (1:${rrrRatio} RRR).`
+      : `High-probability ${side} setup detected on ${asset}. Observed entry around $${fEntry} with Risk Invalidation at $${fStop} reference resistance $${fTarget} (1:${rrrRatio} RRR).`
   );
 
   const proText = educationalLesson?.proLesson || (
@@ -351,7 +351,7 @@ const TradeExecutionCard = ({
     "Capital deployment restricted to 0% (Negative EV / Random Walk). Capital preserved."
   );
 
-  const guidedRiskText = `Risking ${actualRiskPct}% to gain ${actualRewardPct}% (Strict 1:${rrrRatio} RRR).\nProtective Stop Loss: $${fStop} | Target: $${fTarget}.`;
+  const guidedRiskText = `Modeled Risk: ${actualRiskPct}% | Modeled Reward: ${actualRewardPct}% (Strict 1:${rrrRatio} RRR).\nRisk Reference (Invalidation): $${fStop} | Reference Target: $${fTarget}.`;
   
   const smoothedShieldReason = useControlledTypewriter(shieldReasonText, step === 2, step > 2, !isNewMessage, isShield ? onGuidedComplete : null);
   const smoothedGuidedRisk = useControlledTypewriter(guidedRiskText, step === 2, step > 2, !isNewMessage, !isShield ? onGuidedComplete : null);
@@ -388,11 +388,11 @@ const TradeExecutionCard = ({
     // Still waiting for backend response
     if (!tradeResult) {
       return (
-        <div className={`trade-card executed`}>
+        <div className={`setup-card executed`}>
           <div className="trade-header">
             <span className="trade-asset"> {asset} PROCESSING...</span>
           </div>
-          <p className="trade-success-msg">Routing to execution engine...</p>
+          <p className="trade-success-msg">Saving setup to dashboard for tracking...</p>
         </div>
       );
     }
@@ -400,7 +400,7 @@ const TradeExecutionCard = ({
     // Trade was blocked by risk control
     if (!tradeResult.success) {
       return (
-        <div className={`trade-card executed`} style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+        <div className={`setup-card executed`} style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
           <div className="trade-header">
             <span className="trade-asset"> {asset}RISK BLOCKED</span>
             <span className="trade-status-badge" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}>
@@ -408,7 +408,7 @@ const TradeExecutionCard = ({
             </span>
           </div>
           <p className="trade-success-msg" style={{ color: '#f87171' }}>
-            EXECUTION BLOCKED: {tradeResult.reason || 'Portfolio risk limit exceeded'}. Capital preserved.
+            SETUP REJECTED: {tradeResult.reason || 'Portfolio risk limit exceeded'}. Capital preserved.
           </p>
         </div>
       );
@@ -416,7 +416,7 @@ const TradeExecutionCard = ({
 
     // Trade succeeded
     return (
-      <div className={`trade-card executed`}>
+      <div className={`setup-card executed`}>
         <div className="trade-header">
           <span className="trade-asset"> {asset} ACTIVE</span>
           <span className="trade-status-badge" style={{ background: isLiveMode ? 'rgba(239,68,68,0.2)' : 'rgba(148,163,184,0.2)', color: isLiveMode ? '#ef4444' : '#94a3b8' }}>
@@ -425,7 +425,7 @@ const TradeExecutionCard = ({
         </div>
         <p className="trade-success-msg">
           {isLiveMode
-            ? `Order routed to ${currentMode.replace('LIVE_', '')} broker for live execution. Track on Performance Dashboard.`
+            ? `Setup saved to broker/portfolio for tracking. View on Performance Dashboard.`
             : 'Signal logged to the Performance Dashboard for real-time tracking and verification.'
           }
         </p>
@@ -436,14 +436,14 @@ const TradeExecutionCard = ({
   return (
     <div className={`trade-card expanded terminal-${sideLower} ${isShield ? 'shield-card' : ''}`}>
       {step >= 1 && predictiveHorizon && (
-        <div className="predictive-badge ghosttrade-seq-step-anim" style={{ marginBottom: 12 }}>
+        <div className="predictive-badge ghostrade-seq-step-anim" style={{ marginBottom: 12 }}>
           <Eye size={14} className="pred-icon" />
-          <span className="pred-text">5-10m Horizon: <strong>{predictiveHorizon.predictedDirection || 'BULLISH_BREAKOUT_5-10M'}</strong> ({predictiveHorizon.predictiveScore || 85}% Conf)</span>
+          <span className="pred-text">5-10m Horizon: <strong>{predictiveHorizon.observedDirection || 'BULLISH_BREAKOUT_5-10M'}</strong> ({predictiveHorizon.predictiveScore || 85}% Conf)</span>
         </div>
       )}
 
       {step >= 1 && (
-        <div className="terminal-header ghosttrade-seq-step-anim">
+        <div className="terminal-header ghostrade-seq-step-anim">
           <div className="terminal-brand">
             <Activity size={16} className="brand-icon" />
             <span className="terminal-title">
@@ -482,7 +482,7 @@ const TradeExecutionCard = ({
 
       {step >= 3 && (
         <div className="terminal-mentor visual-academy" style={{ paddingTop: '12px' }}>
-          <div className="visual-trading-grid ghosttrade-seq-step-anim">
+          <div className="visual-trading-grid ghostrade-seq-step-anim">
             <div className="visual-gauge-card">
               <div className="gauge-label">
                 <span>ORDER FLOW</span>
@@ -506,7 +506,7 @@ const TradeExecutionCard = ({
           </div>
 
           {step >= 4 && (
-            <div className="mentor-content-box visual-box ghosttrade-seq-step-anim" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+            <div className="mentor-content-box visual-box ghostrade-seq-step-anim" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
               <div className="beginner-card-view">
                 <div className="concept-pill">
                   <TrendingUp size={16} className="concept-icon" />
@@ -518,10 +518,10 @@ const TradeExecutionCard = ({
                   </p>
                 )}
                 {step >= 6 && !isShield && (
-                  <div className="rr-visualizer ghosttrade-seq-step-anim">
-                    <div className="rr-pill stop">SL: ${fStop}</div>
+                  <div className="rr-visualizer ghostrade-seq-step-anim">
+                    <div className="rr-pill stop">INV: ${fStop}</div>
                     <div className="rr-arrow"><ArrowRight size={12}/> Risk {safeRisk}% <ArrowRight size={12}/></div>
-                    <div className="rr-pill target">TP: ${fTarget}</div>
+                    <div className="rr-pill target">REF: ${fTarget}</div>
                     <span className="rr-badge">RRR 1:{rrrRatio > 0 ? rrrRatio : '2.5'}</span>
                   </div>
                 )}
@@ -529,10 +529,10 @@ const TradeExecutionCard = ({
 
               {step >= 7 && (
                 <>
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 8px' }} className="ghosttrade-seq-step-anim"></div>
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 8px' }} className="ghostrade-seq-step-anim"></div>
 
                   <div className="pro-card-view">
-                    <div className="quant-proof-header ghosttrade-seq-step-anim">
+                    <div className="quant-proof-header ghostrade-seq-step-anim">
                       <Zap size={16} className="proof-icon" />
                       <span className="proof-title">QUANTITATIVE PROOF</span>
                     </div>
@@ -546,7 +546,7 @@ const TradeExecutionCard = ({
                     />
 
                     {ofiSource && (
-                      <div className="ofi-source-badge ghosttrade-seq-step-anim" style={{
+                      <div className="ofi-source-badge ghostrade-seq-step-anim" style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
                         marginTop: 10, padding: '4px 10px', borderRadius: 6,
                         background: ofiSource === 'BINANCE_AGGTRADE' ? 'rgba(52,211,153,0.15)' : 'rgba(245,158,11,0.15)',
@@ -618,7 +618,7 @@ const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
         }} />
 
         {step >= 1 && (
-          <div className="ghosttrade-seq-step-anim" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div className="ghostrade-seq-step-anim" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <div style={{
               width: 48, height: 48, borderRadius: 12,
               background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)',
@@ -638,7 +638,7 @@ const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
         )}
 
         {step >= 2 && (
-          <div className="ghosttrade-seq-step-anim" style={{
+          <div className="ghostrade-seq-step-anim" style={{
             background: 'rgba(251,191,36,0.06)',
             border: '1px solid rgba(251,191,36,0.12)',
             borderRadius: 10, padding: '14px 16px', marginBottom: 16
@@ -661,7 +661,7 @@ const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
         )}
 
         {step >= 3 && (
-          <div className="ghosttrade-seq-step-anim" style={{
+          <div className="ghostrade-seq-step-anim" style={{
             fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6
           }}>
             Every asset is currently in Shield Mode — the mathematical expectancy is negative or neutral.
@@ -680,7 +680,7 @@ const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
     }}>
       {/* Header Card */}
       {step >= 1 && (
-        <div className="ghosttrade-seq-step-anim" style={{
+        <div className="ghostrade-seq-step-anim" style={{
           background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(6,78,59,0.2))',
           border: '1px solid rgba(52,211,153,0.25)',
           borderRadius: 14, padding: '16px 20px',
@@ -707,7 +707,7 @@ const DeepScanResultsCard = ({ scanData, isNewMessage }) => {
         const dirIcon = isBull ? '▲' : '▼';
 
         return (
-          <div key={asset.ticker} className="ghosttrade-seq-step-anim" style={{
+          <div key={asset.ticker} className="ghostrade-seq-step-anim" style={{
             background: 'linear-gradient(135deg, rgba(30,41,59,0.85), rgba(15,23,42,0.95))',
             border: `1px solid ${accentBorder}`,
             borderRadius: 14, padding: '20px',
@@ -842,7 +842,7 @@ export default function AiMessageBubble({ message }) {
             )}
             
             {message.uiComponent === 'TRADE_CARD' && message.tradeData && (
-              <TradeExecutionCard {...message.tradeData} isParentStreaming={isStreaming} isNewMessage={isNewMessage} />
+              <SetupTrackerCard {...message.tradeData} isParentStreaming={isStreaming} isNewMessage={isNewMessage} />
             )}
 
             {message.uiComponent === 'DEEP_SCAN_RESULTS' && message.scanData && (

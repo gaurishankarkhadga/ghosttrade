@@ -4,8 +4,8 @@ import './SimpleLesson.css';
 
 const SimpleLesson = ({ educationalLesson, direction }) => {
   const defaultLesson = {
-    beginnerLesson: "GhostTrade is analyzing the market for you. Each trade setup teaches you something new.",
-    coreTakeaway: "Focus on understanding the rationale behind the signals to improve your trading edge over time."
+    beginnerLesson: "Ghostrade is analyzing the market for you. Each analytical setup teaches you something new.",
+    coreTakeaway: "Focus on understanding the rationale behind the signals to improve your analytical edge over time."
   };
 
   const lessonToUse = educationalLesson || defaultLesson;

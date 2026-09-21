@@ -4,7 +4,7 @@
 // Factory pattern creates the correct adapter at runtime.
 //
 // ARCHITECTURE:
-// GhostTrade Signal → User Clicks Execute → BrokerAdapterFactory
+// Ghostrade Signal → User Clicks Execute → BrokerAdapterFactory
 //   → BinanceAdapter (Crypto)
 //   → AlpacaAdapter (US Stocks)
 //   → IBKRAdapter (170+ Global Markets)
@@ -87,9 +87,9 @@ export class BaseBrokerAdapter {
   }
 
   /**
-   * Resolves a GhostTrade ticker to the broker's native symbol format.
+   * Resolves a Ghostrade ticker to the broker's native symbol format.
    * e.g., 'BTC-USD' → 'BTCUSDT' (Binance) or 'BTC/USD' (Alpaca)
-   * @param {string} ghostTicker — GhostTrade's internal ticker format
+   * @param {string} ghostTicker — Ghostrade's internal ticker format
    * @returns {string} — Broker-native symbol
    */
   resolveSymbol(ghostTicker) {

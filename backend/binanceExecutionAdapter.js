@@ -1,7 +1,7 @@
 // =====================================================
 // BINANCE EXECUTION ADAPTER — Crypto Live Trading
 // Connects to Binance REST API using the USER's own
-// API key + secret. GhostTrade never touches user funds.
+// API key + secret. Ghostrade never touches user funds.
 //
 // Supports: MARKET & LIMIT orders, balance check,
 //           order status, position tracking.
@@ -16,7 +16,7 @@ import { BaseBrokerAdapter, registerAdapter } from './brokerAdapter.js';
 const BINANCE_BASE_URL = 'https://api.binance.com';
 
 /**
- * GhostTrade ticker → Binance symbol mapping.
+ * Ghostrade ticker → Binance symbol mapping.
  * Converts our internal format to Binance's expected format.
  */
 const GHOST_TO_BINANCE = {

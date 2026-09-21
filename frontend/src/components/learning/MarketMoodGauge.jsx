@@ -40,7 +40,7 @@ const MarketMoodGauge = ({ regime, direction }) => {
     if (regime === 'MEAN_REVERTING') {
       return 'The market is bouncing between levels — no clear trend';
     }
-    return 'No clear direction right now — GhostTrade recommends waiting';
+    return 'No clear direction right now — Ghostrade data suggests low probability';
   };
 
   const getSubtext = () => {

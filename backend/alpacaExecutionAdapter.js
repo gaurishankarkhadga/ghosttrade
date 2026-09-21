@@ -24,7 +24,7 @@ export class AlpacaAdapter extends BaseBrokerAdapter {
     super('ALPACA', credentials);
     this.apiKey = credentials.apiKey || '';
     this.apiSecret = credentials.apiSecret || '';
-    // Alpaca has its own paper mode — separate from GhostTrade paper
+    // Alpaca has its own paper mode — separate from Ghostrade paper
     this.isPaperAccount = credentials.isPaper !== false; // Default to paper
     this.baseUrl = this.isPaperAccount ? ALPACA_PAPER_URL : ALPACA_LIVE_URL;
   }

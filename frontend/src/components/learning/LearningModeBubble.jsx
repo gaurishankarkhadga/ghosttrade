@@ -28,7 +28,7 @@ const LearningModeBubble = ({ tradeData, content, isGenerating }) => {
           {tradeData ? (
             <div className={`lm-direction-pill ${isBuy ? 'lm-pill-buy' : 'lm-pill-sell'}`}>
               <Zap size={14} />
-              <span>{isBuy ? 'BUY SIGNAL' : 'SELL SIGNAL'}</span>
+              <span>{isBuy ? 'BULLISH SETUP' : 'BEARISH SETUP'}</span>
             </div>
           ) : (
             <div className="lm-direction-pill" style={{ background: 'rgba(255,255,255,0.1)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)' }}>

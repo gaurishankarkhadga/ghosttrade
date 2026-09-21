@@ -4,10 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import useGhostStore from '../store/ghostStore';
 import './PromptInputBar.css';
 
-export default function PromptInputBar({ onSend, disabled }) {
+export default function PromptInputBar({ onSend, disabled, hideLegal }) {
   const [prompt, setPrompt] = useState('');
-  const [market, setMarket] = useState(() => localStorage.getItem('ghosttrade_market') || 'Crypto');
-  const [language, setLanguage] = useState(() => localStorage.getItem('ghosttrade_language') || 'English');
+  const [market, setMarket] = useState(() => localStorage.getItem('ghostrade_market') || 'Crypto');
+  const [language, setLanguage] = useState(() => localStorage.getItem('ghostrade_language') || 'English');
   const [isMarketDropdownOpen, setIsMarketDropdownOpen] = useState(false);
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [attachedImage, setAttachedImage] = useState(null);
@@ -134,7 +134,7 @@ export default function PromptInputBar({ onSend, disabled }) {
 
   const handleDeepScan = () => {
     if (!disabled) {
-      onSend({ text: `Execute Deep Scan across all quantitative regimes`, imageBase64: null, market, language });
+      onSend({ text: `Run Deep Scan across all quantitative regimes`, imageBase64: null, market, language });
     }
   };
 
@@ -166,7 +166,8 @@ export default function PromptInputBar({ onSend, disabled }) {
   const isActive = (prompt.trim() || attachedImage) && !disabled;
 
   return (
-    <form onSubmit={handleSubmit} className="bolt-prompt-form">
+    <div className="prompt-input-bar-wrapper" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <form onSubmit={handleSubmit} className="bolt-prompt-form" style={{ width: "100%" }}>
       <div className="bolt-prompt-container">
         {/* Integrated Quick Action Chips — Enriched with Global Signal Data */}
         <div className="quick-action-row-integrated">
@@ -283,7 +284,7 @@ export default function PromptInputBar({ onSend, disabled }) {
                         className={`market-dropdown-item ${market === m ? 'active' : ''}`}
                         onClick={() => { 
                           setMarket(m); 
-                          localStorage.setItem('ghosttrade_market', m);
+                          localStorage.setItem('ghostrade_market', m);
                           setIsMarketDropdownOpen(false); 
                         }}
                       >
@@ -315,7 +316,7 @@ export default function PromptInputBar({ onSend, disabled }) {
                         className={`market-dropdown-item ${language === l ? 'active' : ''}`}
                         onClick={() => { 
                           setLanguage(l); 
-                          localStorage.setItem('ghosttrade_language', l);
+                          localStorage.setItem('ghostrade_language', l);
                           setIsLangDropdownOpen(false); 
                         }}
                       >
@@ -335,7 +336,7 @@ export default function PromptInputBar({ onSend, disabled }) {
               type="submit"
               disabled={!isActive}
               className={`bolt-submit-btn-wide ${isActive ? 'active' : 'disabled'}`}
-              title="Execute"
+              title="Analyze"
               style={{ padding: '0.4rem 0.8rem', borderRadius: '0.5rem' }}
             >
               <ArrowRight size={16} strokeWidth={2.5} />
@@ -344,5 +345,11 @@ export default function PromptInputBar({ onSend, disabled }) {
         </div>
       </div>
     </form>
+    {!hideLegal && (
+      <div className="prompt-legal-footer">
+        Ghostrade is an analytical platform, not financial advice. <a href="/legal#risk" target="_blank" rel="noopener noreferrer">Risk</a> &middot; <a href="/legal#terms" target="_blank" rel="noopener noreferrer">Terms</a>
+      </div>
+    )}
+    </div>
   );
 }

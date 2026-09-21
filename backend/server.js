@@ -17,6 +17,7 @@ dotenv.config();
 
 // === Security Layer Imports ===
 import { validateEnvironment } from './validateEnv.js';
+import { registerAdvancedSecurity } from "./advancedSecurity.js";
 import { registerSecurityMiddleware, validateWsOrigin, createWsRateLimiter } from './securityMiddleware.js';
 import { sanitizeEmail, validatePassword, sanitizeString, sanitizeMongoQuery, sanitizeTicker, sanitizeName } from './inputValidator.js';
 
@@ -82,6 +83,7 @@ fastify.register(fastifyWebsocket);
 
 // === Register Fortress Security Middleware (Headers, Request IDs, Error Sanitization) ===
 registerSecurityMiddleware(fastify);
+registerAdvancedSecurity(fastify);
 
 // WebSocket rate limiter factory — 10 messages/second per connection
 const wsRateLimiter = createWsRateLimiter(10, 1000);
@@ -801,13 +803,13 @@ fastify.post('/api/paddle/webhook', async (request, reply) => {
 
 fastify.register(async function chatRoutes(fastify) {
   // Add a dedicated HEAD route to instantly answer Render's health checks
-  fastify.head('/api/chat/stream', (req, reply) => reply.send({ status: 'ok', service: 'GhostTrade Chat WS' }));
+  fastify.head('/api/chat/stream', (req, reply) => reply.send({ status: 'ok', service: 'Ghostrade Chat WS' }));
   
   fastify.route({
     method: 'GET', // MUST strictly be a string 'GET' for websockets, not an array
     url: '/api/chat/stream',
     handler: (req, reply) => {
-      reply.send({ status: 'ok', service: 'GhostTrade Chat WS' });
+      reply.send({ status: 'ok', service: 'Ghostrade Chat WS' });
     },
     wsHandler: (socket, req) => {
       // === SECURITY: Origin Validation ===
@@ -940,14 +942,14 @@ workerEvents.on('AUDIT_UPDATE', () => {
 // Secure WebSocket endpoint for the React UI (Ghost Brain)
 fastify.register(async function brainRoutes(fastify) {
   // Add a dedicated HEAD route to instantly answer Render's health checks
-  fastify.head('/', (req, reply) => reply.send({ status: 'ok', service: 'GhostTrade Backend API' }));
+  fastify.head('/', (req, reply) => reply.send({ status: 'ok', service: 'Ghostrade Backend API' }));
 
   fastify.route({
     method: 'GET', // MUST strictly be a string 'GET' for websockets, not an array
     url: '/',
     handler: (req, reply) => {
       // Health check for Render / AWS
-      reply.send({ status: 'ok', service: 'GhostTrade Backend API' });
+      reply.send({ status: 'ok', service: 'Ghostrade Backend API' });
     },
     wsHandler: async (socket, req) => {
       // === SECURITY: Origin Validation ===
@@ -1026,7 +1028,7 @@ const start = async () => {
 
     const PORT = process.env.PORT || 5000;
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log('🚀 GhostTrade Server listening on http://localhost:5000');
+    console.log('🚀 Ghostrade Server listening on http://localhost:5000');
     console.log('   ├── /api/auth/login      (POST)');
     console.log('   ├── /api/auth/signup     (POST)');
     console.log('   ├── /api/audit           (GET)');

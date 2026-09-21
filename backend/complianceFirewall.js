@@ -14,6 +14,23 @@ const REPLACEMENT_MAP = [
   // This prevents double-replacement bugs.
   // =====================================================
 
+  // === TIER 0: SEBI Regulatory Hard-Block (Indian Securities Law) ===
+  // These terms are ILLEGAL for unregistered platforms under SEBI IA/RA Regulations
+  { pattern: /\binvestment\s+advi[cs]e\b/gi, replacement: 'data-driven analysis' },
+  { pattern: /\bfinancial\s+advi[cs]e\b/gi, replacement: 'quantitative analysis' },
+  { pattern: /\bwe\s+recommend\b/gi, replacement: 'the analysis indicates' },
+  { pattern: /\bour\s+recommendation\b/gi, replacement: 'the analytical observation' },
+  { pattern: /\bi\s+advise\b/gi, replacement: 'the data suggests' },
+  { pattern: /\badviso?ry\s+(?:service|firm|company)\b/gi, replacement: 'analysis platform' },
+  { pattern: /\bassured\s+(?:returns?|profits?|income)\b/gi, replacement: 'historically observed returns' },
+  { pattern: /\bsure[\s-]?shot\b/gi, replacement: 'high-probability setup' },
+  { pattern: /\bjackpot\b/gi, replacement: 'high-confluence zone' },
+  { pattern: /\bprofit\s+guarantee[ds]?\b/gi, replacement: 'positive expected value' },
+  { pattern: /\bno\s+loss\b/gi, replacement: 'defined-risk structure' },
+  { pattern: /\bfixed\s+(?:returns?|income|profit)\b/gi, replacement: 'variable market returns' },
+  { pattern: /\byou\s+(?:must|need\s+to)\s+(?:buy|sell|invest|trade)\b/gi, replacement: 'the analysis shows structural interest in' },
+  { pattern: /\bprediction\s+verdict\b/gi, replacement: 'ANALYSIS SUMMARY' },
+
   // === TIER 1: Advisory Phrases (consume "buy/sell" before single-word rules can) ===
   { pattern: /\byou\s+should\s+(?:buy|sell|trade|invest)\b/gi, replacement: 'Structural analysis suggests' },
   { pattern: /\bi\s+(?:would|recommend|suggest)\s+(?:buy|sell|trad)(?:e|ing)?\b/gi, replacement: 'Structural confluence indicates' },
@@ -152,6 +169,14 @@ export async function auditCompliance(fullText, signalHash) {
     { term: 'risk-free',         pattern: /\brisk[\s-]?free\b/gi },
     { term: 'always profitable', pattern: /\balways\s+profitable\b/gi },
     { term: 'zero risk',         pattern: /\bzero[\s-]?risk\b/gi },
+    // SEBI-specific hard violations
+    { term: 'investment advice', pattern: /\binvestment\s+advi[cs]e\b/gi },
+    { term: 'financial advice',  pattern: /\bfinancial\s+advi[cs]e\b/gi },
+    { term: 'assured returns',   pattern: /\bassured\s+(?:returns?|profits?|income)\b/gi },
+    { term: 'sure shot',         pattern: /\bsure[\s-]?shot\b/gi },
+    { term: 'jackpot',           pattern: /\bjackpot\b/gi },
+    { term: 'profit guarantee',  pattern: /\bprofit\s+guarantee[ds]?\b/gi },
+    { term: 'fixed returns',     pattern: /\bfixed\s+(?:returns?|income|profit)\b/gi },
   ];
   
   for (const check of AUDIT_PATTERNS) {

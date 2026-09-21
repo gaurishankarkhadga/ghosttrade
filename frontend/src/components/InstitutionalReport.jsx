@@ -21,7 +21,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
   if (!content) return null;
 
   // Fallback for generic AI responses (global formatting for non-verdicts)
-  if (!content.includes('PREDICTION VERDICT:')) {
+  if (!content.includes('PREDICTION VERDICT:') && !content.includes('ANALYSIS SUMMARY:')) {
     const rawBlocks = content.split(/\n\n+/);
     return (
       <div className="institutional-report">
@@ -64,9 +64,9 @@ export default function InstitutionalReport({ content, isStreaming }) {
     return match ? match[1].trim() : '';
   };
 
-  const nextHeaderPattern = '(?:BEGINNER TAKEAWAY:|MATHEMATICAL ASYMMETRY|FRACTAL MATHEMATICS|LEVEL 2 ORDER BOOK|MULTI-TIMEFRAME|SMART MONEY LIQUIDITY|CAPITAL PRESERVATION|TRADE LEVELS:|INSTITUTIONAL REASONING:|MODULE 14|$)';
+  const nextHeaderPattern = '(?:BEGINNER TAKEAWAY:|MATHEMATICAL ASYMMETRY|FRACTAL MATHEMATICS|LEVEL 2 ORDER BOOK|MULTI-TIMEFRAME|SMART MONEY LIQUIDITY|CAPITAL PRESERVATION|TRADE LEVELS:|KEY PRICE LEVELS[^:]*:|INSTITUTIONAL REASONING:|ANALYTICAL REASONING:|MODULE 14|$)';
 
-  const verdictText = extractSection(new RegExp(`PREDICTION VERDICT:([\\s\\S]*?)${nextHeaderPattern}`));
+  const verdictText = extractSection(new RegExp(`(?:PREDICTION VERDICT|ANALYSIS SUMMARY):([\\s\\S]*?)${nextHeaderPattern}`));
   const beginnerText = extractSection(new RegExp(`BEGINNER TAKEAWAY:([\\s\\S]*?)${nextHeaderPattern}`));
   const asymmetryText = extractSection(new RegExp(`MATHEMATICAL ASYMMETRY[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
   const fractalText = extractSection(new RegExp(`FRACTAL MATHEMATICS[^:]*:([\\s\\S]*?)${nextHeaderPattern}`));
@@ -76,12 +76,12 @@ export default function InstitutionalReport({ content, isStreaming }) {
   const shieldProofText = extractSection(new RegExp(`CAPITAL PRESERVATION[^:]*:([\\s\\S]*?)(?:_Data Telemetry|$)`));
 
   // Legacy sections (for chart image mode / custom AI prompts)
-  const levelsText = extractSection(new RegExp(`TRADE LEVELS:([\\s\\S]*?)${nextHeaderPattern}`));
-  const reasoningText = extractSection(new RegExp(`INSTITUTIONAL REASONING:([\\s\\S]*?)${nextHeaderPattern}`));
+  const levelsText = extractSection(new RegExp(`(?:TRADE LEVELS|KEY PRICE LEVELS[^:]*):([\\s\\S]*?)${nextHeaderPattern}`));
+  const reasoningText = extractSection(new RegExp(`(?:INSTITUTIONAL|ANALYTICAL) REASONING:([\\s\\S]*?)${nextHeaderPattern}`));
   const module14Text = extractSection(/MODULE 14 — [^\n]+[\s\S]*?(?:━+|-+)([\s\S]*?)$/);
 
-  // Parse individual fields from Verdict
-  const baseCase = (verdictText.match(/BASE CASE:\s*(.*)/i) || [])[1] || '';
+  // Parse individual fields from Verdict (accepts both old "BASE CASE" and new "DIRECTIONAL BIAS")
+  const baseCase = (verdictText.match(/(?:BASE CASE|DIRECTIONAL BIAS):\s*(.*)/i) || [])[1] || '';
   const timeframe = (verdictText.match(/Timeframe:\s*(.*)/i) || [])[1] || '';
   const currentPrice = (verdictText.match(/Current Price:\s*(.*)/i) || [])[1] || '';
   const setupId = (verdictText.match(/matched_setup_id:\s*(.*)/i) || [])[1] || '';
@@ -119,11 +119,11 @@ export default function InstitutionalReport({ content, isStreaming }) {
       <div className={`report-card primary-verdict ${isShield ? 'verdict-shield' : ''}`}>
         <div className="report-card-header">
           <Activity size={16} />
-          <span>PREDICTION VERDICT {engineAction ? `— ${engineAction.replace(/_/g, ' ')}` : ''}</span>
+          <span>ANALYSIS SUMMARY {engineAction ? `— ${engineAction.replace(/_/g, ' ')}` : ''}</span>
         </div>
         <div className="verdict-grid">
           <div className="verdict-item highlight">
-            <span className="verdict-label">BASE CASE</span>
+            <span className="verdict-label">DIRECTIONAL BIAS</span>
             <span className={`verdict-value ${dirColorClass}`}>
               {isShield ? <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : isBullish ? <TrendingUp size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : isBearish ? <TrendingDown size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <Activity size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
               <span style={{ flex: 1, overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }}>{baseCase || (isShield ? 'SHIELD MODE ACTIVE' : 'Analyzing...')}</span>
@@ -153,7 +153,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         <div className="report-card beginner-takeaway-card">
           <div className="report-card-header" style={{ color: '#38bdf8' }}>
             <Compass size={16} />
-            <span>BEGINNER TAKEAWAY (DIRECT ACTION)</span>
+            <span>BEGINNER TAKEAWAY (OBSERVATIONAL)</span>
           </div>
           <ul className="report-list">
             {beginnerList.map((item, idx) => (
@@ -309,7 +309,7 @@ export default function InstitutionalReport({ content, isStreaming }) {
         <div className="report-card trade-levels">
           <div className="report-card-header">
             <Target size={16} />
-            <span>TRADE LEVELS</span>
+            <span>KEY PRICE LEVELS</span>
           </div>
           <ul className="report-list">
             {levelsList.map((item, idx) => (

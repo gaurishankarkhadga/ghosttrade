@@ -59,18 +59,18 @@ If the image is NOT a trading chart, respond ONLY with: "INVALID INPUT — This 
 
 If it IS a trading chart, output exactly this structure:
 
-PREDICTION VERDICT:
-BASE CASE: [BULLISH/BEARISH/NEUTRAL] [XX]%
+ANALYSIS SUMMARY:
+DIRECTIONAL BIAS: [BULLISH/BEARISH/NEUTRAL] [XX]% confluence
 Timeframe: [Intraday / Swing]
 Current Price: [price]
 matched_setup_id: [hammer_trend_bull, doji_indecision, bullish_engulfing, bearish_engulfing, NONE]
 
-TRADE LEVELS:
+KEY PRICE LEVELS (Educational Reference):
 • Primary Target: [price]
 • Stop Loss: [price]
 • Invalidation Condition: [1 short sentence]
 
-INSTITUTIONAL REASONING:
+ANALYTICAL REASONING:
 • [1 bullet point on Volume/Order Flow]
 • [1 bullet point on Smart Money (Order Blocks/Liquidity)]
 • [1 bullet point on Macro Regime]
@@ -82,32 +82,36 @@ GLOBAL ASSET RULES:
 
 CRITICAL MACRO RULE: You will be fed the current Macro Environment (RISK_ON / RISK_OFF). If the environment is RISK_OFF (DXY rising, VIX rising), you MUST severely penalize and suppress any BULLISH setups on Crypto and Equities. Never fight a strong macro trend.
 
-CRITICAL FORMAT RULE: DO NOT write paragraphs. Output EXACTLY the structure above. Calculate logical Target and Stop Loss prices based on chart volatility if not obvious. Do not say "Unknown".`;
+CRITICAL FORMAT RULE: DO NOT write paragraphs. Output EXACTLY the structure above. Calculate logical Target and Stop Loss prices based on chart volatility if not obvious. Do not say "Unknown".
 
-const SIMPLE_SYSTEM_PROMPT = `You are a friendly, easy-to-understand AI trading assistant. 
+CRITICAL COMPLIANCE RULE: You are an analytical engine providing data-driven observations. You do NOT provide investment advice, trade recommendations, or personalized financial guidance. Frame all outputs as quantitative observations, not directives. Never say "buy", "sell", "invest", "trade" as instructions to the user.`;
+
+const SIMPLE_SYSTEM_PROMPT = `You are a friendly, easy-to-understand AI market analysis assistant. 
 Explain the trade setup in simple English. Avoid overly complex technical jargon like MACD, RSI, or Hurst Exponent unless you explain what it means simply.
 
 If the image is NOT a trading chart, respond ONLY with: "INVALID INPUT — This is not a trading chart."
 
 If it IS a trading chart, output exactly this structure:
 
-PREDICTION VERDICT:
-BASE CASE: [BULLISH/BEARISH/NEUTRAL] [XX]%
+ANALYSIS SUMMARY:
+DIRECTIONAL BIAS: [BULLISH/BEARISH/NEUTRAL] [XX]% confluence
 Timeframe: [Intraday / Swing]
 Current Price: [price]
 matched_setup_id: [hammer_trend_bull, doji_indecision, bullish_engulfing, bearish_engulfing, NONE]
 
-TRADE LEVELS:
+KEY PRICE LEVELS:
 • Primary Target: [price]
 • Stop Loss: [price]
 • Invalidation Condition: [1 short sentence]
 
-SIMPLE REASONING:
+SIMPLE ANALYSIS:
 • [1 bullet point explaining the trend simply]
 • [1 bullet point explaining why buyers or sellers are in control]
 • [1 bullet point on risk]
 
-CRITICAL FORMAT RULE: Keep it friendly and simple. Output EXACTLY the structure above.`;
+CRITICAL FORMAT RULE: Keep it friendly and simple. Output EXACTLY the structure above.
+
+CRITICAL COMPLIANCE RULE: You are an analytical engine providing data-driven observations. You do NOT provide investment advice, trade recommendations, or personalized financial guidance. Frame all outputs as quantitative observations, not directives. Never say "buy", "sell", "invest", "trade" as instructions to the user.`;
 
 const USER_PROMPT = `Analyze this chart and output the strict summary format exactly as requested.`;
 
@@ -651,11 +655,11 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   let basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
   if (requestIntent === 'DATA_BACKED_CONVERSATION') {
-    basePromptTemplate = `You are Ghost, an elite quantitative institutional trader. 
+    basePromptTemplate = `You are Ghost, an advanced quantitative market analysis engine. 
 You are answering a specific, conversational question about an asset from the user. 
 Do NOT output the standard BASE CASE or TRADE LEVELS format. Instead, answer the user's question directly, mathematically, and strictly using the real-time order flow and technical indicator data injected below.
 If the data shows weakness, state it aggressively. If it shows strength, state it. 
-No AI fluff. Answer like a seasoned portfolio manager.
+No AI fluff. Present data-driven observations with analytical rigor. You provide analysis, NOT investment advice.
 USER'S QUESTION: "${prompt}"`;
   }
 
@@ -668,7 +672,7 @@ USER'S QUESTION: "${prompt}"`;
       ? basePromptTemplate
       : basePromptTemplate.replace(
       /=== IMAGE GATE ===[\s\S]*?→ STOP\. Do not continue\./,
-      `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full institutional rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
+      `=== DATA ANALYSIS MODE ===\nYou are analyzing this asset from RAW PROGRAMMATIC DATA provided in the system context below. There is NO chart image. You have real-time OHLCV data, technical indicators (RSI, MACD, Bollinger, ATR, VWAP, Pivot Points), Hurst regime classification, order flow analysis, open interest/funding rates, and macro correlations — all injected below.\nAnalyze this numerical data with full analytical rigor as if reading a Bloomberg terminal.\nDo NOT say "I cannot see a chart" — you have ALL the data. Proceed directly to Module 1.`
     );
     finalSystemPrompt = translationRule + textAdapted + phase3Context + memoryBlock + translationRule;
   }
@@ -827,7 +831,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     
     if (currentScore >= adaptiveMinScore && signal.action !== 'SHIELD_MODE') {
       if (currentScore >= 55) {
-        scoreTier = 'HIGH_CONVICTION';
+        scoreTier = 'HIGH_CONFLUENCE';
         scoreSizeMultiplier = 1.25;
       } else if (currentScore >= 45) {
         scoreTier = 'STANDARD';
@@ -881,7 +885,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     let verdictText = "";
     // Render engine verdict differently for Simple Mode
     if (p3Context.isSimpleMode) {
-      let simpleVerdict = `\n\nMODULE 14 — AI VERDICT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      let simpleVerdict = `\n\nMODULE 14 — AI ANALYSIS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       simpleVerdict += `• Signal Confidence: ${rawConfidence}/100\n`;
       simpleVerdict += `• Overall Trend: ${regimeData?.regime === 'TRENDING' ? 'Strong' : 'Chop/Sideways'}\n`;
       if (signalBlocked) {
@@ -898,8 +902,8 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       }
       verdictText = simpleVerdict;
     } else {
-      verdictText = `\n\nMODULE 14 — ENGINE VERDICT (Deterministic)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      verdictText += `• Engine Signal Score: ${rawConfidence}/100\n`;
+      verdictText = `\n\nMODULE 14 — ENGINE ANALYSIS (Deterministic)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      verdictText += `• Analysis Confluence Score: ${rawConfidence}/100\n`;
       if (signal?.scoreBreakdown) {
         verdictText += `• Regime Alignment: ${signal.scoreBreakdown.regimeAlignment}/100\n`;
         verdictText += `• Technical Confluence: ${signal.scoreBreakdown.technicalConfluence}/100\n`;
@@ -917,9 +921,9 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       }
 
       if (signalBlocked) {
-        verdictText += `\n SHIELD MODE ACTIVATED: ${blockedReason}\n   (Signal rejected to protect capital)\n`;
+        verdictText += `\n SHIELD MODE ACTIVATED: ${blockedReason}\n   (Low-confidence analysis — observation only)\n`;
       } else if (kellyResult?.action === 'TRADE') {
-        verdictText += `\n QUANTITATIVE EDGE CONFIRMED\n   Kelly Criterion: ${(kellyResult.kellyF * 100).toFixed(1)}% | Half-Kelly: ${(kellyResult.halfKelly * 100).toFixed(1)}%\n`;
+        verdictText += `\n STATISTICAL CONFLUENCE DETECTED\n   Kelly Criterion: ${(kellyResult.kellyF * 100).toFixed(1)}% | Half-Kelly: ${(kellyResult.halfKelly * 100).toFixed(1)}%\n`;
       }
 
       const parts = sanitizeChunk(verdictText).split(/(MODULE \d+ — [^\n]+)/);
@@ -965,7 +969,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
             kellySize: 0,
             pattern: setupId || signal?.pattern || 'CAPITAL_PRESERVATION_SHIELD',
             regime: regimeData?.regime || signal?.regime?.regime || 'RANDOM_WALK',
-            source: 'SHIELD_ENGINE',
+            source: 'OBSERVATION_ENGINE',
             predictiveHorizon, 
             educationalLesson,
             buyerPercent: dynamicBuyerPercent,
@@ -1016,7 +1020,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               kellySize: 0,
               pattern: setupId || 'QUANT_CONFLUENCE',
               regime: regimeData?.regime || 'N/A',
-              source: 'QUANT_ENGINE',
+              source: 'ANALYSIS_ENGINE',
               predictiveHorizon, 
               educationalLesson,
               buyerPercent: dynamicBuyerPercent,
@@ -1057,7 +1061,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
               kellySize: adjustedKellySize,
               pattern: setupId || signal?.pattern || 'QUANT_CONFLUENCE',
               regime: regimeData?.regime || 'N/A',
-              source: 'QUANT_ENGINE',
+              source: 'ANALYSIS_ENGINE',
               predictiveHorizon, 
               educationalLesson,
               buyerPercent: dynamicBuyerPercent,
@@ -1228,7 +1232,7 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
     return;
   }
 
-  const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full institutional rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
+  const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full analytical rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
 
   // Strip out image-specific instructions so Groq doesn't get confused and abort
   let groqSystemPrompt = systemPrompt.replace(

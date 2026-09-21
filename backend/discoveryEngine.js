@@ -43,7 +43,7 @@ export async function getDynamicCryptoWatchlist() {
         // Take the Top 100
         const top100 = usdtPairs.slice(0, 100);
 
-        // Map to GhostTrade ticker format (e.g., BTCUSDT -> BTC-USD)
+        // Map to Ghostrade ticker format (e.g., BTCUSDT -> BTC-USD)
         dynamicCryptoWatchlist = top100.map(t => {
             const base = t.symbol.replace('USDT', '');
             return `${base}-USD`;

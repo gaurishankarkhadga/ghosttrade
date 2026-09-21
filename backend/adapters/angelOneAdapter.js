@@ -214,7 +214,7 @@ export class AngelOneAdapter extends BaseBrokerAdapter {
         
         const { asset, side, quantity, price, orderType = 'MARKET' } = params;
 
-        // F&O Mapping: For simplicity in GhostTrade's architecture, 
+        // F&O Mapping: For simplicity in Ghostrade's architecture, 
         // we map standard AI F&O signals into Angel One's required fields.
         // We assume 'asset' contains the trading symbol, e.g., 'BANKNIFTY15JUN2352000CE'
 

@@ -203,7 +203,7 @@ export function formatCachedAnalysisAsChat(asset) {
   const fPrice = (p) => p !== undefined && p !== null ? (typeof p === 'number' ? p.toFixed(p > 100 ? 2 : 4) : p) : 'N/A';
 
   if (!signal || signal.action === 'NO_SIGNAL') {
-    return `PREDICTION VERDICT:\nBASE CASE: NEUTRAL (0%)\nTimeframe: Intraday (15m / 1h)\nCurrent Price: $${fPrice(price)}\nmatched_setup_id: NONE\nEngine Action: NO_SIGNAL\n\n Insufficient historical market data to generate a deterministic signal.`;
+    return `ANALYSIS SUMMARY:\nDIRECTIONAL BIAS: NEUTRAL (0% confluence)\nTimeframe: Intraday (15m / 1h)\nCurrent Price: $${fPrice(price)}\nmatched_setup_id: NONE\nEngine Action: NO_SIGNAL\n\n Insufficient historical market data to generate a deterministic analysis.`;
   }
 
   const isTrade = signal.action === 'TRADE';
@@ -233,29 +233,29 @@ export function formatCachedAnalysisAsChat(asset) {
   const ofiSource = signal.scoreBreakdown?.ofiSource === 'BINANCE_AGGTRADE' ? 'Binance Live Taker Trades' : 'Candle Imbalance';
   const l2Depth = signal.depthData;
 
-  let text = `PREDICTION VERDICT:\n`;
-  text += `BASE CASE: ${dir} (${score}%)\n`;
-  text += `Timeframe: Intraday (15m execution / 1h horizon)\n`;
+  let text = `ANALYSIS SUMMARY:\n`;
+  text += `DIRECTIONAL BIAS: ${dir} (${score}% confluence)\n`;
+  text += `Timeframe: Intraday (15m analysis / 1h horizon)\n`;
   text += `Current Price: $${fPrice(entry)}\n`;
   text += `matched_setup_id: ${signal.pattern || signal.setupId || 'ENGINE_REPRESENTATION'}\n`;
-  text += `Engine Action: ${isTrade ? 'ACTIONABLE_TRADE' : 'SHIELD_MODE_PROTECTION'}\n\n`;
+  text += `Engine Action: ${isTrade ? 'ANALYSIS_COMPLETE' : 'OBSERVATION_ONLY'}\n\n`;
 
   // 1. Beginner Takeaway
   text += `BEGINNER TAKEAWAY:\n`;
   if (isTrade) {
-    text += `• Action: High-probability ${dir} trade verified by quantitative models.\n`;
-    text += `• Execution Guidance: Buy/Enter at $${fPrice(entry)} with protective Stop Loss at $${fPrice(sl)}. Target $${fPrice(tp2)} for a 1:2.0 reward ratio.\n\n`;
+    text += `• Observation: High-probability ${dir} setup verified by quantitative models.\n`;
+    text += `• Analytical Reference: Observed entry around ${fPrice(entry)} with Risk Invalidation at ${fPrice(sl)}. Reference Target ${fPrice(tp2)} for a 1:2.0 reward ratio.\n\n`;
   } else {
-    text += `• Action: DO NOT TRADE. Capital Preservation is actively engaged.\n`;
+    text += `• Observation: OBSERVATION ONLY. Capital Preservation is actively engaged.\n`;
     text += `• Guidance: Market conditions on ${ticker} lack a statistical edge (${signal.reason || 'Negative mathematical expectancy'}). Keep your money safe until high-probability conditions appear.\n\n`;
   }
 
   // 2. Mathematical Asymmetry & EV
   text += `MATHEMATICAL ASYMMETRY (1:2.0 RRR) & EXPECTED VALUE:\n`;
   text += `• Reference Entry: $${fPrice(entry)}\n`;
-  text += `• Protective Stop Loss: $${fPrice(sl)} (Risk: $${fPrice(riskDist)} | -${riskPct}%)\n`;
-  if (tp1) text += `• Take Profit 1 (1:1 RRR): $${fPrice(tp1)} (+${riskPct}%)\n`;
-  text += `• Take Profit 2 (1:2.0 RRR): $${fPrice(tp2)} (Reward: $${fPrice(tpDist)} | +${tpPct}%)\n`;
+  text += `• Risk Invalidation (INV): ${fPrice(sl)} (Risk: $${fPrice(riskDist)} | -${riskPct}%)\n`;
+  if (tp1) text += `• Reference Target 1 (1:1 RRR): $${fPrice(tp1)} (+${riskPct}%)\n`;
+  text += `• Reference Target 2 (1:2.0 RRR): $${fPrice(tp2)} (Reward: $${fPrice(tpDist)} | +${tpPct}%)\n`;
   text += `• Break-Even Win Rate Required: ${beRate}%\n`;
   text += `• Quant Composite Win Probability: ${score}%\n`;
   text += `• Net Expected Value (EV): ${ev >= 0 ? '+' : ''}$${ev.toFixed(2)} per $100 risked ${ev >= 0 ? '(Positive Expectancy Confirmed)' : '(Negative Expectancy — Blocked)'}\n`;
@@ -304,7 +304,7 @@ export function formatCachedAnalysisAsChat(asset) {
     if (sw.poolLevel) text += `• Reference Pool Level: $${fPrice(sw.poolLevel)}\n`;
     if (sw.wickRatio) text += `• Wick Absorption Ratio: ${Math.round(sw.wickRatio * 100)}% (Smart Money Footprint)\n`;
     text += `• Breakeven Trail Protocol: Active @ +1.0R ($0.00 Capital Risk Lock)\n\n`;
-    text += `• Partial Profit Banking: 50% Scale-Out @ +1.0R (+0.5R cash locked)\n`;
+    text += `• Partial Risk Scaling: 50% Scale-Out @ +1.0R (+0.5R cash locked)\n`;
     text += `• Breakeven Trail Protocol: Active @ +1.0R ($0.00 Capital Risk Lock on remaining 50%)\n`;
     text += `• Anti-Revenge Defense: 8-Hour Post-Loss Isolation Cooldown\n`;
     text += `• Macro Institutional Flow: 4-Hour Trend Bias Alignment\n\n`;

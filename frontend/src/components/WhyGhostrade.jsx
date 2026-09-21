@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Activity, ShieldAlert, Cpu, Zap, Lock, Crosshair, Image as ImageIcon, BookOpen, LineChart, Globe } from 'lucide-react';
 import { PublicLayout } from './ui/SignInFlow';
-import './WhyGhostTrade.css';
+import './WhyGhostrade.css';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -28,8 +28,8 @@ const itemVariants = {
 const PILLARS = [
   {
     icon: <Zap size={28} />,
-    title: "Sub-Millisecond Execution",
-    description: "Direct API routing for ultra-low latency trade execution, bypassing standard retail bottlenecks.",
+    title: "Sub-Millisecond Routing",
+    description: "Direct API routing for ultra-low latency data telemetry, bypassing standard retail bottlenecks.",
     metric: "0.8ms",
     metricLabel: "AVG LATENCY"
   },
@@ -43,7 +43,7 @@ const PILLARS = [
   {
     icon: <BookOpen size={28} />,
     title: "Explainable Learning Mode",
-    description: "The AI doesn't just give signals. It mathematically explains the order flow logic and Hurst Exponent behind every trade.",
+    description: "The AI doesn't just give signals. It mathematically explains the order flow logic and Hurst Exponent behind every setup.",
     metric: "Whitebox",
     metricLabel: "TRANSPARENCY"
   },
@@ -71,7 +71,7 @@ const PILLARS = [
   {
     icon: <Crosshair size={28} />,
     title: "Multi-Broker Routing",
-    description: "Unified execution architecture allowing seamless trade routing across multiple accounts and global exchanges.",
+    description: "Unified architecture allowing seamless data routing across multiple accounts and global exchanges.",
     metric: "API",
     metricLabel: "INTEGRATION"
   },
@@ -92,27 +92,27 @@ const PILLARS = [
   {
     icon: <Crosshair size={28} />,
     title: "Smart Money Sweep Detection",
-    description: "Actively identifies retail stop-loss clusters and detects Institutional 'Turtle Soup' fakeout traps to front-run reversals.",
+    description: "Actively identifies retail liquidation clusters and detects Institutional 'Turtle Soup' fakeout traps to front-run reversals.",
     metric: "L2",
     metricLabel: "LIQUIDITY POOLS"
   },
   {
     icon: <LineChart size={28} />,
-    title: "Profit Machine Scale-Outs",
-    description: "Automatically secures 50% profits at 1:1 risk-to-reward and deploys an ATR trailing stop to create a risk-free 'Infinite Runner'.",
+    title: "Risk-Managed Scale-Outs",
+    description: "Automatically models 50% scale-outs at 1:1 risk-to-reward and deploys an ATR trailing stop to create a statistically optimized 'Infinite Runner'.",
     metric: "50%",
     metricLabel: "SCALE-OUT"
   },
   {
     icon: <ShieldAlert size={28} />,
     title: "Anti-Tilt Circuit Breakers",
-    description: "Enforces 8-hour asset isolation after a stop-loss and triggers a multi-asset freeze if BTC flashes down >2.5%.",
+    description: "Enforces 8-hour asset isolation after a risk invalidation and triggers a multi-asset freeze if BTC flashes down >2.5%.",
     metric: "100%",
     metricLabel: "CAPITAL SHIELD"
   }
 ];
 
-export function WhyGhostTrade() {
+export function WhyGhostrade() {
   const navigate = useNavigate();
 
   return (
@@ -132,7 +132,7 @@ export function WhyGhostTrade() {
               <span className="text-highlight">Zero Emotion.</span>
             </motion.h1>
             <motion.p variants={itemVariants} className="why-subtitle">
-              Professional-grade quantitative signals, deep order flow parsing, and sub-millisecond execution. Built for traders who rely on math, not intuition.
+              Professional-grade quantitative signals, deep order flow parsing, and sub-millisecond execution. Built for analysts who rely on math, not intuition.
             </motion.p>
           </motion.div>
 

@@ -191,7 +191,7 @@ export const PublicLayout = ({ children, initialCanvasVisible = true, reverseCan
   );
 };
 
-// MAIN COMPONENT (Merging 21st.dev animations with GhostTrade Logic)
+// MAIN COMPONENT (Merging 21st.dev animations with Ghostrade Logic)
 export const SignInPage = ({ onLoginSuccess }) => {
   const location = useLocation();
   const [step, setStep] = useState(location.state?.mode || "login"); // 'login' | 'signup' | 'success'
@@ -272,7 +272,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
   const handleInstantDemo = async () => {
     setIsLoading(true);
     setErrorMsg('');
-    const result = await onLoginSuccess({ isSignup: false, email: 'trader@ghosttrade.io', password: 'whalesonly' });
+    const result = await onLoginSuccess({ isSignup: false, email: 'trader@ghostrade.io', password: 'whalesonly' });
     setIsLoading(false);
 
     if (result.success) triggerSuccessAnimation();

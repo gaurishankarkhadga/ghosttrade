@@ -1044,9 +1044,9 @@ async function auditPrompts() {
       try {
         const aiPrompt = `You are an objective auditor. 
 Four hours ago, a user asked this: "${prompt.prompt}"
-The AI responded with this advice/analysis: "${(prompt.aiOutput || '').substring(0, 1000)}"
+The AI responded with this analysis: "${(prompt.aiOutput || '').substring(0, 1000)}"
 
-Based on general market knowledge of what typically happens in 4 hours, or objective logic, was the AI's advice CORRECT or INCORRECT?
+Based on general market knowledge of what typically happens in 4 hours, or objective logic, was the AI's analysis CORRECT or INCORRECT?
 Reply strictly in this JSON format:
 {
   "grade": "CORRECT" | "INCORRECT",

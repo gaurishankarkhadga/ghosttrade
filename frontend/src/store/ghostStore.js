@@ -445,12 +445,6 @@ const useGhostStore = create(
                   body: JSON.stringify(newPromptLog)
                 }).catch(e => console.error("Failed to sync prompt audit:", e));
                }
-               
-               fetch(`${baseUrl}/api/audit/prompt`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${get().token}` },
-                body: JSON.stringify(newPromptLog)
-              }).catch(e => console.error("Failed to sync prompt audit:", e));
             } else if (data.status === 'error') {
                if (data.message === 'FREE_TRIAL_EXCEEDED') {
                  set(state => ({ 
@@ -495,7 +489,7 @@ const useGhostStore = create(
       }
     }),
     {
-      name: 'ghosttrade-auth', // storage key
+      name: 'ghostrade-auth', // storage key
       storage: createJSONStorage(() => sessionStorage), // === SECURITY: Move from localStorage to sessionStorage ===
       partialize: (state) => ({
         // Only persist auth credentials — all other state is fetched fresh from DB

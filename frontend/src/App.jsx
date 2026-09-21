@@ -14,7 +14,8 @@ import OAuthCallback from './components/OAuthCallback';
 
 import { PricingModal } from './components/PricingModal';
 import GhostAbout from './components/GhostAbout';
-import { WhyGhostTrade } from './components/WhyGhostTrade';
+import LegalCenter from './components/LegalCenter';
+import { WhyGhostrade } from './components/WhyGhostrade';
 import { TermsOfServicePage, PrivacyPolicyPage, RiskDisclosurePage, MasterServiceAgreementPage, ApiDocsPage, BrokerIntegrationsPage, StatusDashboardPage, ArchitecturePage } from './components/FooterPages';
 
 // Layout wrapper for authenticated routes to share the Navbar
@@ -91,7 +92,7 @@ export default function App() {
         <Route path="/about" element={<GhostAbout />} />
         
         {/* Public Why Us Route */}
-        <Route path="/why-us" element={<WhyGhostTrade />} />
+        <Route path="/why-us" element={<WhyGhostrade />} />
 
         {/* Public Footer Pages */}
         <Route path="/architecture/oracle" element={<ArchitecturePage title="Oracle Engine" type="oracle" />} />
@@ -99,10 +100,11 @@ export default function App() {
         <Route path="/architecture/risk" element={<ArchitecturePage title="Risk Sentinel" type="risk" />} />
         <Route path="/architecture/ledger" element={<ArchitecturePage title="Verified Ledger" type="ledger" />} />
         
-        <Route path="/terms" element={<TermsOfServicePage />} />
-        <Route path="/privacy" element={<PrivacyPolicyPage />} />
-        <Route path="/risk" element={<RiskDisclosurePage />} />
-        <Route path="/msa" element={<MasterServiceAgreementPage />} />
+        <Route path="/terms" element={<LegalCenter />} />
+        <Route path="/legal" element={<LegalCenter />} />
+        <Route path="/privacy" element={<LegalCenter />} />
+        <Route path="/risk" element={<LegalCenter />} />
+        <Route path="/msa" element={<LegalCenter />} />
         
         <Route path="/api-docs" element={<ApiDocsPage />} />
         <Route path="/broker-integrations" element={<BrokerIntegrationsPage />} />
