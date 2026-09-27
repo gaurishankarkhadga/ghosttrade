@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { Terminal, BrainCircuit, Activity, LogIn, UserPlus } from 'lucide-react';
+import { Terminal, BrainCircuit, Activity, LogIn, UserPlus, Mail, Lock } from 'lucide-react';
 import AnimatedProLogo from '../AnimatedProLogo';
+import ForgotPasswordFlow from './ForgotPasswordFlow';
+import OtpInputBoxes from './OtpInputBoxes';
+import { toast } from 'react-toastify';
 import './SignInFlow.css';
 
 // 3D Canvas Background (Preserved from 21st.dev)
@@ -207,8 +210,13 @@ export const SignInPage = ({ onLoginSuccess }) => {
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
+  
+  
+
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -239,34 +247,119 @@ export const SignInPage = ({ onLoginSuccess }) => {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!loginEmail || !loginPassword) return setErrorMsg('Please provide both email and password.');
+    if (!loginEmail || !loginPassword) {
+      const msg = 'Please provide both email and password.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
 
     setIsLoading(true);
     const result = await onLoginSuccess({ isSignup: false, email: loginEmail, password: loginPassword });
     setIsLoading(false);
 
-    if (result.success) triggerSuccessAnimation();
-    else setErrorMsg(result.message || 'Authentication failed. Please check credentials.');
+    if (result.success) {
+      toast.success('Welcome back! Signing in...');
+      triggerSuccessAnimation();
+    } else {
+      const msg = result.message || 'Authentication failed. Please check credentials.';
+      toast.error(msg);
+      setErrorMsg(msg);
+    }
   };
 
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!signupName || !signupEmail || !signupPassword) return setErrorMsg('Please complete all required fields.');
-    if (signupPassword !== signupConfirmPassword) return setErrorMsg('Passwords do not match.');
+    if (!signupName || !signupEmail || !signupPassword) {
+      const msg = 'Please complete all required fields.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      const msg = 'Passwords do not match.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
     
     // Strict institutional password policy validation
-    if (signupPassword.length < 8) return setErrorMsg('Password must be at least 8 characters.');
-    if (!/[a-z]/.test(signupPassword)) return setErrorMsg('Password must contain at least one lowercase letter.');
-    if (!/[A-Z]/.test(signupPassword)) return setErrorMsg('Password must contain at least one uppercase letter.');
-    if (!/\d/.test(signupPassword)) return setErrorMsg('Password must contain at least one number.');
+    if (signupPassword.length < 8) {
+      const msg = 'Password must be at least 8 characters.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
+    if (!/[a-z]/.test(signupPassword)) {
+      const msg = 'Password must contain at least one lowercase letter.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
+    if (!/[A-Z]/.test(signupPassword)) {
+      const msg = 'Password must contain at least one uppercase letter.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
+    if (!/\d/.test(signupPassword)) {
+      const msg = 'Password must contain at least one number.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
 
     setIsLoading(true);
-    const result = await onLoginSuccess({ isSignup: true, name: signupName, email: signupEmail, password: signupPassword });
+    
+    // Step 1: Send OTP
+    try {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signupEmail })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        toast.success(`Verification OTP sent to ${signupEmail}!`);
+        setStep('verify-otp');
+      } else {
+        const msg = data.error || 'Failed to send OTP. Please try again.';
+        toast.error(msg);
+        setErrorMsg(msg);
+      }
+    } catch (err) {
+      const msg = 'Network error while sending OTP.';
+      toast.error(msg);
+      setErrorMsg(msg);
+    }
+    
+    setIsLoading(false);
+  };
+
+  
+  const handleVerifyOtpSubmit = async (e) => {
+
+    e.preventDefault();
+    setErrorMsg('');
+    if (!otpCode || otpCode.length < 8) {
+      const msg = 'Please enter a valid 8-digit OTP.';
+      toast.error(msg);
+      return setErrorMsg(msg);
+    }
+
+    setIsLoading(true);
+    const result = await onLoginSuccess({ 
+      isSignup: true, 
+      name: signupName, 
+      email: signupEmail, 
+      password: signupPassword,
+      otp: otpCode 
+    });
     setIsLoading(false);
 
-    if (result.success) triggerSuccessAnimation();
-    else setErrorMsg(result.message || 'Account creation failed. Email may already exist.');
+    if (result.success) {
+      toast.success('Account verified! Signing you in...');
+      triggerSuccessAnimation();
+    } else {
+      const msg = result.message || 'OTP Verification failed.';
+      toast.error(msg);
+      setErrorMsg(msg);
+    }
   };
 
   const handleInstantDemo = async () => {
@@ -297,11 +390,11 @@ export const SignInPage = ({ onLoginSuccess }) => {
                       <h1 className="hero-welcome">Welcome Back Trader</h1>
                     </div>
 
-                    {errorMsg && <div className="auth-alert error">{errorMsg}</div>}
+                    
 
                     <form onSubmit={handleLoginSubmit} className="auth-form-modern">
                       <div className="input-group">
-                        <input type="text" placeholder="Enter your email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="email-input text-left" />
+                        <input type="text" placeholder="Email Address" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="email-input text-left" />
                       </div>
                       <div className="input-group">
                         <input type={showLoginPassword ? 'text' : 'password'} placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="email-input text-left" />
@@ -313,20 +406,20 @@ export const SignInPage = ({ onLoginSuccess }) => {
                       <div className="auth-options-row">
                         <label className="auth-checkbox-label">
                           <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
-                          Remember session
+                          Remember me
                         </label>
-                        <span className="auth-link">Forgot Password?</span>
+                        <span className="auth-link" onClick={() => { setStep("forgot-password"); setErrorMsg(""); }}>Forgot Password?</span>
                       </div>
 
                       <button type="submit" disabled={isLoading} className="google-btn justify-center mt-4">
-                        {isLoading ? 'Authenticating...' : 'Sign In to Terminal'}
+                        {isLoading ? 'Signing in...' : 'Sign In'}
                       </button>
                     </form>
 
                     <div className="mobile-only-auth-flow">
                       <div className="divider" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
                         <div className="divider-line"></div>
-                        <span className="divider-text">NEW TRADER?</span>
+                        <span className="divider-text">DON'T HAVE AN ACCOUNT?</span>
                         <div className="divider-line"></div>
                       </div>
 
@@ -335,7 +428,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
                         onClick={() => { setStep('signup'); setErrorMsg(''); }}
                         className="google-btn justify-center outline-btn mobile-solid-btn"
                       >
-                        Create Quant Account
+                        Create Account
                       </button>
                     </div>
                   </motion.div>
@@ -345,17 +438,17 @@ export const SignInPage = ({ onLoginSuccess }) => {
                       <h1 className="hero-title">Create Account</h1>
                     </div>
 
-                    {errorMsg && <div className="auth-alert error">{errorMsg}</div>}
+                    
 
                     <form onSubmit={handleSignupSubmit} className="auth-form-modern">
                       <div className="input-group">
                         <input type="text" placeholder="Full Name" value={signupName} onChange={e => setSignupName(e.target.value)} className="email-input text-left" />
                       </div>
                       <div className="input-group">
-                        <input type="email" placeholder="Work Email Address" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} className="email-input text-left" />
+                        <input type="email" placeholder="Email Address" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} className="email-input text-left" />
                       </div>
                       <div className="input-group">
-                        <input type={showSignupPassword ? 'text' : 'password'} placeholder="Create Password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} className="email-input text-left" />
+                        <input type={showSignupPassword ? 'text' : 'password'} placeholder="Password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} className="email-input text-left" />
                         {strength.label && <span className="pwd-strength" style={{ color: strength.color }}>{strength.label}</span>}
                       </div>
                       <div className="input-group">
@@ -363,7 +456,7 @@ export const SignInPage = ({ onLoginSuccess }) => {
                       </div>
 
                       <button type="submit" disabled={isLoading} className="google-btn justify-center mt-4" style={{ background: '#fff', color: '#000' }}>
-                        {isLoading ? 'Creating Account...' : 'Create Quant Account'}
+                        {isLoading ? 'Creating Account...' : 'Create Account'}
                       </button>
                     </form>
 
@@ -377,14 +470,50 @@ export const SignInPage = ({ onLoginSuccess }) => {
                     </div>
 
                     <p className="legal-text">
-                      By creating an account, you agree to the <Link to="#">MSA</Link>, <Link to="#">Product Terms</Link>, <Link to="#">Policies</Link>.
+                      By creating an account, you agree to our <Link to="/terms">Terms of Service</Link>, <Link to="/privacy">Privacy Policy</Link>, and <Link to="/risk">Risk Disclosure</Link>.
                     </p>
+                  </motion.div>
+                
+                ) : step === "forgot-password" ? (
+                  <ForgotPasswordFlow onCancel={() => setStep('login')} />
+                ) : step === "verify-otp" ? (
+                  <motion.div key="verify-otp" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="step-wrapper signup-wrapper-adjust">
+                    <div>
+                      <h1 className="hero-title">Verify Email</h1>
+                      <p style={{ color: 'rgba(255,255,255,0.7)', marginTop: '8px', fontSize: '14px', textAlign: 'center' }}>
+                        We sent an 8-digit code to <strong style={{color: '#fff'}}>{signupEmail}</strong>.
+                      </p>
+                    </div>
+
+                    
+
+                    <form onSubmit={handleVerifyOtpSubmit} className="auth-form-modern">
+                      <OtpInputBoxes 
+                        value={otpCode} 
+                        onChange={setOtpCode} 
+                        length={8} 
+                        disabled={isLoading} 
+                      />
+
+                      <button type="submit" disabled={isLoading} className="google-btn justify-center mt-4" style={{ background: '#fff', color: '#000' }}>
+                        {isLoading ? 'Verifying...' : 'Verify Email'}
+                      </button>
+                    </form>
+
+                    <div className="auth-options-row mobile-only-auth-flow" style={{ justifyContent: 'center', marginTop: '1.5rem', flexDirection: 'row' }}>
+                      <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Didn't receive it?{' '}
+                        <span className="auth-link" style={{ color: '#fff', fontWeight: '500', cursor: 'pointer' }} onClick={handleSignupSubmit}>
+                          Resend Code
+                        </span>
+                      </span>
+                    </div>
                   </motion.div>
                 ) : (
                   <motion.div key="success" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="step-wrapper">
                     <div>
-                      <h1 className="hero-title">Terminal Unlocked</h1>
-                      <p className="hero-subtitle">Connection established</p>
+                      <h1 className="hero-title">Success!</h1>
+                      <p className="hero-subtitle">Redirecting to dashboard...</p>
                     </div>
                     <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.5, delay: 0.5 }} style={{ padding: '2.5rem 0' }}>
                       <div className="success-icon-wrapper">

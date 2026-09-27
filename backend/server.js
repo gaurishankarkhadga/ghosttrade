@@ -8,6 +8,7 @@ import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
+import forgotPasswordRoutes from './routes/forgotPasswordRoutes.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
@@ -67,7 +68,8 @@ const ACCESS_CODE_HASH = IS_PRODUCTION ? null : (process.env.ACCESS_CODE_HASH ||
 const fastify = Fastify({ logger: false, bodyLimit: 1048576 }); // 1MB default body limit
 
 // Rate limiting — apply globally but stricter on auth routes
-await fastify.register(fastifyRateLimit, {
+await fastify.register(forgotPasswordRoutes);
+  fastify.register(fastifyRateLimit, {
   global: false, // Only apply where explicitly added
 });
 
@@ -97,6 +99,10 @@ fastify.decorateRequest('user', null);
 const PUBLIC_ROUTES = [
   '/api/auth/login',
   '/api/auth/signup',
+  '/api/auth/send-otp',
+  '/api/auth/forgot-password',
+  '/api/auth/verify-recovery-otp',
+  '/api/auth/update-password',
   '/api/markets',
   '/api/paddle/webhook',
   '/api/chat/stream',
@@ -189,6 +195,42 @@ fastify.post('/api/auth/login', {
   return reply.code(401).send({ error: 'Invalid credentials. Access Denied.' });
 });
 
+
+fastify.post('/api/auth/send-otp', {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: '1 minute',
+      errorResponseBuilder: () => ({ statusCode: 429, error: 'Too many OTP requests. Please wait.' })
+    }
+  }
+}, async (request, reply) => {
+  const { email } = request.body || {};
+  if (!email) return reply.code(400).send({ error: 'Email is required' });
+
+  try {
+    const res = await fetch(`${process.env.SUPABASE_URL}/auth/v1/otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${process.env.SUPABASE_PUBLISHABLE_KEY}`
+      },
+      body: JSON.stringify({ email, create_user: true })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      // If it's a rate limit from Supabase, return 429 instead of 500
+      const statusCode = res.status === 429 ? 429 : 400;
+      const errorMsg = errData.msg || errData.message || 'Failed to send OTP via Supabase';
+      return reply.code(statusCode).send({ error: errorMsg, details: errData });
+    }
+    return reply.send({ success: true, message: 'OTP sent successfully' });
+  } catch (err) {
+    return reply.code(500).send({ error: 'Internal server error', details: err.message });
+  }
+});
+
 fastify.post('/api/auth/signup', {
   config: {
     rateLimit: {
@@ -226,6 +268,29 @@ fastify.post('/api/auth/signup', {
     return reply.code(409).send({ error: 'Account with this email already exists.' });
   }
 
+  // Verify OTP via Supabase
+  if (!body.otp) {
+    return reply.code(400).send({ error: 'OTP is required for signup.' });
+  }
+
+  try {
+    const verifyRes = await fetch(`${process.env.SUPABASE_URL}/auth/v1/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${process.env.SUPABASE_PUBLISHABLE_KEY}`
+      },
+      body: JSON.stringify({ type: 'email', email: emailCheck.sanitized, token: body.otp })
+    });
+    
+    if (!verifyRes.ok) {
+      return reply.code(401).send({ error: 'Invalid or expired OTP code.' });
+    }
+  } catch (err) {
+    return reply.code(500).send({ error: 'Failed to verify OTP', details: err.message });
+  }
+
   // Hash password before storing — NEVER store plaintext
   const passwordHash = await bcrypt.hash(password, 12); // Increased cost factor from 10 to 12
   
@@ -241,7 +306,6 @@ fastify.post('/api/auth/signup', {
   const token = jwt.sign({ sub: emailCheck.sanitized, email: emailCheck.sanitized, role: 'trader', iss: JWT_ISSUER, aud: JWT_AUDIENCE }, JWT_SECRET, { expiresIn: '24h' });
   return reply.send({ token, email: emailCheck.sanitized, name: cleanName, role: 'trader', promptsUsed: 0 });
 });
-
 fastify.post('/api/auth/paddle-sync', async (request, reply) => {
   const authHeader = request.headers.authorization;
   if (!authHeader) return reply.code(401).send({ error: 'Unauthorized' });

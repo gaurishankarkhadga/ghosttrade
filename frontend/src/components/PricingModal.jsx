@@ -138,7 +138,7 @@ export function PricingModal() {
 
   const handleSubscribe = (plan) => {
     if (!isAuthenticated) {
-      navigate('/connect', { state: { mode: 'signup' } });
+      useGhostStore.getState().openAuthModal('signup');
       return;
     }
 
@@ -174,7 +174,7 @@ export function PricingModal() {
   };
 
   return (
-    <PublicLayout onModeSwitch={(mode) => navigate('/connect', { state: { mode } })}>
+    <PublicLayout onModeSwitch={(mode) => useGhostStore.getState().openAuthModal(mode)}>
       <div className="pricing-page-wrapper">
         <div className="pricing-modal-container">
           <div className="pricing-header">

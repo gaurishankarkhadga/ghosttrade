@@ -5,6 +5,11 @@ const useGhostStore = create(
   persist(
     (set, get) => ({
       isAuthenticated: false,
+      isAuthModalOpen: false,
+      authModalStep: "login",
+      openAuthModal: (step = "login") => set({ isAuthModalOpen: true, authModalStep: step }),
+      closeAuthModal: () => set({ isAuthModalOpen: false }),
+      setAuthModalStep: (step) => set({ authModalStep: step }),
       token: null,
       email: null,
       role: 'trader',
@@ -256,7 +261,7 @@ const useGhostStore = create(
           const endpoint = credentials.isSignup ? '/api/auth/signup' : '/api/auth/login';
           
           const payload = credentials.isSignup 
-            ? { name: credentials.name, email: credentials.email, password: credentials.password }
+            ? { name: credentials.name, email: credentials.email, password: credentials.password, otp: credentials.otp }
             : { email: credentials.email, password: credentials.password };
 
           const res = await fetch(`${baseUrl}${endpoint}`, {

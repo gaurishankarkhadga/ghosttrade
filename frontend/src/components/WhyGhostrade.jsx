@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import useGhostStore from '../store/ghostStore';
 import { Activity, ShieldAlert, Cpu, Zap, Lock, Crosshair, Image as ImageIcon, BookOpen, LineChart, Globe } from 'lucide-react';
 import { PublicLayout } from './ui/SignInFlow';
 import './WhyGhostrade.css';
@@ -114,9 +115,10 @@ const PILLARS = [
 
 export function WhyGhostrade() {
   const navigate = useNavigate();
+  const openAuthModal = useGhostStore(state => state.openAuthModal);
 
   return (
-    <PublicLayout onModeSwitch={(mode) => navigate('/connect', { state: { mode } })}>
+    <PublicLayout onModeSwitch={(mode) => openAuthModal(mode)}>
       <div className="why-page-wrapper">
         <div className="why-container">
           {/* HERO SECTION */}
@@ -168,7 +170,7 @@ export function WhyGhostrade() {
             <motion.div variants={itemVariants} className="cta-content">
               <h2>Deploy Your Algorithmic Edge</h2>
               <p>Initialize your terminal and access institutional-grade order flow analytics.</p>
-              <button className="cta-btn primary" onClick={() => navigate('/connect', { state: { mode: 'signup' } })}>
+              <button className="cta-btn primary" onClick={() => openAuthModal('signup')}>
                 Initialize Terminal <Crosshair size={18} style={{ marginLeft: '8px' }} />
               </button>
             </motion.div>

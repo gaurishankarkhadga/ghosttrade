@@ -5,7 +5,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useGhostStore from './store/ghostStore';
 import './App.css';
 
-import { SignInPage } from './components/ui/SignInFlow';
+import AuthModal from './components/ui/AuthModal';
 import TerminalNavbar from './components/TerminalNavbar';
 import AiChatInterface from './components/AiChatInterface';
 import PerformanceDashboard from './components/PerformanceDashboard';
@@ -24,9 +24,17 @@ const ProtectedLayout = ({ children }) => {
   const isConnected = wsStatus === 'CONNECTED';
   const location = useLocation();
 
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      useGhostStore.getState().openAuthModal('login');
+    }
+  }, [isAuthenticated]);
+
   if (!isAuthenticated) {
-    return <Navigate to="/connect" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
+
 
   const isTrialExpired = role === 'trader' && promptsUsed >= 3;
   if (isTrialExpired) {
@@ -73,19 +81,10 @@ export default function App() {
 
   return (
     <>
-    <ToastContainer position="top-right" theme="dark" />
+    
+    <AuthModal />
     <Routes>
-        {/* Public Route */}
-        <Route 
-          path="/connect" 
-          element={
-            isAuthenticated ? (
-              <Navigate to="/terminal" replace />
-            ) : (
-              <SignInPage onLoginSuccess={(key) => login(key)} />
-            )
-          } 
-        />
+        
         
         {/* Public About Route */}
         <Route path="/" element={<GhostAbout />} />
@@ -153,10 +152,7 @@ export default function App() {
         />
 
         {/* Default Redirection */}
-        <Route 
-          path="/" 
-          element={<Navigate to={isAuthenticated ? "/terminal" : "/connect"} replace />} 
-        />
+        {/* Let GhostAbout handle / as defined earlier. We don't need this catch-all if GhostAbout is on / */}
         
         {/* Catch-all 404 (Redirect to root) */}
         <Route 
@@ -164,6 +160,16 @@ export default function App() {
           element={<Navigate to="/" replace />} 
         />
       </Routes>
+      <ToastContainer 
+        position="top-right" 
+        theme="dark" 
+        autoClose={4000} 
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        pauseOnHover
+        style={{ zIndex: 9999999 }}
+      />
     </>
   );
 }

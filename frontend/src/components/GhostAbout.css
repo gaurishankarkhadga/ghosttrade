@@ -33,6 +33,7 @@
   font-family: var(--font-sans);
   overflow-x: hidden;
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
 }
@@ -99,7 +100,8 @@
 /* ===================================================================
    1. HERO SECTION
    =================================================================== */
-.about-hero-section {
+.about-hero-section,
+.ghost-about-page .ghost-about-hero {
   position: relative;
   min-height: calc(100vh - 80px);
   width: 100%;
@@ -110,7 +112,8 @@
   padding: 80px 24px 40px 24px;
 }
 
-.hero-content {
+.hero-content,
+.ghost-about-page .ghost-about-hero-content {
   position: relative;
   z-index: 10;
   flex: 1;
@@ -125,7 +128,8 @@
   margin: 0 auto;
 }
 
-.hero-content h1 {
+.hero-content h1,
+.ghost-about-page .ghost-about-hero-title {
   font-family: var(--font-display);
   font-size: clamp(22px, 4.2vw, 56px);
   font-weight: 800;
@@ -137,8 +141,20 @@
   text-transform: uppercase;
 }
 
-.mobile-break {
+.ghost-about-page .ghost-about-hero-title-top {
+  display: inline;
+}
+
+.mobile-break,
+.ghost-about-page .ghost-about-mobile-break {
   display: none;
+}
+
+.text-highlight,
+.ghost-about-page .ghost-about-hero-highlight {
+  color: var(--color-ghost-buy, #10b981);
+  text-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
+  display: inline-block;
 }
 
 .gradient-text {
@@ -147,7 +163,8 @@
   -webkit-text-fill-color: transparent;
 }
 
-.hero-subtext {
+.hero-subtext,
+.ghost-about-page .ghost-about-hero-subtext {
   font-size: clamp(15px, 1.8vw, 18px);
   color: var(--text-secondary);
   max-width: 720px;
@@ -156,7 +173,8 @@
   font-weight: 400;
 }
 
-.hero-cta-group {
+.hero-cta-group,
+.ghost-about-page .ghost-about-hero-ctas {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -975,7 +993,7 @@
    9. RESPONSIVE BREAKPOINTS
    =================================================================== */
 @media (max-width: 1024px) {
-  .hero-content h1 {
+  .ghost-about-page .ghost-about-hero-title {
     font-size: clamp(20px, 4vw, 44px);
     white-space: normal;
   }
@@ -998,10 +1016,6 @@
 .mobile-only { display: none; }
 
 @media (max-width: 640px) {
-  .ghost-about-page .about-hero-section {
-    padding: 80px 16px 40px 16px;
-  }
-  
   .ghost-about-page .arch-nav-tabs {
     display: none; /* Hide standard tabs entirely on mobile */
   }
@@ -1040,32 +1054,131 @@
     -webkit-overflow-scrolling: touch;
   }
   
-  .ghost-about-page .hero-content h1 {
-    font-size: clamp(28px, 8vw, 36px);
-    line-height: 1.25;
-    white-space: normal;
-    letter-spacing: 1.5px; /* Added slightly more letter spacing for mobile legibility */
-  }
-
-  .mobile-break {
-    display: block;
-  }
-
-  .ghost-about-page .hero-subtext {
-    font-size: 14px;
-    margin-bottom: 32px;
-  }
-  
-  .ghost-about-page .hero-cta-group {
+  /* ===================================================================
+     MOBILE HERO (Unique Scoped Selectors - Strictly Non-Global)
+     =================================================================== */
+  .ghost-about-page .ghost-about-hero {
+    min-height: calc(100svh - 80px);
+    max-height: 780px;
+    padding: 88px 16px 36px 16px;
+    display: flex;
     flex-direction: column;
-    width: 100%;
-    max-width: 320px;
-    margin: 0 auto;
-    gap: 12px;
+    justify-content: center;
+    align-items: center;
+    position: relative;
   }
-  
-  .ghost-about-page .cta-btn {
+
+  .ghost-about-page .ghost-about-hero::before {
+    content: '';
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 260px;
+    height: 180px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .ghost-about-page .ghost-about-hero-content {
+    padding: 0 4px;
+    max-width: 380px;
     width: 100%;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .ghost-about-page .ghost-about-hero-title {
+    font-size: clamp(27px, 8.4vw, 38px) !important;
+    line-height: 1.15 !important;
+    letter-spacing: -0.5px !important;
+    margin: 0 0 18px 0 !important;
+    font-weight: 800 !important;
+    text-align: center;
+    width: 100%;
+  }
+
+  .ghost-about-page .ghost-about-hero-title-top {
+    display: inline-block !important;
+    white-space: nowrap !important;
+  }
+
+  .ghost-about-page .ghost-about-mobile-break {
+    display: block !important;
+  }
+
+  .ghost-about-page .ghost-about-hero-highlight {
+    color: var(--color-ghost-buy, #10b981) !important;
+    text-shadow: 0 0 25px rgba(16, 185, 129, 0.4) !important;
+    display: inline-block !important;
+  }
+
+  .ghost-about-page .ghost-about-hero-subtext {
+    font-size: 15.5px !important;
+    line-height: 1.6 !important;
+    color: rgba(255, 255, 255, 0.75) !important;
+    max-width: 340px !important;
+    margin: 0 auto 32px auto !important;
+    letter-spacing: -0.01em !important;
+    font-weight: 400 !important;
+    text-align: center;
+  }
+
+  .ghost-about-page .ghost-about-hero-ctas {
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+    gap: 12px !important;
+  }
+
+  .ghost-about-page .ghost-about-btn-primary,
+  .ghost-about-page .ghost-about-btn-secondary {
+    width: 100% !important;
+    height: 50px !important;
+    padding: 0 24px !important;
+    font-size: 15.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+    border-radius: 9999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    cursor: pointer;
+  }
+
+  .ghost-about-page .ghost-about-btn-primary:active,
+  .ghost-about-page .ghost-about-btn-secondary:active {
+    transform: scale(0.98) !important;
+  }
+
+  .ghost-about-page .ghost-about-btn-primary {
+    background: #ffffff !important;
+    color: #050505 !important;
+    border: 1px solid rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.18), 0 0 1px rgba(255, 255, 255, 0.8) !important;
+  }
+
+  .ghost-about-page .ghost-about-btn-secondary {
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
+
+  .ghost-about-page .ghost-about-btn-secondary:active {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
   }
 
   .ghost-about-page .about-section {
@@ -1144,11 +1257,6 @@
 /* ===================================================================
    10. FIXED BACKGROUND LOGO WATERMARK & SCROLL REVEAL SYSTEM
    =================================================================== */
-.ghost-about-page {
-  position: relative;
-  z-index: 1;
-}
-
 .ghost-about-bg-logo {
   position: fixed;
   top: 50%;

@@ -7,6 +7,7 @@ import {
   PieChart, Sliders, ShieldAlert, Check
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import useGhostStore from '../store/ghostStore';
 import AnimatedProLogo from './AnimatedProLogo';
 import { PublicLayout } from './ui/SignInFlow';
 import './GhostAbout.css';
@@ -184,6 +185,7 @@ const SecuritySection = () => {
 
 export default function GhostAbout() {
   const navigate = useNavigate();
+  const openAuthModal = useGhostStore(state => state.openAuthModal);
   const [activeTab, setActiveTab] = useState('ledger');
   const [openFaq, setOpenFaq] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -252,7 +254,7 @@ export default function GhostAbout() {
   }, [activeTab]);
 
   return (
-    <PublicLayout onModeSwitch={(mode) => navigate('/connect', { state: { mode } })}>
+    <PublicLayout onModeSwitch={(mode) => openAuthModal(mode)}>
       <div className="ghost-about-page">
         
         {/* ===================================================================
@@ -284,21 +286,21 @@ export default function GhostAbout() {
         {/* ===================================================================
             1. HERO SECTION
            =================================================================== */}
-        <section className="about-hero-section">
-          <div className="hero-content">
-            <h1 className="scroll-reveal">
-              ANALYZE SMARTER <br className="mobile-break" /><span className="text-highlight">WITH AI</span>
+        <section className="about-hero-section ghost-about-hero">
+          <div className="hero-content ghost-about-hero-content">
+            <h1 className="scroll-reveal ghost-about-hero-title">
+              <span className="ghost-about-hero-title-top">ANALYZE SMARTER</span> <br className="ghost-about-mobile-break" /><span className="text-highlight ghost-about-hero-highlight">WITH AI</span>
             </h1>
 
-            <p className="hero-subtext scroll-reveal delay-100">
+            <p className="hero-subtext ghost-about-hero-subtext scroll-reveal delay-100">
               No more guessing. Our AI watches the markets 24/7, finds high-probability setups, and logs them for tracking.
             </p>
 
-            <div className="hero-cta-group scroll-reveal delay-200">
-              <button className="cta-btn primary" onClick={() => navigate('/connect')}>
+            <div className="hero-cta-group ghost-about-hero-ctas scroll-reveal delay-200">
+              <button className="cta-btn primary ghost-about-btn-primary" onClick={() => openAuthModal('login')}>
                 Start Scanning <ArrowRight size={16} />
               </button>
-              <button className="cta-btn secondary" onClick={() => {
+              <button className="cta-btn secondary ghost-about-btn-secondary" onClick={() => {
                 const el = document.getElementById('architecture-section');
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
               }}>
@@ -781,7 +783,7 @@ export default function GhostAbout() {
             <h2 className="scroll-reveal">Ready to Analyze with Quantitative Precision?</h2>
             <p className="scroll-reveal delay-100">Connect your environment and start tracking with institutional-grade edge today.</p>
             <div className="cta-action-row scroll-reveal delay-200">
-              <button className="cta-btn primary" onClick={() => navigate('/connect')}>
+              <button className="cta-btn primary" onClick={() => openAuthModal('login')}>
                 Access Terminal <ArrowRight size={16} />
               </button>
             </div>
@@ -818,7 +820,7 @@ export default function GhostAbout() {
                 <div className="footer-col scroll-reveal delay-200">
                   <h4>PLATFORM</h4>
                   <ul>
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/connect'); }}>Terminal Access</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); openAuthModal('login'); }}>Terminal Access</a></li>
                     <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/api-docs'); }}>API Documentation</a></li>
                     <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/broker-integrations'); }}>Broker Integrations</a></li>
                     <li><a href="#" onClick={(e) => { e.preventDefault(); navigate('/status'); }}>Status Dashboard</a></li>
