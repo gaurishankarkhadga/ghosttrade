@@ -377,12 +377,17 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
 
 /**
  * Extracts closing prices from an OHLCV array.
+ * Accepts either [{close, ...}] objects or raw [[ts,o,h,l,c,v]] arrays.
  */
 export function getClosePrices(ohlcv) {
-  return ohlcv.map(b => b.close);
+  if (!Array.isArray(ohlcv) || ohlcv.length === 0) return [];
+  // Raw candle format: [timestamp, open, high, low, close, volume]
+  if (Array.isArray(ohlcv[0])) return ohlcv.map(b => b[4]);
+  return ohlcv.map(b => b.close ?? b[4] ?? null).filter(v => v !== null);
 }
 
 export function getLogReturns(ohlcv) {
+  if (!Array.isArray(ohlcv) || ohlcv.length === 0) return [];
   const closes = getClosePrices(ohlcv);
   const returns = [];
   for (let i = 1; i < closes.length; i++) {

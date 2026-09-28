@@ -43,6 +43,7 @@ import { getDb } from './mongoConfig.js';
 import { executionManager } from './executionEngine.js';
 import { startScannerWorker, startAuditWorker, runBacktestInWorker, workerEvents } from './workerPool.js';
 import { getSystemPerformance } from './performanceEngine.js';
+import { calculatePortfolioVaR } from './riskControlEngine.js';
 import { updateGlobalCache, getGlobalAssetAnalysis, getAllCachedAssets, getCacheInfo } from './globalAnalysisCache.js';
 // === Global System Imports ===
 import { storeBrokerKeys, deleteBrokerKeys, listConnectedBrokers, SUPPORTED_BROKERS } from './brokerKeyManager.js';
@@ -353,9 +354,10 @@ fastify.get('/api/audit', async (request, reply) => {
     
     const promptLogs = await db.collection('prompt_logs').find({ userId: request.user.email }).sort({ timestamp: -1 }).limit(200).toArray();
     const aiSignals = await db.collection('signals').find({ userId: request.user.email }).sort({ timestamp: -1 }).limit(200).toArray();
-    const systemPerformance = await getSystemPerformance();
+    const systemPerformance = await getSystemPerformance(request.user.email);
+    const portfolioVaR = systemPerformance?.portfolioVaR ?? null;
 
-    return reply.send({ activePaperTrades, closedPaperTrades, promptLogs, aiSignals, systemPerformance });
+    return reply.send({ activePaperTrades, closedPaperTrades, promptLogs, aiSignals, systemPerformance, portfolioVaR });
   } catch (e) {
     console.error('[AUDIT API] GET /api/audit failed:', e.message);
     return reply.send({ activePaperTrades: [], closedPaperTrades: [], promptLogs: [], systemPerformance: null });
@@ -787,7 +789,12 @@ fastify.post('/api/backtest', {
     }
     const days = Math.min(Math.max(Number(body.days) || 730, 30), 1825); // Clamp 30-1825 days
 
-    const result = await runBacktestInWorker(cleanTicker, days);
+    const options = {
+      walkForward: body.walkForward === true,
+      splitRatio: typeof body.splitRatio === 'number' ? Math.min(Math.max(body.splitRatio, 0.5), 0.9) : 0.7,
+    };
+
+    const result = await runBacktestInWorker(cleanTicker, days, options);
     
     if (result.error) {
        return reply.code(500).send(result);
@@ -796,6 +803,21 @@ fastify.post('/api/backtest', {
     return reply.send(result);
   } catch (error) {
     console.error('[BACKTEST API] Error:', error.message);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+// =====================================================
+// PORTFOLIO VAR ENDPOINT
+// =====================================================
+
+fastify.get('/api/portfolio/var', async (request, reply) => {
+  try {
+    if (!dbReady) return reply.send({ var95: 0, totalExposure: 0, openTradeCount: 0 });
+    const result = await calculatePortfolioVaR(request.user.email);
+    return reply.send(result);
+  } catch (e) {
+    console.error('[VAR API] Error:', e.message);
     return reply.code(500).send({ error: 'Internal Server Error' });
   }
 });
