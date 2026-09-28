@@ -35,9 +35,10 @@ const LOSS_CATEGORIES = {
 };
 
 // Tier 1: Deterministic categorization from signal metadata (NOT text)
-function categorizeFromMetadata(signal) {
+export function categorizeFromMetadata(signal) {
   // Use actual quantitative data instead of text matching
-  if (signal.regime?.regime === 'RANDOM_WALK') return 'REGIME_RANDOM_WALK';
+  const regimeType = typeof signal.regime === 'string' ? signal.regime : signal.regime?.regime;
+  if (regimeType === 'RANDOM_WALK') return 'REGIME_RANDOM_WALK';
   if (signal.hurst?.ci95 && signal.hurst.ci95.lower < 0.40 && signal.hurst.ci95.upper > 0.60) return 'REGIME_AMBIGUOUS';
   
   // Counter-trend: signal direction vs higher-TF trend  

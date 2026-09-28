@@ -69,7 +69,7 @@ const THRESHOLDS = {
 };
 
 // Dynamic volume thresholds based on asset's own volatility profile
-function getDynamicThresholds(candles) {
+export function getDynamicThresholds(candles) {
   const defaultThresholds = { ...THRESHOLDS };
   if (!candles || candles.length < 30) return defaultThresholds;
   

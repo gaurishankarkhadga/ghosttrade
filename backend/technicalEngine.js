@@ -242,6 +242,7 @@ export function atr(bars, period = 14) {
   }
 
   return {
+    atr: atrVal,
     value: atrVal,
     percentOfPrice: parseFloat(percentOfPrice.toFixed(2)),
     regime,

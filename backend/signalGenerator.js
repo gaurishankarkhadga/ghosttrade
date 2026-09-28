@@ -555,6 +555,10 @@ export async function generateSignal(ticker, candles, options = {}) {
   scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * normWeightOfi);
   scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * normWeightVol);
   scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * normWeightHist);
+
+  // Exact sum alignment: absorb any integer rounding discrepancy into winRatePoints
+  const pointsSum = scoreBreakdown.regimePoints + scoreBreakdown.confluencePoints + scoreBreakdown.orderFlowPoints + scoreBreakdown.volumePoints + scoreBreakdown.winRatePoints;
+  scoreBreakdown.winRatePoints += (compositeScore - pointsSum);
   scoreBreakdown.totalScore = compositeScore;
   scoreBreakdown.ofiSource = ofiSource;
   scoreBreakdown.weightsUsed = weights;

@@ -19,7 +19,7 @@ PURE_CONVERSATION: The user is asking a general market, finance, or educational 
 
 Reply ONLY with the category name string. No other text.`;
 
-    const modelName = process.env.GROQ_INTENT_MODEL || 'llama-3.1-8b-instant';
+    const modelName = process.env.GROQ_INTENT_MODEL || 'openai/gpt-oss-20b';
     const requestBody = {
       model: modelName,
       messages: [
@@ -27,7 +27,7 @@ Reply ONLY with the category name string. No other text.`;
         { role: "user", content: prompt }
       ],
       temperature: 0.1,
-      max_tokens: 20
+      max_tokens: 50
     };
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -57,3 +57,5 @@ Reply ONLY with the category name string. No other text.`;
     return 'FULL_ANALYSIS';
   }
 }
+
+export const classifyIntent = classifyIntentWithGroq;

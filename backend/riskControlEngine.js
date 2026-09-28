@@ -33,7 +33,7 @@ export const STREAK_RESPONSES = {
 
 
 // Timestamp-aligned correlation — only compare returns from same time periods
-function alignedCorrelation(returnsA, returnsB, timestampsA, timestampsB) {
+export function alignedCorrelation(returnsA, returnsB, timestampsA, timestampsB) {
   // If timestamps not available, fall back to tail alignment but warn
   if (!timestampsA || !timestampsB) {
     console.warn('[RISK] No timestamps for correlation — using tail alignment (may be inaccurate)');

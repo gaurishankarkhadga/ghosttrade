@@ -240,6 +240,7 @@ export function calculateHurst(logReturns) {
   }
 
   const result = {
+    hurst:         mean_h,
     rsH:           rsResult.h,
     rsR2:          rsResult.r2,
     dfaH:          dfaResult.h,
@@ -271,3 +272,5 @@ export function calculateRollingHurst(logReturns, windowSize = 100, step = 20) {
   }
   return { values, latest: values[values.length - 1]?.hurst || null };
 }
+
+export const computeHurstExponent = calculateHurst;

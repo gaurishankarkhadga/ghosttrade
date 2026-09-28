@@ -28,7 +28,7 @@ const CONFIDENCE_BUCKETS = [
 
 // Isotonic Regression via Pool Adjacent Violators Algorithm
 // Ensures calibration curve is monotonically non-decreasing
-function isotonicRegression(points) {
+export function isotonicRegression(points) {
   // points = [{rawConf, actualWinRate, count}] sorted by rawConf
   if (!points || points.length < 2) return points;
   
