@@ -1,3 +1,5 @@
+import { fetchOHLCV, getLogReturns } from './dataFetcher.js';
+
 // =====================================================
 // CORRELATION ENGINE — Phase 6 Liquidity Rotation
 // Maps crypto assets into specific industry sectors.
@@ -56,16 +58,59 @@ export function pearsonCorrelation(x, y) {
 const correlationCache = new Map();
 const CORRELATION_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
-export async function getDynamicSector(ticker, watchlistTickers) {
+export async function getDynamicSector(ticker, watchlistTickers = []) {
   const cacheKey = ticker;
   const cached = correlationCache.get(cacheKey);
   if (cached && Date.now() - cached.time < CORRELATION_CACHE_TTL) {
     return cached.sector;
   }
-  
-  // Dynamically discover correlated assets from price data
-  const sector = { ticker, correlatedAssets: [], highCorrelation: [] };
-  // ... compute correlations with other tickers from the watchlist
+
+  const sector = { ticker, correlatedAssets: {}, correlatedList: [], highCorrelation: [] };
+
+  try {
+    // Fetch OHLCV for the target ticker (30 daily candles)
+    const targetOHLCV = await fetchOHLCV(ticker, '1d', 30);
+    if (!Array.isArray(targetOHLCV) || targetOHLCV.length < 10) {
+      correlationCache.set(cacheKey, { sector, time: Date.now() });
+      return sector;
+    }
+    const targetReturns = getLogReturns(targetOHLCV);
+    if (targetReturns.length < 10) {
+      correlationCache.set(cacheKey, { sector, time: Date.now() });
+      return sector;
+    }
+
+    // Compare against up to 25 peer tickers
+    const peers = (watchlistTickers.length > 0 ? watchlistTickers : Object.keys(SECTOR_MAP))
+      .filter(t => t !== ticker)
+      .slice(0, 25);
+
+    const correlationResults = await Promise.allSettled(
+      peers.map(async (peer) => {
+        try {
+          const peerOHLCV = await fetchOHLCV(peer, '1d', 30);
+          if (!Array.isArray(peerOHLCV) || peerOHLCV.length < 10) return null;
+          const peerReturns = getLogReturns(peerOHLCV);
+          const corr = pearsonCorrelation(targetReturns, peerReturns);
+          return { ticker: peer, correlation: parseFloat(corr.toFixed(4)) };
+        } catch { return null; }
+      })
+    );
+
+    for (const res of correlationResults) {
+      if (res.status !== 'fulfilled' || !res.value) continue;
+      const { ticker: peer, correlation: corr } = res.value;
+      sector.correlatedAssets[peer] = corr;       // O(1) dict lookup
+      sector.correlatedList.push({ ticker: peer, correlation: corr }); // iteration-friendly
+      if (Math.abs(corr) >= 0.7) sector.highCorrelation.push({ ticker: peer, correlation: corr });
+    }
+
+    // Sort list by absolute correlation descending
+    sector.correlatedList.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+  } catch (e) {
+    console.warn(`[CORRELATION] getDynamicSector(${ticker}) failed:`, e.message);
+  }
+
   correlationCache.set(cacheKey, { sector, time: Date.now() });
   return sector;
 }
@@ -119,10 +164,13 @@ export function calculateRotationImpacts(marketSentiment) {
         let corr = 0;
         
         if (cached && cached.sector) {
-          // Find correlation from array if it exists
-          const assetMatch = cached.sector.correlatedAssets.find(a => a.ticker === s.ticker);
-          if (assetMatch) {
-            corr = assetMatch.correlation || 0;
+          // Look up correlation: dict (O(1)) then list fallback
+          const ca = cached.sector.correlatedAssets;
+          if (ca && typeof ca === 'object' && !Array.isArray(ca)) {
+            corr = ca[s.ticker] ?? 0;
+          } else if (Array.isArray(ca)) {
+            const match = ca.find(a => a.ticker === s.ticker);
+            corr = match ? match.correlation || 0 : 0;
           }
         }
         

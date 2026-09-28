@@ -12,7 +12,7 @@ import { fetchOrderFlow, fetchOrderBookDepth, formatOrderFlowContext } from './o
 import { atr, sma } from './technicalEngine.js';
 import { computeKelly } from './kellyEngine.js';
 import { fetchAssetSentiment } from './sentimentEngine.js';
-import { calculateRotationImpacts, SECTOR_MAP } from './correlationEngine.js';
+import { calculateRotationImpacts, getDynamicSector, SECTOR_MAP } from './correlationEngine.js';
 
 import { detectPatterns } from './patternEngine.js';
 import { constructSetupId, CURRENT_LOGIC_VERSION, DEFAULT_CRYPTO_WATCHLIST, DEFAULT_GLOBAL_STOCKS_WATCHLIST } from './sharedConfig.js';
@@ -301,7 +301,13 @@ export async function runBulkScanPhase4(marketOrWatchlist = 'Global') {
     }
   }
   
-  // Calculate the cross-asset rotation impact matrix
+  // Pre-fetch dynamic correlations for TOXIC assets before building rotation matrix
+  const toxicTickers = allSentiments.filter(s => s.sentimentBias === 'TOXIC').map(s => s.ticker);
+  if (toxicTickers.length > 0) {
+    await Promise.allSettled(toxicTickers.map(t => getDynamicSector(t, tickers)));
+  }
+
+  // Calculate the cross-asset rotation impact matrix (uses pre-fetched correlation cache)
   const rotationMatrix = calculateRotationImpacts(allSentiments);
 
   for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
