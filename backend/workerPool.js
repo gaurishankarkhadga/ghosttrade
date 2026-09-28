@@ -120,11 +120,11 @@ export function startAuditWorker() {
  * Runs a Backtest on Demand in a short-lived worker thread.
  * Enforces a hard timeout to prevent indefinite hangs.
  */
-export function runBacktestInWorker(asset, days) {
+export function runBacktestInWorker(asset, days, options = {}) {
   return new Promise((resolve, reject) => {
     console.log(`[WORKER POOL] Spawning short-lived Backtest Worker for ${asset} (${days} days)`);
     const worker = new Worker(path.join(__dirname, 'workers', 'backtestWorker.js'), {
-      workerData: { asset, days }
+      workerData: { asset, days, options }
     });
 
     let settled = false;
