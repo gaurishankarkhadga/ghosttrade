@@ -351,8 +351,8 @@ const useGhostStore = create(
       clearChat: () => set({ chatHistory: [], isThinking: false }),
 
       sendPrompt: async (promptData) => {
-        const { text, imageBase64, market, language } = typeof promptData === 'string' 
-          ? { text: promptData, imageBase64: null, market: 'Global', language: 'English' } 
+        const { text, imageBase64, market, language, isDeepThink } = typeof promptData === 'string' 
+          ? { text: promptData, imageBase64: null, market: 'Global', language: 'English', isDeepThink: false } 
           : promptData;
 
         // 1. Check for command overrides
@@ -386,7 +386,8 @@ const useGhostStore = create(
              prompt: `[Context: Market Region = ${market || 'Global'}]\n${text}`, 
              image: imageBase64,
              language: language || 'English',
-             isSimpleMode: get().isSimpleMode
+             isSimpleMode: get().isSimpleMode,
+             isDeepThink: !!isDeepThink
           }));
         };
 

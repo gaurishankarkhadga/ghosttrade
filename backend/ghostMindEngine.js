@@ -177,7 +177,7 @@ async function checkLossPatterns(ticker, direction, regime) {
 // MASTER PRE-TRADE GATE — The single entry point
 // Called after generateSignal() but BEFORE logging/executing
 // ─────────────────────────────────────────────────────
-export async function preTradeGate(signal, ticker) {
+export async function preTradeGate(signal, ticker, options = {}) {
   // Only gate TRADE signals (SHIELD_MODE already blocked)
   if (!signal || signal.action !== 'TRADE') {
     return { blocked: false, signal };
@@ -214,18 +214,20 @@ export async function preTradeGate(signal, ticker) {
   }
 
   // ── Gate 2: Signal Deduplication ──
-  try {
-    const isDupe = await isDuplicateSignal(ticker, direction);
-    if (isDupe) {
-      console.log(`[GHOSTMIND] 🛡️ DEDUP GATE: Blocking duplicate ${ticker} ${direction} — active unresolved signal exists within 6h`);
-      return {
-        blocked: true,
-        reason: `Signal Deduplication: An active unresolved ${direction} signal for ${ticker} already exists within the last 6 hours. Preventing duplicate exposure.`,
-        gate: 'SIGNAL_DEDUPLICATION'
-      };
+  if (!options?.skipDedup) {
+    try {
+      const isDupe = await isDuplicateSignal(ticker, direction);
+      if (isDupe) {
+        console.log(`[GHOSTMIND] 🛡️ DEDUP GATE: Blocking duplicate ${ticker} ${direction} — active unresolved signal exists within 6h`);
+        return {
+          blocked: true,
+          reason: `Signal Deduplication: An active unresolved ${direction} signal for ${ticker} already exists within the last 6 hours. Preventing duplicate exposure.`,
+          gate: 'SIGNAL_DEDUPLICATION'
+        };
+      }
+    } catch (err) {
+      console.warn('[GHOSTMIND] Dedup gate skipped:', err.message);
     }
-  } catch (err) {
-    console.warn('[GHOSTMIND] Dedup gate skipped:', err.message);
   }
 
   // ── Gate 3: Recent Loss Memory ──

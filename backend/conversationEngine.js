@@ -30,7 +30,7 @@ STRICT BOUNDARIES:
 ${translationDirective}`;
 
     const requestBody = {
-      model: "qwen/qwen3.6-27b",
+      model: process.env.GROQ_CONVERSATION_MODEL || 'qwen/qwen3.8-27b',
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt }

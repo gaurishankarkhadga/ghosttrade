@@ -192,7 +192,7 @@ export async function scanTickerPhase4(ticker, rotationImpact = { multiplier: 1.
 
       // GhostMind v2: Pre-Trade Gate
       // Pass the generated signal through the intelligence layer before logging/executing
-      const gateResult = await preTradeGate(signalData, ticker);
+      const gateResult = await preTradeGate(signalData, ticker, { skipDedup: true });
       if (gateResult.blocked) {
         signalData.action = 'SHIELD_MODE';
         signalData.reason = gateResult.reason;

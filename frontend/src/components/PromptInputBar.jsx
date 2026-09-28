@@ -189,7 +189,19 @@ export default function PromptInputBar({ onSend, disabled, hideLegal }) {
 
   const handleDeepScan = () => {
     if (!disabled) {
-      onSend({ text: `Run Deep Scan across all quantitative regimes`, imageBase64: null, market, language });
+      const trimmed = prompt.trim();
+      onSend({ 
+        text: trimmed ? `Deep Think: ${trimmed}` : `Run Deep Think across all quantitative regimes`, 
+        imageBase64: attachedImage, 
+        market, 
+        language,
+        isDeepThink: true 
+      });
+      setPrompt('');
+      setAttachedImage(null);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }
   };
 

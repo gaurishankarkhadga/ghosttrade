@@ -990,6 +990,7 @@ fastify.register(async function chatRoutes(fastify) {
             imageBase64: message.image || null,
             language: sanitizeString(message.language, 30) || 'English',
             isSimpleMode: !!message.isSimpleMode,
+            isDeepThink: !!message.isDeepThink,
             promptsUsed: promptsUsed,
             userId: decoded.email
           });

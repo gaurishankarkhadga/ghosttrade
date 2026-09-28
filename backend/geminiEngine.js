@@ -45,7 +45,9 @@ const SIGNAL_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 const lastSignalTime = new Map();
 
 const MODELS = [
-  'models/gemini-2.5-flash'
+  'models/gemini-2.5-flash',
+  'models/gemini-2.5-flash-lite',
+  'models/gemini-flash-latest'
 ];
 
 function getApiKeys() {
@@ -163,28 +165,32 @@ async function extractTickerFromImage(base64Image) {
  * Extracts ticker from a text prompt using pattern matching.
  * Handles: "analyze BTC", "what about RELIANCE?", "SOL prediction", etc.
  */
-function extractTickerFromText(promptText) {
+export function extractTickerFromText(promptText) {
   if (!promptText) return 'UNKNOWN';
   const text = promptText.toUpperCase().trim();
 
-  const CRYPTO = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC', 'BNB', 'LTC', 'ATOM', 'UNI', 'NEAR', 'APT', 'ARB', 'OP', 'SUI', 'PEPE', 'WIF', 'SHIB'];
+  const CRYPTO = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC', 'BNB', 'LTC', 'ATOM', 'UNI', 'NEAR', 'APT', 'ARB', 'OP', 'SUI', 'PEPE', 'WIF', 'SHIB', 'STRK', '2Z', '1INCH', 'FET', 'RENDER', 'TAO', 'INJ', 'TIA', 'SEI', 'AAVE', 'MKR', 'CRV', 'DYDX'];
   const NSE = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'WIPRO', 'TATAMOTORS', 'TATASTEEL', 'ADANIENT', 'BAJFINANCE', 'MARUTI', 'SUNPHARMA', 'HCLTECH', 'AXISBANK', 'ULTRACEMCO'];
   const US = ['AAPL', 'TSLA', 'GOOGL', 'GOOG', 'AMZN', 'MSFT', 'NVDA', 'META', 'NFLX', 'AMD', 'CRM', 'ORCL', 'INTC', 'QCOM', 'PYPL', 'DIS', 'BA', 'JPM', 'GS', 'V', 'MA'];
 
-  // Check for ticker-suffix formats first: BTC-USD, ETH/USDT, RELIANCE.NS
-  const suffixMatch = text.match(/\b([A-Z]{2,15})(?:\.(NS|BO)|[-\/](USD|USDT|INR))\b/);
+  // 1. Check for ticker-suffix formats first: BTC-USD, 2Z-USD, ETH/USDT, RELIANCE.NS, 1INCH-USDT
+  const suffixMatch = text.match(/\b([A-Z0-9]{1,15})(?:\.(NS|BO)|[-\/](USD|USDT|INR))\b/);
   if (suffixMatch) return suffixMatch[0].replace(/\//g, '-');
 
-  // Check known tickers (standalone word boundary match)
+  // 2. Check known tickers (standalone word boundary match)
   for (const t of CRYPTO) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
   for (const t of NSE) { if (new RegExp(`\\b${t}\\b`).test(text)) return `${t}.NS`; }
   for (const t of US) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
   for (const t of ['NIFTY', 'BANKNIFTY', 'NIFTY50']) { if (new RegExp(`\\b${t}\\b`).test(text)) return t; }
 
-  // Last resort: find any 2-10 letter uppercase word that looks like a ticker
-  const genericMatch = text.match(/\b([A-Z]{2,10})\b/);
-  if (genericMatch && !['THE', 'AND', 'FOR', 'NOT', 'ARE', 'BUT', 'HOW', 'CAN', 'WHAT', 'WILL', 'THIS', 'THAT', 'WITH', 'FROM', 'ABOUT', 'ANALYZE', 'ANALYSIS', 'TRADE', 'SCAN', 'DEEP', 'ALL'].includes(genericMatch[1])) {
-    return genericMatch[1];
+  // 3. Last resort: find any 2-10 character alphanumeric word that looks like a ticker
+  const STOP_WORDS = new Set(['THE', 'AND', 'FOR', 'NOT', 'ARE', 'BUT', 'HOW', 'CAN', 'WHAT', 'WILL', 'THIS', 'THAT', 'WITH', 'FROM', 'ABOUT', 'ANALYZE', 'ANALYSIS', 'TRADE', 'SCAN', 'DEEP', 'ALL', 'USD', 'USDT', 'INR', 'CRYPTO', 'STOCK', 'PRICE', 'CHART', 'TODAY', 'TARGET', 'PREDICT', 'PREDICTION', 'SIGNAL', 'BUY', 'SELL', 'HOLD', 'ENTRY', 'EXIT', 'STOP', 'LOSS', 'RUN', 'EXECUTE', 'THINK', 'REGIME', 'REGIMES', 'QUANTITATIVE', 'ACROSS', 'MARKET']);
+  
+  const tokens = text.match(/\b[A-Z0-9]{2,10}\b/g) || [];
+  for (const token of tokens) {
+    if (!STOP_WORDS.has(token) && !/^\d+$/.test(token)) {
+      return token;
+    }
   }
 
   return 'UNKNOWN';
@@ -196,26 +202,30 @@ function extractTickerFromText(promptText) {
  * Text mode: User types a ticker/question, system fetches all data via API.
  */
 export async function handleGeminiConnection(clientWs, options = {}) {
-  const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0 } = options;
+  const { prompt = '', language = 'English', isSimpleMode = false, promptsUsed = 0, isDeepThink = false } = options;
 
   // === "1 = ALL" GLOBAL CACHE INTERCEPTOR ===
-  // If the prompt is just a ticker name (not a custom question, not an image),
-  // serve the pre-computed global analysis instantly from cache.
-  // This is the core of the "1 = ALL" architecture — zero per-user recalculation.
   const imageBase64Raw = options.imageBase64 || null;
   const isImageRequest = !!imageBase64Raw;
+  const isDeepThinkOption = !!isDeepThink;
   
   let requestIntent = 'FULL_ANALYSIS';
-  let cleanPrompt = prompt;
+  let cleanPrompt = prompt.replace(/\[Context: Market Region = [^\]]+\]\n?/, '').trim();
+  const extractedTicker = extractTickerFromText(cleanPrompt);
 
-  if (!isImageRequest && !prompt.includes('Execute Deep Scan')) {
-    // Extract ticker from the prompt text
-    cleanPrompt = prompt.replace(/\[Context: Market Region = [^\]]+\]\n?/, '').trim();
-    const extractedTicker = extractTickerFromText(cleanPrompt);
-    
-    // Check if this is a simple ticker lookup (not a complex question)
-    // A simple lookup is when the user prompt IS essentially just a ticker name
-    const isSimpleLookup = extractedTicker !== 'UNKNOWN' && (
+  const isMarketDeepScan = 
+    prompt.includes('Execute Deep Scan') ||
+    prompt.includes('Run Deep Scan') ||
+    prompt.includes('Run Deep Think') ||
+    (cleanPrompt.toUpperCase().includes('DEEP SCAN') && (extractedTicker === 'UNKNOWN' || !extractedTicker)) ||
+    (cleanPrompt.toUpperCase().includes('DEEP THINK') && (extractedTicker === 'UNKNOWN' || !extractedTicker)) ||
+    (isDeepThinkOption && (extractedTicker === 'UNKNOWN' || !extractedTicker));
+
+  const isDeepThinkRequest = isDeepThinkOption || cleanPrompt.toUpperCase().includes('DEEP THINK');
+
+  if (!isImageRequest && !isMarketDeepScan) {
+    // Check if this is a simple ticker lookup (not a complex question, and NOT a Deep Think request)
+    const isSimpleLookup = !isDeepThinkRequest && extractedTicker !== 'UNKNOWN' && (
       cleanPrompt.length <= 15 || // Short prompt = likely just a ticker
       cleanPrompt.toUpperCase().replace(/[^A-Z0-9]/g, '') === extractedTicker.replace(/[^A-Z0-9]/g, '') // Prompt IS the ticker
     );
@@ -335,16 +345,16 @@ export async function handleGeminiConnection(clientWs, options = {}) {
     }
   }
 
-      // === PHASE 4: DEEP SCAN INTERCEPTOR (Real-time On-Demand Scan) ===
-  if (prompt.includes('Execute Deep Scan')) {
+      // === PHASE 4: DEEP THINK / DEEP SCAN INTERCEPTOR (Real-time On-Demand Scan) ===
+  if (isMarketDeepScan) {
     const marketMatch = prompt.match(/Market Region = ([^\]]+)/);
     const market = marketMatch ? marketMatch[1] : 'Global';
     const scanTimestamp = new Date();
     const scanTimeIST = scanTimestamp.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' });
     const scanTimeUTC = scanTimestamp.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 
-    // DO NOT send raw text report, just minimal telemetry so the premium card renders beautifully
-    clientWs.send(JSON.stringify({ status: 'update', text: `_Initializing Real-Time Deep Compute Engine..._\n` }));
+    // Send real-time Deep Think telemetry
+    clientWs.send(JSON.stringify({ status: 'update', text: `_🧠 Initializing Real-Time Deep Think Engine across ${market}..._\n` }));
 
     // Get the base list from cache to know what tickers exist
     const allCached = await getAllCachedAssets();
@@ -366,8 +376,8 @@ export async function handleGeminiConnection(clientWs, options = {}) {
        baseAssets = fbTickers.map(t => ({ ticker: t }));
     }
 
-    // Take top 25 assets for deep on-demand scanning to keep it fast but highly accurate
-    const targetTickers = baseAssets.slice(0, 25).map(a => a.ticker);
+    // Take top 20 assets for deep on-demand scanning to keep it fast and responsive
+    const targetTickers = baseAssets.slice(0, 20).map(a => (typeof a === 'string' ? a : a.ticker)).filter(Boolean);
     
     let relevantAssets = [];
     const BATCH_SIZE = 5; 
@@ -377,7 +387,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
       const batch = targetTickers.slice(i, i + BATCH_SIZE);
       const displayTicker = batch[0]; 
       
-      const actions = ['Analyzing Order Flow on', 'Validating Hurst Fractal for', 'Calculating Kelly Risk on', 'Extracting Sentiment for', 'Synthesizing Neural Data on'];
+      const actions = ['Analyzing Level 2 Order Flow on', 'Validating Multi-Timeframe Hurst Fractals for', 'Calculating Kelly Criterion & Regimes on', 'Extracting Forensic Sentiment for', 'Evaluating Quantitative Confluence on'];
       const action = actions[Math.floor(Math.random() * actions.length)];
       clientWs.send(JSON.stringify({ status: 'update', text: `_${action} ${displayTicker.replace('-USD', '')}..._\n` }));
       
@@ -398,7 +408,7 @@ export async function handleGeminiConnection(clientWs, options = {}) {
 
     // === HONEST FILTERING: Only REAL profitable assets ===
     const profitableAssets = relevantAssets
-      .filter(r => r.signalData && r.signalData.action === 'TRADE')
+      .filter(r => r.signalData && (r.signalData.action === 'TRADE' || (r.signalData.score >= 50 && !r.signalData.signalBlocked)))
       .filter(r => (r.signalData.score || r.score || 0) >= 50)
       .sort((a, b) => {
         const scoreA = a.signalData?.score || a.score || 0;
@@ -652,9 +662,26 @@ export async function handleGeminiConnection(clientWs, options = {}) {
   }
 
   // Build final system prompt — adapt IMAGE GATE for text-only mode
+  const isDeepThinkMode = isDeepThinkOption || prompt.toUpperCase().includes('DEEP THINK');
+
   let basePromptTemplate = isSimpleMode ? SIMPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
-  if (requestIntent === 'DATA_BACKED_CONVERSATION') {
+  if (isDeepThinkMode) {
+    basePromptTemplate = `You are the GhostTrade Deep Think Quantitative Engine. 
+You are communicating a comprehensive, institutional-grade mathematical evaluation of ${ticker}.
+All values (Hurst fractal exponent, multi-timeframe regimes, order flow imbalance, Level 2 depth, Kelly criterion, Expected Value, Stop Loss, and Take Profit) have been computed by the native deterministic engines and injected in the context below.
+Your role is to translate and communicate these EXACT computed mathematical facts clearly, logically, and transparently to the user with zero fluff and zero hallucination.
+
+STRICT ACCURACY RULES (ZERO HALLUCINATION):
+1. State the exact computed prices, regime, Hurst exponent, and Order Flow values provided in the context. NEVER invent or hallucinate alternative numbers.
+2. Structure your output clearly with these exact sections:
+   - 🧠 DEEP THINK SYNTHESIS: Directional bias, confluence score, and regime state.
+   - 📊 MULTI-TIMEFRAME FRACTAL MATRIX: 15m, 1h, and 1d regimes and Hurst persistence.
+   - 🌊 ORDER FLOW & LIQUIDITY: Level 2 book balance, OFI delta, buyer vs seller control.
+   - 🎯 MATHEMATICAL EXECUTION & RISK: Exact entry price, target levels (TP1, TP2), stop loss, and Kelly position sizing.
+   - 🛡️ CAPITAL DEFENSE / PRE-TRADE GATES: Why this trade is either approved or held in Shield Mode.
+3. Keep it razor-sharp, analytical, and unambiguous.`;
+  } else if (requestIntent === 'DATA_BACKED_CONVERSATION') {
     basePromptTemplate = `You are Ghost, an advanced quantitative market analysis engine. 
 You are answering a specific, conversational question about an asset from the user. 
 Do NOT output the standard BASE CASE or TRADE LEVELS format. Instead, answer the user's question directly, mathematically, and strictly using the real-time order flow and technical indicator data injected below.
@@ -684,6 +711,7 @@ USER'S QUESTION: "${prompt}"`;
     regimeData,
     isImageMode,
     imageBase64,
+    isDeepThink: isDeepThinkMode,
     userPrompt: prompt,
     flowData: flowDataRef,
     tf15m: tf15mRef,
@@ -714,7 +742,8 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       return;
     }
 
-    const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt, userId } = p3Context;
+    const { ticker, hurstData, regimeData, flowData, tf15m, tf1h, userPrompt, userId, isDeepThink } = p3Context;
+    const isDeepThinkMode = isDeepThink || (userPrompt && userPrompt.toUpperCase().includes('DEEP THINK'));
 
     // ═══════════════════════════════════════════════════════
     // DETERMINISTIC SIGNAL GENERATOR — Engine decides, not AI
@@ -755,7 +784,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
           });
 
           // GhostMind v2: Pre-Trade Gate
-          const gateResult = await preTradeGate(signal, ticker);
+          const gateResult = await preTradeGate(signal, ticker, { skipDedup: isDeepThinkMode });
           if (gateResult.blocked) {
             signal.action = 'SHIELD_MODE';
             signal.reason = gateResult.reason;
@@ -860,7 +889,9 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       scoreTier = 'REJECT';
       scoreSizeMultiplier = 0;
       signal.action = 'SHIELD_MODE';
-      signal.reason = `Score ${currentScore} below adaptive threshold ${adaptiveMinScore}`;
+      if (!signal.reason) {
+        signal.reason = `Score ${currentScore} below adaptive threshold ${adaptiveMinScore}`;
+      }
       if (!signal.kelly) signal.kelly = {};
       signal.kelly.action = 'SHIELD_MODE';
       signal.kelly.kellyF = 0;
@@ -1179,14 +1210,20 @@ async function streamViaRestSSE(clientWs, apiKeys, systemPrompt, p3Context = {})
   const { isImageMode, imageBase64 } = p3Context;
   
   if (!isImageMode || !imageBase64) {
-    // TEXT-ONLY MODE -> Route to Groq API
-    console.log('[ROUTER] Text-only request detected. Routing to Groq API (High Speed).');
-    await streamViaGroqRestSSE(clientWs, systemPrompt, p3Context);
-  } else {
-    // IMAGE MODE -> Route to Gemini API
-    console.log('[ROUTER] Image upload detected. Routing to Gemini API (Vision).');
-    await streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context);
+    // TEXT-ONLY MODE -> Route to Groq API with seamless Gemini fallback
+    console.log('[ROUTER] Text-only request detected. Routing to Groq API (High Speed)...');
+    try {
+      const groqSuccess = await streamViaGroqRestSSE(clientWs, systemPrompt, p3Context);
+      if (groqSuccess) return;
+      console.warn('[ROUTER] Groq did not complete. Falling back to Gemini...');
+    } catch (groqErr) {
+      console.warn('[ROUTER] Groq error:', groqErr.message, '— Falling back to Gemini API...');
+    }
   }
+
+  // IMAGE MODE or GROQ FALLBACK -> Route to Gemini API
+  console.log('[ROUTER] Routing to Gemini API (Vision / Multimodal)...');
+  await streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context);
 }
 
 /**
@@ -1197,7 +1234,7 @@ async function translateTextWithGroq(text, targetLanguage) {
   if (!apiKey) return text;
   
   const payload = {
-    model: "llama-3.1-8b-instant", // fast and reliable for translation
+    model: process.env.GROQ_TRANSLATION_MODEL || 'openai/gpt-oss-20b', // fast and reliable for translation
     messages: [
       { role: "system", content: `You are a professional financial translator. Translate the following trading analysis into ${targetLanguage}. Maintain all markdown formatting, bullet points, emojis, and numerical values exactly as they are.` },
       { role: "user", content: text }
@@ -1228,11 +1265,14 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
   const apiKey = process.env.GROQ_API_KEY;
   
   if (!apiKey) {
-    clientWs.send(JSON.stringify({ status: 'error', message: 'Groq API Key is missing.', rawError: 'Missing GROQ_API_KEY' }));
-    return;
+    console.warn('[GROQ] GROQ_API_KEY missing — delegating to Gemini fallback');
+    return false;
   }
 
-  const textPrompt = `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full analytical rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
+  const isDeepThinkMode = p3Context.isDeepThink || (userPrompt && userPrompt.toUpperCase().includes('DEEP THINK'));
+  const textPrompt = isDeepThinkMode
+    ? `The user requested Deep Think analysis: "${userPrompt}"\n\nAnalyze all numerical data provided in the system context above with full quantitative rigor. Structure your response according to the Deep Think format. State the exact computed figures without hallucinating.`
+    : `The user asked: "${userPrompt || 'Analyze this asset'}"\n\n${USER_PROMPT}\n\nIMPORTANT: You are in DATA-ONLY mode. All market data (OHLCV candles, RSI, MACD, Bollinger Bands, ATR, VWAP, Hurst regime, order flow, open interest, macro correlations) has been injected into your system prompt above. Analyze the NUMBERS with full analytical rigor. Do NOT mention that there is no chart — you have all numerical data needed for a complete analysis.`;
 
   // Strip out image-specific instructions so Groq doesn't get confused and abort
   let groqSystemPrompt = systemPrompt.replace(
@@ -1244,14 +1284,15 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
     'Based on the provided data, output exactly this structure:'
   );
 
+  const groqModel = process.env.GROQ_CHAT_MODEL || 'qwen/qwen3.8-27b';
   const payload = {
-    model: "groq/compound-mini",
+    model: groqModel,
     messages: [
       { role: "system", content: groqSystemPrompt },
       { role: "user", content: textPrompt }
     ],
     temperature: 0.3,
-    max_tokens: 8192,
+    max_tokens: 800,
     top_p: 0.85,
     stream: true
   };
@@ -1260,7 +1301,7 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
   let rawFullText = '';
   
   try {
-    console.log(`[GROQ] Attempting REST SSE with groq/compound-mini`);
+    console.log(`[GROQ] Attempting REST SSE with ${groqModel}`);
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: 'POST',
       headers: {
@@ -1315,10 +1356,16 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
       console.error('[PHASE 3] Intercept failed — client will still receive complete signal:', p3Err.message);
     }
     clientWs.send(JSON.stringify({ status: 'complete', priceAtTime: p3Context?.currentPrice || null }));
+    return true;
 
   } catch (error) {
-    console.error('[GROQ-SSE] Stream connection error:', error);
+    console.error('[GROQ-SSE] Stream connection error:', error.message);
+    if (!fullText || fullText.length < 50) {
+      // Re-throw so caller can fall back to Gemini
+      throw error;
+    }
     clientWs.send(JSON.stringify({ status: 'error', message: 'We lost connection to the AI. Retrying...', rawError: error.message }));
+    return false;
   }
 }
 
@@ -1326,12 +1373,19 @@ async function streamViaGroqRestSSE(clientWs, systemPrompt, p3Context) {
  * GEMINI IMPLEMENTATION (Image Mode, Vision Parsing, Gemini SSE Format)
  */
 async function streamViaGeminiRestSSE(clientWs, apiKeys, systemPrompt, p3Context) {
-  const { imageBase64 } = p3Context;
+  const { imageBase64, userPrompt } = p3Context;
   
-  const userParts = [
-    { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-    { text: USER_PROMPT }
-  ];
+  const userParts = [];
+  if (imageBase64) {
+    userParts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64 } });
+  }
+  const isDeepThinkMode = p3Context.isDeepThink || (userPrompt && userPrompt.toUpperCase().includes('DEEP THINK'));
+  const promptText = isDeepThinkMode
+    ? `The user requested Deep Think analysis: "${userPrompt}"\n\nAnalyze all numerical data provided in the system context above with full quantitative rigor. Structure your response according to the Deep Think format. State the exact computed figures without hallucinating.`
+    : (userPrompt
+      ? `The user asked: "${userPrompt}"\n\n${USER_PROMPT}\n\nAll market data (OHLCV, technicals, regime, order flow) has been provided in the system context above. Analyze the data thoroughly.`
+      : USER_PROMPT);
+  userParts.push({ text: promptText });
 
   const payload = {
     systemInstruction: { parts: [{ text: systemPrompt }] },

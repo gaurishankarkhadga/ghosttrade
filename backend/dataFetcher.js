@@ -241,8 +241,9 @@ export async function fetchOHLCV(ticker, bars = DEFAULT_BAR_COUNT) {
     // 1. Try Binance API Next (for crypto)
     const binanceData = await fetchBinanceOHLCV(ticker, '1d', bars);
     if (binanceData && binanceData.length > 0) {
-      if (binanceData.length < 200) {
-        return { error: 'INSUFFICIENT_DATA', message: `Only ${binanceData.length} bars available on Binance.`, count: binanceData.length };
+      const minRequired = Math.min(bars, 50);
+      if (binanceData.length < minRequired) {
+        return { error: 'INSUFFICIENT_DATA', message: `Only ${binanceData.length} bars available on Binance (need ${minRequired}+).`, count: binanceData.length };
       }
       const finalData = { symbol: ticker, bars: binanceData };
       ohlcvCache.set(cacheKey, { timestamp: Date.now(), data: finalData });
@@ -350,7 +351,8 @@ export async function fetchMultiTimeframeOHLCV(symbol, bars = DEFAULT_BAR_COUNT)
       console.warn(`[DataFetcher] Insufficient 1h data for ${symbol}: ${binance1h?.length || 0} bars`);
     }
 
-    if (binance15m && binance15m.length >= 50 && binance1h && binance1h.length >= 50 && binance1d && binance1d.length >= 200) {
+    const minRequiredDaily = Math.min(bars, 50);
+    if (binance15m && binance15m.length >= 20 && binance1h && binance1h.length >= 20 && binance1d && binance1d.length >= minRequiredDaily) {
       const finalData = {
         symbol: ticker,
         timeframes: { '15m': binance15m, '1h': binance1h, '1d': binance1d }
