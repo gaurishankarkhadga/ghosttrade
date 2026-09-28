@@ -88,10 +88,16 @@ export function detectLeadLagDivergence(leaderCandles, followerCandles) {
 
   const leaderStart = leaderRecent[0].close;
   const leaderEnd = leaderRecent[leaderRecent.length - 1].close;
+  if (!leaderStart || leaderStart === 0 || isNaN(leaderStart) || isNaN(leaderEnd)) {
+    return { divergenceSignal: 'NONE', leaderReturnPct: 0, followerReturnPct: 0, catchupEdgePct: 0 };
+  }
   const leaderReturnPct = ((leaderEnd - leaderStart) / leaderStart) * 100;
 
   const followerStart = followerRecent[0].close;
   const followerEnd = followerRecent[followerRecent.length - 1].close;
+  if (!followerStart || followerStart === 0 || isNaN(followerStart) || isNaN(followerEnd)) {
+    return { divergenceSignal: 'NONE', leaderReturnPct: 0, followerReturnPct: 0, catchupEdgePct: 0 };
+  }
   const followerReturnPct = ((followerEnd - followerStart) / followerStart) * 100;
 
   const spread = leaderReturnPct - followerReturnPct;

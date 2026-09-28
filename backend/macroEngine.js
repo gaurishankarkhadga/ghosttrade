@@ -49,7 +49,8 @@ const MACRO_CONFIG = {
   BTC_RISK_OFF: -3,
   ETH_RISK_OFF: -4,
   BTC_RISK_ON: 3,
-  ETH_RISK_ON: 3
+  ETH_RISK_ON: 3,
+  DXY_RISK_OFF: 0.5,  // DXY proxy must move >= 0.5% to trigger RISK_OFF (prevents micro-fluctuation noise)
 };
 
 async function fetchDXYProxy() {
@@ -129,7 +130,7 @@ export async function fetchMacroCorrelations() {
     } else if (vixData && vixData.cryptoVIX > MACRO_CONFIG.VIX_HIGH_THRESHOLD) {
       riskEnvironment = "RISK_OFF";
       interpretation = `RISK OFF: High crypto volatility detected (VIX Proxy: ${vixData.cryptoVIX}%). Elevated downside pressure.`;
-    } else if (dxyData && dxyData.dxyProxy > 0) { // DXY Proxy > 0 means EUR fell
+    } else if (dxyData && dxyData.dxyProxy >= MACRO_CONFIG.DXY_RISK_OFF) { // DXY Proxy >= 0.5% means meaningful dollar strength
       riskEnvironment = "RISK_OFF";
       interpretation = `RISK OFF: Strong Dollar Proxy (DXY Proxy +${dxyData.dxyProxy.toFixed(2)}%). Macro headwind for crypto.`;
     } else if (btc && eth) {
@@ -152,7 +153,7 @@ export async function fetchMacroCorrelations() {
       if (eth.changePercent < -3) riskScore -= 15;
     }
     
-    if (dxyData && dxyData.dxyProxy > 0) riskScore -= 10;
+    if (dxyData && dxyData.dxyProxy >= MACRO_CONFIG.DXY_RISK_OFF) riskScore -= Math.min(20, Math.round(dxyData.dxyProxy * 15)); // Proportional: 0.5% DXY = -8pts, 1% = -15pts, 1.3%+ = -20pts cap
     if (vixData && vixData.cryptoVIX > MACRO_CONFIG.VIX_HIGH_THRESHOLD) riskScore -= 20;
     if (usdcData && !usdcData.isStable) riskScore = 0; // Extreme risk off
 

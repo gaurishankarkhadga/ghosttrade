@@ -34,6 +34,15 @@ const SCORE_WEIGHTS = {
   VOLUME_CONFIRMATION:   0.10,  // Above-average volume?
 };
 
+// Timeframe Reliability Weights — higher timeframes are more reliable predictors
+const TIMEFRAME_RELIABILITY = {
+  '4h': 1.0,    // Institutional-grade — most reliable
+  '1h': 0.85,   // Strong reliability
+  '15m': 0.60,  // Medium — more noise
+  '5m':  0.40,  // High noise, low reliability
+  'daily': 0.90, // Very reliable but slow
+};
+
 // Adaptive Score Weights — learns from actual performance
 let adaptiveWeights = null;
 let adaptiveWeightsUpdatedAt = 0;
@@ -208,6 +217,15 @@ export async function generateSignal(ticker, candles, options = {}) {
       else if (mPrice < mSma50 && mSma20 < mSma50) macroTrend = 'BEARISH';
       else macroTrend = 'NEUTRAL';
     }
+  } else if (closes && closes.length >= 50) {
+    // Structural Daily fallback: Use daily candles as macro baseline
+    const dSma20 = sma(closes, 20);
+    const dSma50 = sma(closes, 50);
+    if (dSma20 && dSma50) {
+      if (currentPrice > dSma50 && dSma20 > dSma50) macroTrend = 'BULLISH';
+      else if (currentPrice < dSma50 && dSma20 < dSma50) macroTrend = 'BEARISH';
+      else macroTrend = 'NEUTRAL';
+    }
   }
 
   // ─────────────────────────────────────────────────────
@@ -236,7 +254,12 @@ export async function generateSignal(ticker, candles, options = {}) {
     }
   }
 
+  // Determine source timeframe reliability for weighting
+  const votingTimeframe = isVotingHourly ? '1h' : 'daily';
+  const votingReliability = TIMEFRAME_RELIABILITY[votingTimeframe] || 0.7;
+
   if (candles4h && candles4h.length >= 20) {
+    const mesoReliability = TIMEFRAME_RELIABILITY['4h'];
     const mesoCloses = getClosePrices(candles4h);
     const mePrice = mesoCloses[mesoCloses.length - 1];
     const meSma20 = sma(mesoCloses, Math.min(20, Math.floor(mesoCloses.length / 2)));
@@ -249,6 +272,20 @@ export async function generateSignal(ticker, candles, options = {}) {
       if (mePrice > meSma20) mesoTrend = 'BULLISH';
       else if (mePrice < meSma20) mesoTrend = 'BEARISH';
       else mesoTrend = 'NEUTRAL';
+    }
+  }
+
+  // LAYER 5c: MICRO TREND (15m Execution Horizon if available)
+  let microTrend = 'UNKNOWN';
+  if (options.candles15m && options.candles15m.length >= 20) {
+    const microCloses = getClosePrices(options.candles15m);
+    const microPrice = microCloses[microCloses.length - 1];
+    const microSma9 = sma(microCloses, 9);
+    const microSma21 = sma(microCloses, 21);
+    if (microSma9 && microSma21) {
+      if (microPrice > microSma21 && microSma9 > microSma21) microTrend = 'BULLISH';
+      else if (microPrice < microSma21 && microSma9 < microSma21) microTrend = 'BEARISH';
+      else microTrend = 'NEUTRAL';
     }
   }
 
@@ -382,14 +419,50 @@ export async function generateSignal(ticker, candles, options = {}) {
   }
   scoreBreakdown.regimeAlignment = Math.round(regimeScore);
 
-  // 2. Technical Confluence Score (0-100)
-  let techScore = 0;
+  // 2. Multi-Timeframe Confluence Scoring v2 (0-100)
+  // Cross-checks indicator consensus on the voting timeframe against 4H Meso, Daily Macro, and 15m Micro
   const totalVoters = directionVotes.BULLISH + directionVotes.BEARISH + directionVotes.NEUTRAL;
   const dominantVotes = Math.max(directionVotes.BULLISH, directionVotes.BEARISH);
-  if (totalVoters > 0) {
-    techScore = Math.round((dominantVotes / totalVoters) * 100);
+  const h1Score = totalVoters > 0 ? Math.round((dominantVotes / totalVoters) * 100) : 50;
+
+  let h4Score = 50;
+  if (mesoTrend === direction) h4Score = 100;
+  else if (mesoTrend !== 'UNKNOWN' && mesoTrend !== 'NEUTRAL') h4Score = 15;
+
+  let dailyScore = 50;
+  if (macroTrend === direction) dailyScore = 100;
+  else if (macroTrend !== 'UNKNOWN' && macroTrend !== 'NEUTRAL') dailyScore = 15;
+
+  let m15Score = 50;
+  const has15m = options.candles15m && options.candles15m.length >= 20;
+  if (has15m) {
+    if (microTrend === direction) m15Score = 100;
+    else if (microTrend !== 'UNKNOWN' && microTrend !== 'NEUTRAL') m15Score = 20;
   }
-  scoreBreakdown.technicalConfluence = techScore;
+
+  // Weight each timeframe by its institutional reliability (4H > Daily > 1H > 15m)
+  const mtfWeights = has15m
+    ? { daily: 0.30, h4: 0.35, h1: 0.25, m15: 0.10 }
+    : { daily: 0.35, h4: 0.40, h1: 0.25 };
+
+  const mtfConfluenceScore = Math.round(
+    dailyScore * mtfWeights.daily +
+    h4Score * mtfWeights.h4 +
+    h1Score * mtfWeights.h1 +
+    (has15m ? m15Score * mtfWeights.m15 : 0)
+  );
+
+  scoreBreakdown.technicalConfluence = Math.max(0, Math.min(100, mtfConfluenceScore));
+  scoreBreakdown.mtfConfluence = {
+    dailyScore,
+    h4Score,
+    h1Score,
+    m15Score: has15m ? m15Score : null,
+    weights: mtfWeights,
+    macroTrend,
+    mesoTrend,
+    microTrend
+  };
 
   // 3. Order Flow Score (0-100)
   let ofiScore = 50; // Neutral baseline
@@ -445,13 +518,29 @@ export async function generateSignal(ticker, candles, options = {}) {
   // ─── WEIGHTED COMPOSITE SCORE ───
   const weights = await getAdaptiveWeights();
   
+  // Apply timeframe reliability — downweights noise on lower timeframes while re-normalizing weights
+  const tfRel = votingReliability;
+  const rawWeightRegime = weights.REGIME_ALIGNMENT;
+  const rawWeightTech = weights.TECHNICAL_CONFLUENCE * tfRel;
+  const rawWeightOfi = weights.ORDER_FLOW * tfRel;
+  const rawWeightVol = weights.VOLUME_CONFIRMATION * tfRel;
+  const rawWeightHist = weights.HISTORICAL_WIN_RATE;
+
+  const totalRawWeight = rawWeightRegime + rawWeightTech + rawWeightOfi + rawWeightVol + rawWeightHist;
+  const normWeightRegime = rawWeightRegime / totalRawWeight;
+  const normWeightTech = rawWeightTech / totalRawWeight;
+  const normWeightOfi = rawWeightOfi / totalRawWeight;
+  const normWeightVol = rawWeightVol / totalRawWeight;
+  const normWeightHist = rawWeightHist / totalRawWeight;
+
   let compositeScore = Math.round(
-    scoreBreakdown.regimeAlignment * weights.REGIME_ALIGNMENT +
-    scoreBreakdown.technicalConfluence * weights.TECHNICAL_CONFLUENCE +
-    scoreBreakdown.orderFlow * weights.ORDER_FLOW +
-    scoreBreakdown.volumeConfirmation * weights.VOLUME_CONFIRMATION +
-    scoreBreakdown.historicalWinRate * weights.HISTORICAL_WIN_RATE
+    scoreBreakdown.regimeAlignment * normWeightRegime +
+    scoreBreakdown.technicalConfluence * normWeightTech +
+    scoreBreakdown.orderFlow * normWeightOfi +
+    scoreBreakdown.volumeConfirmation * normWeightVol +
+    scoreBreakdown.historicalWinRate * normWeightHist
   );
+  compositeScore = Math.max(0, Math.min(100, compositeScore));
 
   // ─── MATHEMATICAL EXPECTED VALUE (EV) & ASYMMETRY (1:2.0 RRR) ───
   const pWin = Math.max(0.05, Math.min(0.95, compositeScore / 100));
@@ -460,15 +549,17 @@ export async function generateSignal(ticker, candles, options = {}) {
   const evPer100 = parseFloat(((pWin * 200) - (pLoss * 100) - 1.50).toFixed(2));
   const breakEvenWinRate = 33.33; // 1 / (1 + 2.0) = 33.33%
 
-  // Factor points mapped to exact max weights: 25, 25, 20, 15, 15 (sum = compositeScore)
-  scoreBreakdown.regimePoints = Math.round(scoreBreakdown.regimeAlignment * weights.REGIME_ALIGNMENT);
-  scoreBreakdown.confluencePoints = Math.round(scoreBreakdown.technicalConfluence * weights.TECHNICAL_CONFLUENCE);
-  scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * weights.ORDER_FLOW);
-  scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * weights.VOLUME_CONFIRMATION);
-  scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * weights.HISTORICAL_WIN_RATE);
+  // Factor points mapped to exact normalized weights (sum === compositeScore)
+  scoreBreakdown.regimePoints = Math.round(scoreBreakdown.regimeAlignment * normWeightRegime);
+  scoreBreakdown.confluencePoints = Math.round(scoreBreakdown.technicalConfluence * normWeightTech);
+  scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * normWeightOfi);
+  scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * normWeightVol);
+  scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * normWeightHist);
   scoreBreakdown.totalScore = compositeScore;
   scoreBreakdown.ofiSource = ofiSource;
   scoreBreakdown.weightsUsed = weights;
+  scoreBreakdown.timeframeReliability = tfRel;
+  scoreBreakdown.votingTimeframe = votingTimeframe;
   scoreBreakdown.orderBookImbalance = depthData?.orderBookImbalance ?? null;
 
   // Add L2 order book depth insight to reasons if available

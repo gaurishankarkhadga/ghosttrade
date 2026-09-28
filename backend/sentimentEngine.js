@@ -115,19 +115,36 @@ function calculateSentimentMultiplier(headlines, ticker, tradeSide) {
   const text = headlines.map(h => h.title.toLowerCase()).join(' |||BREAK||| ');
   const cleanTicker = ticker.replace('.NS', '').replace('NSE:', '').split('-')[0].toLowerCase();
 
+  // Negation-aware keyword matching
+  const NEGATION_PREFIXES = ['not ', 'no ', 'never ', 'isn\'t ', 'wasn\'t ', 'aren\'t ', 'denies ', 'denied ', 'without ', 'lack of ', 'doesn\'t ', 'didn\'t ', 'cleared of ', 'acquitted ', 'dismisses ', 'refutes '];
+
+  function isNegated(text, kwIndex, kw) {
+    // Check the 25 characters before the keyword for negation words
+    const prefix = text.substring(Math.max(0, kwIndex - 25), kwIndex).toLowerCase();
+    return NEGATION_PREFIXES.some(neg => prefix.includes(neg));
+  }
+
   TOXIC_KEYWORDS.forEach(kw => {
     // Proximity Regex: Is the toxic keyword within 40 characters (~5 words) of the asset name?
     const regexStr1 = `${cleanTicker}.{0,40}${kw}`;
     const regexStr2 = `${kw}.{0,40}${cleanTicker}`;
     
-    if (new RegExp(regexStr1, 'i').test(text) || new RegExp(regexStr2, 'i').test(text)) {
-      toxicHits++;
-      alerts.push(`TOXIC EVENT DETECTED: '${kw.toUpperCase()}' in direct proximity to '${cleanTicker.toUpperCase()}'`);
+    const match1 = new RegExp(regexStr1, 'i').exec(text);
+    const match2 = new RegExp(regexStr2, 'i').exec(text);
+    const matchIndex = match1 ? match1.index : (match2 ? match2.index : -1);
+
+    if (matchIndex >= 0) {
+      // Check for negation — "not a scam", "denies bankruptcy" should NOT trigger TOXIC
+      if (!isNegated(text, matchIndex, kw)) {
+        toxicHits++;
+        alerts.push(`TOXIC EVENT DETECTED: '${kw.toUpperCase()}' in direct proximity to '${cleanTicker.toUpperCase()}'`);
+      }
     }
   });
 
   BEARISH_KEYWORDS.forEach(kw => {
-    if (text.includes(kw)) bearishHits++;
+    const idx = text.indexOf(kw);
+    if (idx >= 0 && !isNegated(text, idx, kw)) bearishHits++;
   });
 
   BULLISH_KEYWORDS.forEach(kw => {

@@ -42,7 +42,7 @@ import { startRegimeMonitor, registerClient } from './regimeMonitor.js';
 import { getDb } from './mongoConfig.js';
 import { executionManager } from './executionEngine.js';
 import { startScannerWorker, startAuditWorker, runBacktestInWorker, workerEvents } from './workerPool.js';
-import { getSystemPerformance } from './performanceEngine.js';
+import { getSystemPerformance, generatePerformanceReport } from './performanceEngine.js';
 import { calculatePortfolioVaR } from './riskControlEngine.js';
 import { updateGlobalCache, getGlobalAssetAnalysis, getAllCachedAssets, getCacheInfo } from './globalAnalysisCache.js';
 // === Global System Imports ===
@@ -803,6 +803,20 @@ fastify.post('/api/backtest', {
     return reply.send(result);
   } catch (error) {
     console.error('[BACKTEST API] Error:', error.message);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+// =====================================================
+// PERFORMANCE REPORT ENDPOINT
+// =====================================================
+
+fastify.get('/api/performance/report', async (request, reply) => {
+  try {
+    const report = await generatePerformanceReport(request.user.email);
+    return reply.send(report);
+  } catch (e) {
+    console.error('[REPORT API] Error:', e.message);
     return reply.code(500).send({ error: 'Internal Server Error' });
   }
 });
