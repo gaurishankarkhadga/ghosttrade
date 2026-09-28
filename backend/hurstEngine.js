@@ -4,10 +4,10 @@
 // H > 0.55 → Trending (persistent)
 // H < 0.45 → Mean-Reverting (anti-persistent)
 // 0.45–0.55 → Random Walk (no edge)
-// Requires minimum 200 data points.
+// Requires minimum 100 data points.
 // =====================================================
 
-const MIN_BARS = 200;
+const MIN_BARS = 100;
 const INSTABILITY_THRESHOLD = 0.10; // Flag if R/S and DFA disagree by more than this
 
 /**
@@ -37,9 +37,11 @@ function stdDev(arr) {
 function computeRS(series) {
   const m = mean(series);
   // Cumulative deviation from mean
-  const cumDev = series.map((_, i) =>
-    series.slice(0, i + 1).reduce((s, v) => s + (v - m), 0)
-  );
+  let sum = 0;
+  const cumDev = series.map((v) => {
+    sum += (v - m);
+    return sum;
+  });
   const range = Math.max(...cumDev) - Math.min(...cumDev);
   const sd = stdDev(series);
   if (sd === 0) return null;
@@ -50,18 +52,17 @@ function computeRS(series) {
  * Estimates Hurst exponent via Rescaled Range (R/S) analysis.
  * Uses multiple sub-period lengths and fits a log-log regression.
  *
- * @param {number[]} logReturns - Array of log returns (min 200 elements)
+ * @param {number[]} logReturns - Array of log returns
+ * @param {number} minWindow - Minimum window size for regression
  * @returns {{ h: number, r2: number } | null}
  */
-function hurstRS(logReturns) {
+function hurstRS(logReturns, minWindow = 10) {
   const n = logReturns.length;
   if (n < MIN_BARS) return null;
 
-  // Generate sub-period sizes as powers of 2, capped at n/4
-  const minWindow = 10;
   const maxWindow = Math.floor(n / 4);
   const windowSizes = [];
-  for (let w = minWindow; w <= maxWindow; w = Math.ceil(w * 1.5)) {
+  for (let w = minWindow; w <= maxWindow; w = Math.max(w + 1, Math.ceil(w * 1.2))) {
     windowSizes.push(w);
   }
 
@@ -86,6 +87,7 @@ function hurstRS(logReturns) {
 
   // Ordinary Least Squares regression: logRS = H * logN + c
   const { slope, r2 } = olsRegression(logN, logRS);
+  if (r2 < 0.7) return null;
   return { h: Math.max(0, Math.min(1, slope)), r2 };
 }
 
@@ -97,10 +99,11 @@ function hurstRS(logReturns) {
 /**
  * Estimates Hurst exponent via Detrended Fluctuation Analysis (DFA).
  *
- * @param {number[]} logReturns - Array of log returns (min 200 elements)
+ * @param {number[]} logReturns - Array of log returns
+ * @param {number} minWindow - Minimum window size for regression
  * @returns {{ h: number, r2: number } | null}
  */
-function hurstDFA(logReturns) {
+function hurstDFA(logReturns, minWindow = 10) {
   const n = logReturns.length;
   if (n < MIN_BARS) return null;
 
@@ -113,10 +116,9 @@ function hurstDFA(logReturns) {
     integrated.push(cumSum);
   }
 
-  const minWindow = 10;
   const maxWindow = Math.floor(n / 4);
   const windowSizes = [];
-  for (let w = minWindow; w <= maxWindow; w = Math.ceil(w * 1.5)) {
+  for (let w = minWindow; w <= maxWindow; w = Math.max(w + 1, Math.ceil(w * 1.2))) {
     windowSizes.push(w);
   }
 
@@ -149,6 +151,7 @@ function hurstDFA(logReturns) {
   if (logN.length < 4) return null;
 
   const { slope, r2 } = olsRegression(logN, logF);
+  if (r2 < 0.7) return null;
   return { h: Math.max(0, Math.min(1, slope)), r2 };
 }
 
@@ -253,4 +256,18 @@ export function calculateHurst(logReturns) {
 
   console.log(`[HURST] ${regime} | R/S=${rsResult.h.toFixed(3)} DFA=${dfaResult.h.toFixed(3)} Mean=${mean_h.toFixed(3)} Stable=${isStable}`);
   return result;
+}
+
+// Rolling Hurst for responsive regime detection
+export function calculateRollingHurst(logReturns, windowSize = 100, step = 20) {
+  if (!logReturns || logReturns.length < windowSize) {
+    return { values: [], latest: null };
+  }
+  const values = [];
+  for (let i = logReturns.length - windowSize; i >= 0; i -= step) {
+    const windowReturns = logReturns.slice(i, i + windowSize);
+    const h = calculateHurst(windowReturns);
+    values.unshift({ index: i, hurst: h });
+  }
+  return { values, latest: values[values.length - 1]?.hurst || null };
 }

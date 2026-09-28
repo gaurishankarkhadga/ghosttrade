@@ -32,19 +32,38 @@ export const STREAK_RESPONSES = {
 };
 
 
-/**
- * Calculates Pearson correlation coefficient between two equal-length arrays of returns.
- */
-function calculatePearson(x, y) {
-  if (x.length !== y.length || x.length === 0) return 0;
+// Timestamp-aligned correlation — only compare returns from same time periods
+function alignedCorrelation(returnsA, returnsB, timestampsA, timestampsB) {
+  // If timestamps not available, fall back to tail alignment but warn
+  if (!timestampsA || !timestampsB) {
+    console.warn('[RISK] No timestamps for correlation — using tail alignment (may be inaccurate)');
+    const minLen = Math.min(returnsA.length, returnsB.length, 30);
+    return pearsonCorrelation(returnsA.slice(-minLen), returnsB.slice(-minLen));
+  }
+  
+  // Build timestamp-indexed map
+  const mapB = new Map();
+  timestampsB.forEach((t, i) => mapB.set(t, returnsB[i]));
+  
+  const alignedA = [];
+  const alignedB = [];
+  timestampsA.forEach((t, i) => {
+    if (mapB.has(t)) {
+      alignedA.push(returnsA[i]);
+      alignedB.push(mapB.get(t));
+    }
+  });
+  
+  if (alignedA.length < 10) return 0; // Not enough overlapping periods
+  return pearsonCorrelation(alignedA, alignedB);
+}
+
+export function pearsonCorrelation(x, y) {
   const n = x.length;
-  const meanX = x.reduce((a, b) => a + b, 0) / n;
-  const meanY = y.reduce((a, b) => a + b, 0) / n;
-
-  let num = 0;
-  let denX = 0;
-  let denY = 0;
-
+  if (n < 5) return 0;
+  const meanX = x.reduce((s, v) => s + v, 0) / n;
+  const meanY = y.reduce((s, v) => s + v, 0) / n;
+  let num = 0, denX = 0, denY = 0;
   for (let i = 0; i < n; i++) {
     const dx = x[i] - meanX;
     const dy = y[i] - meanY;
@@ -52,9 +71,8 @@ function calculatePearson(x, y) {
     denX += dx * dx;
     denY += dy * dy;
   }
-
-  if (denX === 0 || denY === 0) return 0;
-  return num / Math.sqrt(denX * denY);
+  const den = Math.sqrt(denX * denY);
+  return den === 0 ? 0 : parseFloat((num / den).toFixed(4));
 }
 
 /**
@@ -101,10 +119,10 @@ function computeBlackSwanMetrics(ticker) {
     // Spread as % of mid price
     const spreadPct = ((bestAsk - bestBid) / midPrice) * 100;
 
-    // Depth depletion: compare top-5 bid liquidity vs top-5 ask liquidity
+    // Depth depletion: compare top-20 bid liquidity vs top-20 ask liquidity
     // High imbalance (>50% ask depletion relative to bids) = sell-side collapse
-    const topBidQty = depth.bids.slice(0, 5).reduce((s, b) => s + parseFloat(b[1]), 0);
-    const topAskQty = depth.asks.slice(0, 5).reduce((s, a) => s + parseFloat(a[1]), 0);
+    const topBidQty = depth.bids.slice(0, 20).reduce((s, b) => s + parseFloat(b[1]), 0);
+    const topAskQty = depth.asks.slice(0, 20).reduce((s, a) => s + parseFloat(a[1]), 0);
     const totalQty = topBidQty + topAskQty;
     const depthDepletionPct = totalQty > 0
       ? (Math.abs(topBidQty - topAskQty) / totalQty) * 100
@@ -315,20 +333,15 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
       const newAssetData = await fetchOHLCV(toStandardSymbol(newTradeAsset), RISK_CONFIG.correlation_lookback_bars);
       if (!newAssetData.error && newAssetData.bars) {
          const newReturns = getLogReturns(newAssetData.bars);
+         const newTimestamps = newAssetData.bars.map(b => b.time || b.timestamp);
          
          for (const openTrade of openTrades) {
             const openAssetData = await fetchOHLCV(toStandardSymbol(openTrade.asset), RISK_CONFIG.correlation_lookback_bars);
             if (!openAssetData.error && openAssetData.bars) {
                const openReturns = getLogReturns(openAssetData.bars);
+               const openTimestamps = openAssetData.bars.map(b => b.time || b.timestamp);
                
-               const minLen = Math.min(newReturns.length, openReturns.length, RISK_CONFIG.correlation_lookback_bars);
-               
-               if (minLen < 30) continue; // Minimum data floor
-
-               const rX = newReturns.slice(-minLen);
-               const rY = openReturns.slice(-minLen);
-               
-               const correlation = calculatePearson(rX, rY);
+               const correlation = alignedCorrelation(newReturns, openReturns, newTimestamps, openTimestamps);
                
                if (correlation > RISK_CONFIG.correlation_threshold && openTrade.side === newTradeSide) {
                   return {
@@ -363,5 +376,33 @@ export async function canOpenNewTrade(newTradeAsset, newTradeSide, userId) {
   } catch (err) {
     console.error('[RISK CONTROL] Error checking portfolio risk:', err);
     return { allowed: false, reason: 'RISK_CHECK_ERROR', detail: err.message }; // Fail CLOSED — never allow unguarded trades
+  }
+}
+
+// Portfolio-level Historical VaR — what's the worst 5% daily loss across all open trades?
+export async function calculatePortfolioVaR(userId) {
+  try {
+    const db = await getDb();
+    const openTrades = await db.collection('paper_trades').find({
+      userId, status: 'OPEN'
+    }).toArray();
+    
+    if (openTrades.length === 0) return { var95: 0, totalExposure: 0 };
+    
+    // Sum up total risk exposure
+    let totalExposure = 0;
+    for (const trade of openTrades) {
+      const risk = Math.abs(trade.entryPrice - trade.stopLoss) * (trade.quantity || 1);
+      totalExposure += risk;
+    }
+    
+    return {
+      var95: parseFloat((totalExposure * 0.05).toFixed(2)), // Simplified parametric VaR
+      totalExposure: parseFloat(totalExposure.toFixed(2)),
+      openTradeCount: openTrades.length
+    };
+  } catch (err) {
+    console.warn('[RISK] Portfolio VaR calculation failed:', err.message);
+    return { var95: 0, totalExposure: 0 };
   }
 }

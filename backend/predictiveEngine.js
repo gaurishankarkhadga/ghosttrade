@@ -68,6 +68,36 @@ const THRESHOLDS = {
   CONFIDENCE_CAP:   92,         // Never claim >92% confidence (overclaim guard)
 };
 
+// Dynamic volume thresholds based on asset's own volatility profile
+function getDynamicThresholds(candles) {
+  const defaultThresholds = { ...THRESHOLDS };
+  if (!candles || candles.length < 30) return defaultThresholds;
+  
+  // Calculate volume statistics from recent history
+  const volumes = candles.slice(-30).map(c => c.volume || 0).filter(v => v > 0);
+  if (volumes.length < 10) return defaultThresholds;
+  
+  const mean = volumes.reduce((s, v) => s + v, 0) / volumes.length;
+  const variance = volumes.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / volumes.length;
+  const stdDev = Math.sqrt(variance);
+  const cv = stdDev / (mean || 1); // Coefficient of variation
+  
+  // High CV = volatile volume (crypto) → need higher threshold to filter noise
+  // Low CV = stable volume (large-cap stocks) → lower threshold captures real spikes
+  const volumeAccel = Math.max(1.3, Math.min(3.0, 1.0 + cv * 1.5));
+  const volumeExtreme = Math.max(2.0, Math.min(4.0, volumeAccel * 1.4));
+  
+  // OFI threshold also adapts — more volatile assets need stronger signal
+  const ofiDir = Math.max(0.10, Math.min(0.35, 0.15 + cv * 0.1));
+  
+  return {
+    ...defaultThresholds,
+    VOLUME_ACCELERATION: parseFloat(volumeAccel.toFixed(2)),
+    VOLUME_EXTREME: parseFloat(volumeExtreme.toFixed(2)),
+    OFI_DIRECTION: parseFloat(ofiDir.toFixed(2)),
+  };
+}
+
 /**
  * Evaluates 5-to-10 minute predictive lookahead horizon for a given asset's candle history.
  * 
@@ -76,12 +106,14 @@ const THRESHOLDS = {
  * @returns { object } - { predictedDirection, predictiveScore, timeHorizonMinutes, confidencePct, rationale }
  */
 export function predict5to10mHorizon(candles, ofiMetrics = null) {
+  const thresholds = getDynamicThresholds(candles);
+
   if (!candles || candles.length < 10) {
     return {
       predictedDirection: 'NEUTRAL_WAIT',
-      predictiveScore: THRESHOLDS.SCORE_FLOOR,
+      predictiveScore: thresholds.SCORE_FLOOR,
       timeHorizonMinutes: 5,
-      confidencePct: THRESHOLDS.CONFIDENCE_BASE - 10, // Below actionable floor
+      confidencePct: thresholds.CONFIDENCE_BASE - 10, // Below actionable floor
       rationale: 'Insufficient price history for 5-10m predictive lookahead.'
     };
   }
@@ -113,46 +145,46 @@ export function predict5to10mHorizon(candles, ofiMetrics = null) {
   // 4. Predictive Lookahead Decision (5-10 minutes ahead)
   //    Priority: Volume + OFI confirmation → Volatility Squeeze → Neutral
   let predictedDirection  = 'CONSOLIDATION_SIDEWAYS';
-  let predictiveScore     = THRESHOLDS.SCORE_FLOOR;
+  let predictiveScore     = thresholds.SCORE_FLOOR;
   let timeHorizonMinutes  = 5;
-  let confidencePct       = THRESHOLDS.CONFIDENCE_BASE - 5;
+  let confidencePct       = thresholds.CONFIDENCE_BASE - 5;
   let rationale           = 'Market consolidating. Micro-volume steady. No directional signal.';
 
-  if (currentVolumeRatio >= THRESHOLDS.VOLUME_ACCELERATION && ofi >= THRESHOLDS.OFI_DIRECTION) {
+  if (currentVolumeRatio >= thresholds.VOLUME_ACCELERATION && ofi >= thresholds.OFI_DIRECTION) {
     // ── Bullish Breakout: High volume + positive OFI → buy-side pressure
     predictedDirection = 'BULLISH_BREAKOUT_5-10M';
     predictiveScore    = Math.min(
-      THRESHOLDS.SCORE_CAP,
-      Math.round(THRESHOLDS.SCORE_BASE + (currentVolumeRatio * THRESHOLDS.VOLUME_CONFIDENCE_SCALE) + (ofi * THRESHOLDS.OFI_CONFIDENCE_SCALE))
+      thresholds.SCORE_CAP,
+      Math.round(thresholds.SCORE_BASE + (currentVolumeRatio * thresholds.VOLUME_CONFIDENCE_SCALE) + (ofi * thresholds.OFI_CONFIDENCE_SCALE))
     );
     // Tighten horizon when volume is extreme (>2.5x) → institutional urgency
-    timeHorizonMinutes = currentVolumeRatio > THRESHOLDS.VOLUME_EXTREME ? 5 : 10;
-    confidencePct      = Math.min(THRESHOLDS.CONFIDENCE_CAP, Math.round(THRESHOLDS.CONFIDENCE_BASE + ofi * THRESHOLDS.OFI_CONFIDENCE_SCALE));
-    rationale = `Institutional volume acceleration (${currentVolumeRatio.toFixed(1)}x normal, threshold: ${THRESHOLDS.VOLUME_ACCELERATION}x) ` +
-                `and positive Order Flow Delta (+${(ofi * 100).toFixed(0)}%, threshold: +${THRESHOLDS.OFI_DIRECTION * 100}%) ` +
+    timeHorizonMinutes = currentVolumeRatio > thresholds.VOLUME_EXTREME ? 5 : 10;
+    confidencePct      = Math.min(thresholds.CONFIDENCE_CAP, Math.round(thresholds.CONFIDENCE_BASE + ofi * thresholds.OFI_CONFIDENCE_SCALE));
+    rationale = `Institutional volume acceleration (${currentVolumeRatio.toFixed(1)}x normal, threshold: ${thresholds.VOLUME_ACCELERATION}x) ` +
+                `and positive Order Flow Delta (+${(ofi * 100).toFixed(0)}%, threshold: +${thresholds.OFI_DIRECTION * 100}%) ` +
                 `predict upward momentum expansion within ${timeHorizonMinutes} minutes.`;
 
-  } else if (currentVolumeRatio >= THRESHOLDS.VOLUME_ACCELERATION && ofi <= -THRESHOLDS.OFI_DIRECTION) {
+  } else if (currentVolumeRatio >= thresholds.VOLUME_ACCELERATION && ofi <= -thresholds.OFI_DIRECTION) {
     // ── Bearish Breakdown: High volume + negative OFI → sell-side pressure
     predictedDirection = 'BEARISH_BREAKDOWN_5-10M';
     predictiveScore    = Math.min(
-      THRESHOLDS.SCORE_CAP,
-      Math.round(THRESHOLDS.SCORE_BASE + (currentVolumeRatio * THRESHOLDS.VOLUME_CONFIDENCE_SCALE) + (Math.abs(ofi) * THRESHOLDS.OFI_CONFIDENCE_SCALE))
+      thresholds.SCORE_CAP,
+      Math.round(thresholds.SCORE_BASE + (currentVolumeRatio * thresholds.VOLUME_CONFIDENCE_SCALE) + (Math.abs(ofi) * thresholds.OFI_CONFIDENCE_SCALE))
     );
-    timeHorizonMinutes = currentVolumeRatio > THRESHOLDS.VOLUME_EXTREME ? 5 : 10;
-    confidencePct      = Math.min(THRESHOLDS.CONFIDENCE_CAP, Math.round(THRESHOLDS.CONFIDENCE_BASE + Math.abs(ofi) * THRESHOLDS.OFI_CONFIDENCE_SCALE));
-    rationale = `Institutional distribution volume (${currentVolumeRatio.toFixed(1)}x normal, threshold: ${THRESHOLDS.VOLUME_ACCELERATION}x) ` +
-                `and negative Order Flow Delta (${(ofi * 100).toFixed(0)}%, threshold: -${THRESHOLDS.OFI_DIRECTION * 100}%) ` +
+    timeHorizonMinutes = currentVolumeRatio > thresholds.VOLUME_EXTREME ? 5 : 10;
+    confidencePct      = Math.min(thresholds.CONFIDENCE_CAP, Math.round(thresholds.CONFIDENCE_BASE + Math.abs(ofi) * thresholds.OFI_CONFIDENCE_SCALE));
+    rationale = `Institutional distribution volume (${currentVolumeRatio.toFixed(1)}x normal, threshold: ${thresholds.VOLUME_ACCELERATION}x) ` +
+                `and negative Order Flow Delta (${(ofi * 100).toFixed(0)}%, threshold: -${thresholds.OFI_DIRECTION * 100}%) ` +
                 `predict downward breakdown within ${timeHorizonMinutes} minutes.`;
 
-  } else if (volatilityCompressionPct < THRESHOLDS.VOLATILITY_SQUEEZE_PCT) {
+  } else if (volatilityCompressionPct < thresholds.VOLATILITY_SQUEEZE_PCT) {
     // ── Volatility Squeeze: Price coiling, direction unknown → imminent explosion
     predictedDirection = 'VOLATILITY_EXPANSION_IMMINENT';
     predictiveScore    = 75;
     timeHorizonMinutes = 8;
     confidencePct      = 70;
     rationale = `Volatility compression detected (${volatilityCompressionPct.toFixed(2)}% range/price, ` +
-                `threshold: <${THRESHOLDS.VOLATILITY_SQUEEZE_PCT}%). ` +
+                `threshold: <${thresholds.VOLATILITY_SQUEEZE_PCT}%). ` +
                 `Price is coiling — explosive 5-10m breakout imminent. Direction undetermined by volume alone.`;
   }
 
@@ -167,7 +199,7 @@ export function predict5to10mHorizon(candles, ofiMetrics = null) {
       volumeRatio:            parseFloat(currentVolumeRatio.toFixed(2)),
       ofi:                    parseFloat(ofi.toFixed(4)),
       volatilityCompressionPct: parseFloat(volatilityCompressionPct.toFixed(3)),
-      thresholdsUsed:         THRESHOLDS,
+      thresholdsUsed:         thresholds,
     }
   };
 }

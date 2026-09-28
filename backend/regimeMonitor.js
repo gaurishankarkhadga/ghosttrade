@@ -16,6 +16,10 @@ const RECHECK_INTERVAL_MS = 5 * 60 * 1000;
 // In-memory map of active signals: signalId → { ticker, regime, clientWs? }
 const openSignals = new Map();
 
+// Regime transition buffer — prevents whipsawing from micro-fluctuations
+const regimeFlipCounts = new Map();
+const REGIME_FLIP_THRESHOLD = 2; // Must stay flipped for 2 consecutive checks
+
 // Active WebSocket clients that can receive invalidation pushes
 const activeClients = new Set();
 
@@ -43,6 +47,7 @@ export function registerSignal(signalId, ticker, regime) {
  */
 export function unregisterSignal(signalId) {
   openSignals.delete(signalId);
+  regimeFlipCounts.delete(signalId);
 }
 
 /**
@@ -145,17 +150,30 @@ async function runRecheckCycle() {
 
       // Check each signal using this ticker's fresh regime
       for (const signal of signals) {
-        if (currentRegime !== signal.originalRegime) {
-          console.warn(`[REGIME MONITOR] FLIP DETECTED: ${ticker} | ${signal.originalRegime} → ${currentRegime} | Signal: ${signal.signalId}`);
+        const meanH = hurstResult.meanH;
+        const isInBufferZone = (meanH >= 0.37 && meanH <= 0.43) || (meanH >= 0.57 && meanH <= 0.63);
 
-          // Broadcast to connected clients
-          broadcastInvalidation(signal.signalId, ticker, signal.originalRegime, currentRegime);
+        if (currentRegime !== signal.originalRegime && !isInBufferZone) {
+          let flipCount = (regimeFlipCounts.get(signal.signalId) || 0) + 1;
+          regimeFlipCounts.set(signal.signalId, flipCount);
 
-          // Log to DB and flag the signal
-          await logInvalidationToDb(signal.signalId, ticker, signal.originalRegime, currentRegime);
+          if (flipCount >= REGIME_FLIP_THRESHOLD) {
+            console.warn(`[REGIME MONITOR] FLIP DETECTED: ${ticker} | ${signal.originalRegime} → ${currentRegime} | Signal: ${signal.signalId}`);
 
-          // Remove from monitoring — thesis is done
-          unregisterSignal(signal.signalId);
+            // Broadcast to connected clients
+            broadcastInvalidation(signal.signalId, ticker, signal.originalRegime, currentRegime);
+
+            // Log to DB and flag the signal
+            await logInvalidationToDb(signal.signalId, ticker, signal.originalRegime, currentRegime);
+
+            // Remove from monitoring — thesis is done
+            unregisterSignal(signal.signalId);
+          } else {
+            console.warn(`[REGIME MONITOR] FLIP PENDING (${flipCount}/${REGIME_FLIP_THRESHOLD}): ${ticker} | ${signal.originalRegime} → ${currentRegime} | Signal: ${signal.signalId}`);
+          }
+        } else {
+          // Regime matches or inside hysteresis buffer, reset counter
+          regimeFlipCounts.set(signal.signalId, 0);
         }
       }
 

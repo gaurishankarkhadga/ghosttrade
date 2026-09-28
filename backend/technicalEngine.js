@@ -99,14 +99,25 @@ export function macd(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9)
   for (let i = 0; i < slowPeriod; i++) slowEmaVal += closes[i];
   slowEmaVal /= slowPeriod;
 
-  // Warm up fast EMA from fastPeriod to slowPeriod
+  // Catch up fast EMA from fastPeriod to slowPeriod
   for (let i = fastPeriod; i < slowPeriod; i++) {
     fastEmaVal = closes[i] * fastK + fastEmaVal * (1 - fastK);
   }
 
-  // Build MACD line from slowPeriod onwards (both EMAs are now warmed up)
+  // Determine how many bars to use for warmup buffer
+  const maxWarmup = Math.max(0, closes.length - (slowPeriod + signalPeriod));
+  const warmupBuffer = Math.min(maxWarmup, 100);
+  const warmupEnd = slowPeriod + warmupBuffer;
+
+  // Warm up both EMAs together
+  for (let i = slowPeriod; i < warmupEnd; i++) {
+    fastEmaVal = closes[i] * fastK + fastEmaVal * (1 - fastK);
+    slowEmaVal = closes[i] * slowK + slowEmaVal * (1 - slowK);
+  }
+
+  // Build MACD line from warmupEnd onwards
   const macdLine = [];
-  for (let i = slowPeriod; i < closes.length; i++) {
+  for (let i = warmupEnd; i < closes.length; i++) {
     fastEmaVal = closes[i] * fastK + fastEmaVal * (1 - fastK);
     slowEmaVal = closes[i] * slowK + slowEmaVal * (1 - slowK);
     macdLine.push(fastEmaVal - slowEmaVal);
@@ -425,16 +436,22 @@ export function vwap(candles) {
   const lastCandle = candles[candles.length - 1];
   if (!lastCandle.date) return null; // Failsafe if date is missing
   
-  const sessionStartStr = new Date(lastCandle.date).toISOString().split('T')[0];
-  
+  let sessionStartStr = null;
   let startIndex = 0;
-  for (let i = candles.length - 1; i >= 0; i--) {
-    if (!candles[i].date) continue; // Skip invalid dates to prevent RangeError
-    const cDate = new Date(candles[i].date);
-    if (cDate.toISOString().split('T')[0] !== sessionStartStr) {
-      startIndex = i + 1;
-      break;
+  
+  try {
+    sessionStartStr = new Date(lastCandle.date).toISOString().split('T')[0];
+    for (let i = candles.length - 1; i >= 0; i--) {
+      if (!candles[i].date) continue; // Skip invalid dates to prevent RangeError
+      const cDate = new Date(candles[i].date);
+      if (cDate.toISOString().split('T')[0] !== sessionStartStr) {
+        startIndex = i + 1;
+        break;
+      }
     }
+  } catch (err) {
+    // If parsing fails, fall back to treating all candles as same session
+    startIndex = 0;
   }
 
   // FIXED: Detect daily data (all candles have unique dates) and use rolling 20-bar VWAP

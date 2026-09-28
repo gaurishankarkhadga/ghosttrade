@@ -2,42 +2,71 @@ import { fetchOHLCV } from './dataFetcher.js';
 import { generateSignal } from './signalGenerator.js';
 import { preTradeGate } from './ghostMindEngine.js';
 
-export async function runBacktest(asset, days = 730) {
-  console.log(`[BACKTEST ENGINE] Starting historical simulation for ${asset} over past ${days} days.`);
-  
-  const dataResponse = await fetchOHLCV(asset, days);
-  if (dataResponse.error) {
-    return { error: dataResponse.message };
-  }
-  
-  const allCandles = dataResponse.bars;
-  if (!allCandles || allCandles.length < 300) {
-    return { error: `Insufficient data: only ${allCandles?.length || 0} bars available.` };
-  }
+// Dynamic slippage + commission model per asset class
+export const EXECUTION_COSTS = {
+  CRYPTO: { slippagePct: 0.05, commissionPct: 0.10 }, // 0.05% slippage + 0.10% commission per side
+  EQUITY: { slippagePct: 0.02, commissionPct: 0.05 },
+  FOREX:  { slippagePct: 0.01, commissionPct: 0.03 },
+};
 
-  const lookback = 200; // Need 200 days for Hurst Exponent
+export function getAssetClass(ticker) {
+  const upper = (ticker || '').toUpperCase();
+  if (upper.includes('USD') || upper.includes('BTC') || upper.includes('ETH')) return 'CRYPTO';
+  if (upper.includes('.NS') || upper.includes('.BO')) return 'EQUITY';
+  if (upper.match(/^[A-Z]{6}$/)) return 'FOREX';
+  return 'EQUITY';
+}
+
+// Conservative intra-candle resolution:
+// If BOTH TP and SL could be hit in the same candle, always assume SL was hit first
+// This eliminates look-ahead bias and produces realistic (slightly pessimistic) results
+function resolveIntraCandle(candle, stopLoss, takeProfit, side) {
+  const hitsSL = side === 'LONG' 
+    ? candle.low <= stopLoss 
+    : candle.high >= stopLoss;
+  const hitsTP = side === 'LONG' 
+    ? candle.high >= takeProfit 
+    : candle.low <= takeProfit;
+  
+  if (hitsSL && hitsTP) {
+    // Both levels hit in same candle — conservatively assume LOSS
+    return 'STOP_LOSS';
+  }
+  if (hitsSL) return 'STOP_LOSS';
+  if (hitsTP) return 'TAKE_PROFIT';
+  return 'OPEN';
+}
+
+/**
+  * Simulates sequential trading over a provided sequence of OHLCV bars.
+  * 
+  * @param {Array} candles - Array of OHLCV bars
+  * @param {string} asset - Asset ticker
+  * @param {number} startIndex - Starting bar index (lookback offset)
+  * @returns {Promise<Object>} simulationResults
+  */
+async function simulateCandleSequence(candles, asset, startIndex = 100) {
   let baselineWins = 0, baselineLosses = 0;
   let improvedFullWins = 0, improvedLosses = 0, improvedPartialWins = 0;
   let tradesTaken = 0;
   const tradeLog = [];
 
-  // Simulate time moving forward day by day
-  for (let i = lookback; i < allCandles.length - 5; i++) {
-    const history = allCandles.slice(0, i + 1);
-    const currentDate = allCandles[i].date;
+  const assetClass = getAssetClass(asset);
+  const cost = EXECUTION_COSTS[assetClass] || EXECUTION_COSTS.EQUITY;
+  const roundTripCostPct = (cost.slippagePct + cost.commissionPct) * 2; // Entry + exit
+
+  for (let i = startIndex; i < candles.length - 5; i++) {
+    const history = candles.slice(0, i + 1);
+    const currentDate = candles[i].date;
     
     // Generate signal on historical slice
     const signal = await generateSignal(asset, history, { useCache: false });
     
-    // GhostMind v2: Pre-Trade Gate
+    // GhostMind Pre-Trade Gate
     const gateResult = await preTradeGate(signal, asset);
     if (gateResult.blocked) {
       signal.action = 'SHIELD_MODE';
       signal.reason = gateResult.reason;
-    }
-
-    if (signal.action === 'SHIELD_MODE') {
-      console.log(`[SHIELD] ${signal.reason}`);
     }
 
     if (signal.action === 'TRADE' || signal.action === 'BUY' || signal.action === 'LONG') {
@@ -57,64 +86,60 @@ export async function runBacktest(asset, days = 730) {
       let exitPriceBaseline = 0;
       let exitPriceImproved = 0;
 
-      // Look into the future to see what hit first
+      // Look forward to resolve the trade
       let exitDate = null;
-      for (let j = i + 1; j < allCandles.length; j++) {
-        const futureHigh = allCandles[j].high;
-        const futureLow = allCandles[j].low;
-        const futureClose = allCandles[j].close;
-        const futureDate = allCandles[j].date;
+      for (let j = i + 1; j < candles.length; j++) {
+        const futureHigh = candles[j].high;
+        const futureLow = candles[j].low;
+        const futureDate = candles[j].date;
 
         // BASELINE (Fixed TP2, No Trailing Stop)
         if (baselineResult === 'PENDING') {
-          if (side === 'LONG') {
-            if (futureLow <= stopLossOriginal) {
-              baselineResult = 'LOSS';
-              exitPriceBaseline = stopLossOriginal;
-            } else if (futureHigh >= target2) {
-              baselineResult = 'WIN';
-              exitPriceBaseline = target2;
-            }
-          } else { // SHORT
-            if (futureHigh >= stopLossOriginal) {
-              baselineResult = 'LOSS';
-              exitPriceBaseline = stopLossOriginal;
-            } else if (futureLow <= target2) {
-              baselineResult = 'WIN';
-              exitPriceBaseline = target2;
-            }
+          const res = resolveIntraCandle(candles[j], stopLossOriginal, target2, side);
+          if (res === 'STOP_LOSS') {
+            baselineResult = 'LOSS';
+            exitPriceBaseline = stopLossOriginal;
+          } else if (res === 'TAKE_PROFIT') {
+            baselineResult = 'WIN';
+            exitPriceBaseline = target2;
           }
         }
 
-        // IMPROVED (With TP1 Partial Scaling & ATR Trailing Stop Infinite Runner)
+        // IMPROVED (With TP1 Partial Scaling & Trailing Stop)
         if (improvedResult === 'PENDING') {
            const trailingDistance = Math.abs(target1 - entry) * 1.5;
 
-           if (side === 'LONG') {
-             if (futureHigh >= target1 && !tp1Hit) {
-                 tp1Hit = true;
-                 stopLossActive = Math.max(entry, futureHigh - trailingDistance);
-             } else if (tp1Hit) {
-                 stopLossActive = Math.max(stopLossActive, futureHigh - trailingDistance);
-             }
-
-             if (futureLow <= stopLossActive) {
-                 improvedResult = tp1Hit ? 'WIN' : 'LOSS';
+           if (!tp1Hit) {
+             const res = resolveIntraCandle(candles[j], stopLossActive, target1, side);
+             if (res === 'STOP_LOSS') {
+                 improvedResult = 'LOSS';
                  exitPriceImproved = stopLossActive;
                  if (!exitDate) exitDate = futureDate;
-             }
-           } else { // SHORT
-             if (futureLow <= target1 && !tp1Hit) {
+             } else if (res === 'TAKE_PROFIT') {
                  tp1Hit = true;
-                 stopLossActive = Math.min(entry, futureLow + trailingDistance);
-             } else if (tp1Hit) {
-                 stopLossActive = Math.min(stopLossActive, futureLow + trailingDistance);
+                 stopLossActive = side === 'LONG' 
+                   ? Math.max(entry, futureHigh - trailingDistance)
+                   : Math.min(entry, futureLow + trailingDistance);
+                 
+                 const hitsNewSL = side === 'LONG' 
+                   ? futureLow <= stopLossActive 
+                   : futureHigh >= stopLossActive;
+                 if (hitsNewSL) {
+                     improvedResult = 'WIN';
+                     exitPriceImproved = stopLossActive;
+                     if (!exitDate) exitDate = futureDate;
+                 }
              }
-
-             if (futureHigh >= stopLossActive) {
-                 improvedResult = tp1Hit ? 'WIN' : 'LOSS';
+           } else {
+             const hitsSL = side === 'LONG' ? futureLow <= stopLossActive : futureHigh >= stopLossActive;
+             if (hitsSL) {
+                 improvedResult = 'WIN';
                  exitPriceImproved = stopLossActive;
                  if (!exitDate) exitDate = futureDate;
+             } else {
+                 stopLossActive = side === 'LONG'
+                   ? Math.max(stopLossActive, futureHigh - trailingDistance)
+                   : Math.min(stopLossActive, futureLow + trailingDistance);
              }
            }
         }
@@ -122,15 +147,15 @@ export async function runBacktest(asset, days = 730) {
         if (baselineResult !== 'PENDING' && improvedResult !== 'PENDING') break;
       }
 
-      // If we run out of data, just mark whatever price it's at
-      if (baselineResult === 'PENDING') exitPriceBaseline = allCandles[allCandles.length - 1].close;
-      if (improvedResult === 'PENDING') exitPriceImproved = allCandles[allCandles.length - 1].close;
+      // If we run out of data, mark at last available close
+      if (baselineResult === 'PENDING') exitPriceBaseline = candles[candles.length - 1].close;
+      if (improvedResult === 'PENDING') exitPriceImproved = candles[candles.length - 1].close;
 
       if (baselineResult === 'WIN') baselineWins++;
       else if (baselineResult === 'LOSS') baselineLosses++;
 
       if (improvedResult === 'WIN') {
-          if (tp1Hit) improvedPartialWins++; // Using partial wins bucket to denote trailing stop wins
+          if (tp1Hit) improvedPartialWins++;
           else improvedFullWins++; 
       }
       else if (improvedResult === 'LOSS') improvedLosses++;
@@ -138,6 +163,7 @@ export async function runBacktest(asset, days = 730) {
       tradeLog.push({
         date: currentDate,
         exitDate,
+        side,
         entryPrice: entry,
         target1,
         target2,
@@ -167,22 +193,25 @@ export async function runBacktest(asset, days = 730) {
       const risk = Math.abs(t.entryPrice - t.stopLossOriginal);
       if (risk > 0) {
           const mult = (t.side === 'LONG' || t.target1 > t.entryPrice) ? 1 : -1;
-          baselineTotalRR += mult * (t.exitPriceBaseline - t.entryPrice) / risk;
+          const riskPct = (risk / t.entryPrice) * 100;
+          const costInRR = (roundTripCostPct / (riskPct || 1));
+
+          const grossBaselineRR = mult * (t.exitPriceBaseline - t.entryPrice) / risk;
+          baselineTotalRR += (grossBaselineRR - costInRR);
           
           if (t.tp1Hit) {
               const profit1 = mult * ((t.target1 - t.entryPrice) / risk) * 0.5; // 50% at TP1
               const profit2 = mult * ((t.exitPriceImproved - t.entryPrice) / risk) * 0.5; // 50% trailed
-              improvedTotalRR += (profit1 + profit2);
+              improvedTotalRR += (profit1 + profit2 - costInRR);
           } else {
-              improvedTotalRR += mult * (t.exitPriceImproved - t.entryPrice) / risk;
+              const grossImprovedRR = mult * (t.exitPriceImproved - t.entryPrice) / risk;
+              improvedTotalRR += (grossImprovedRR - costInRR);
           }
       }
   });
 
   return {
-    asset,
-    daysSimulated: allCandles.length - lookback,
-    totalSignalsTaken: tradesTaken,
+    tradesTaken,
     baseline: {
       wins: baselineWins,
       losses: baselineLosses,
@@ -198,5 +227,109 @@ export async function runBacktest(asset, days = 730) {
       totalProfitRR: parseFloat(improvedTotalRR.toFixed(2))
     },
     tradeLog
+  };
+}
+
+/**
+  * Standard backtest over historical days.
+  */
+export async function runBacktest(asset, days = 730) {
+  console.log(`[BACKTEST ENGINE] Starting historical simulation for ${asset} over past ${days} days.`);
+  
+  const dataResponse = await fetchOHLCV(asset, days);
+  if (dataResponse.error) {
+    return { error: dataResponse.message };
+  }
+  
+  const allCandles = dataResponse.bars;
+  if (!allCandles || allCandles.length < 150) {
+    return { error: `Insufficient data: only ${allCandles?.length || 0} bars available (need 150+).` };
+  }
+
+  const lookback = 100;
+  const sim = await simulateCandleSequence(allCandles, asset, lookback);
+
+  return {
+    asset,
+    daysSimulated: allCandles.length - lookback,
+    totalSignalsTaken: sim.tradesTaken,
+    baseline: sim.baseline,
+    improved: sim.improved,
+    tradeLog: sim.tradeLog
+  };
+}
+
+/**
+  * Walk-forward analysis: trains on first 70% of data (In-Sample),
+  * tests on last 30% (Out-Of-Sample) with historical lookback warmup.
+  */
+export async function walkForwardBacktest(assetOrCandles, days = 730, options = {}) {
+  let ticker = typeof assetOrCandles === 'string' ? assetOrCandles : (options.ticker || 'ASSET');
+  let candles = [];
+
+  if (typeof assetOrCandles === 'string') {
+    const dataResponse = await fetchOHLCV(assetOrCandles, days);
+    if (dataResponse.error) return { error: dataResponse.message };
+    candles = dataResponse.bars || [];
+  } else if (Array.isArray(assetOrCandles)) {
+    candles = assetOrCandles;
+  }
+
+  if (!candles || candles.length < 150) {
+    return { error: `Insufficient candles for walk-forward: got ${candles.length}, need at least 150.` };
+  }
+
+  const splitRatio = options.splitRatio || 0.7;
+  const splitPoint = Math.floor(candles.length * splitRatio);
+  const lookback = options.lookback || Math.min(100, Math.max(50, Math.floor(splitPoint * 0.6)));
+
+  if (splitPoint < lookback + 10) {
+    return { error: `Train window too small (${splitPoint} bars). Need at least ${lookback + 10} bars.` };
+  }
+
+  const trainCandles = candles.slice(0, splitPoint);
+  // Give out-of-sample candles a lookback warmup from the end of trainCandles
+  const testCandlesWithWarmup = candles.slice(splitPoint - lookback);
+
+  console.log(`[WALK-FORWARD] ${ticker} | In-Sample: ${trainCandles.length} bars | Out-Of-Sample: ${candles.length - splitPoint} bars`);
+
+  const [inSample, outOfSample] = await Promise.all([
+    simulateCandleSequence(trainCandles, ticker, lookback),
+    simulateCandleSequence(testCandlesWithWarmup, ticker, lookback)
+  ]);
+
+  const trainWinRate = inSample.improved.winRate;
+  const testWinRate = outOfSample.improved.winRate;
+  const trainProfitRR = inSample.improved.totalProfitRR;
+  const testProfitRR = outOfSample.improved.totalProfitRR;
+
+  // Walk-Forward Efficiency: ratio of out-of-sample annualized/bar return to in-sample
+  const sampleRatio = (candles.length - splitPoint) / (trainCandles.length || 1);
+  const normalizedTestRR = sampleRatio > 0 ? (testProfitRR / sampleRatio) : testProfitRR;
+  const wfe = trainProfitRR > 0 ? (normalizedTestRR / trainProfitRR) * 100 : 0;
+
+  const winRateStability = trainWinRate > 0 ? (testWinRate / trainWinRate) : 0;
+  let overfitRisk = 'LOW';
+  if (winRateStability < 0.65 || (trainProfitRR > 0 && testProfitRR < 0)) {
+    overfitRisk = 'HIGH';
+  } else if (winRateStability < 0.85) {
+    overfitRisk = 'MODERATE';
+  }
+
+  return {
+    asset: ticker,
+    mode: 'WALK_FORWARD',
+    totalBars: candles.length,
+    trainSize: trainCandles.length,
+    testSize: candles.length - splitPoint,
+    inSample: inSample.improved,
+    outOfSample: outOfSample.improved,
+    baselineOutOfSample: outOfSample.baseline,
+    robustness: {
+      wfe: parseFloat(wfe.toFixed(2)),
+      winRateStability: parseFloat(winRateStability.toFixed(2)),
+      overfitRisk
+    },
+    tradeLog: outOfSample.tradeLog
   };
 }

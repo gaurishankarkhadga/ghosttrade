@@ -25,17 +25,60 @@ const LOSS_CATEGORIES = {
   VOLUME_FADE:      'Volume dried up after entry, no follow-through',
   EXPIRATION_FLAT:  'Market barely moved, signal expired worthless',
   DUPLICATE_LOSS:   'Same asset already failed recently',
+  REGIME_RANDOM_WALK: 'Regime was completely random walk',
+  REGIME_AMBIGUOUS: 'Regime was ambiguous based on Hurst exponent',
+  WEAK_REGIME:      'Score breakdown showed weak regime alignment',
+  NO_ORDER_FLOW:    'Score breakdown showed no order flow',
+  LOW_VOLUME:       'Score breakdown showed low volume confirmation',
+  WEAK_CONFLUENCE:  'Score breakdown showed weak technical confluence',
   UNKNOWN:          'Could not determine specific failure category'
 };
 
+// Tier 1: Deterministic categorization from signal metadata (NOT text)
+function categorizeFromMetadata(signal) {
+  // Use actual quantitative data instead of text matching
+  if (signal.regime?.regime === 'RANDOM_WALK') return 'REGIME_RANDOM_WALK';
+  if (signal.hurst?.ci95 && signal.hurst.ci95.lower < 0.40 && signal.hurst.ci95.upper > 0.60) return 'REGIME_AMBIGUOUS';
+  
+  // Counter-trend: signal direction vs higher-TF trend  
+  if (signal.macroTrend && signal.macroTrend !== 'NEUTRAL' && signal.macroTrend !== signal.direction) return 'COUNTER_TREND';
+  
+  // Overextension: price was too far from SMA20
+  if (signal.scoreBreakdown?.regimeAlignment < 30) return 'WEAK_REGIME';
+  if (signal.scoreBreakdown?.orderFlow < 30) return 'NO_ORDER_FLOW';
+  if (signal.scoreBreakdown?.volumeConfirmation < 30) return 'LOW_VOLUME';
+  if (signal.scoreBreakdown?.technicalConfluence < 40) return 'WEAK_CONFLUENCE';
+  
+  // Liquidity trap: if sweep data shows entry near pool
+  if (signal.liquiditySweep?.sweepType === 'APPROACHING_LIQUIDITY_POOL') return 'LIQUIDITY_TRAP';
+  
+  return 'UNCATEGORIZED';
+}
+
+function hasPositiveKeyword(text, keywords) {
+  const negations = ['no', 'not', 'without', 'denied', 'lacks'];
+  for (const kw of keywords) {
+    let idx = text.indexOf(kw);
+    while (idx !== -1) {
+      const beforeText = text.substring(0, idx);
+      const beforeWords = beforeText.split(/[\s,.-]+/).filter(Boolean).slice(-3);
+      if (!beforeWords.some(w => negations.includes(w))) {
+        return true;
+      }
+      idx = text.indexOf(kw, idx + 1);
+    }
+  }
+  return false;
+}
+
 /**
  * Classifies the loss category based on the resolved signal's data.
- * Uses the signal's metadata, resolved reason, and error vectors.
+ * Tier 2: Text-based approach as fallback with negation handling.
  *
  * @param {Object} signal - The resolved signal document from MongoDB
  * @returns {string} - One of the LOSS_CATEGORIES keys
  */
-function classifyLossCategory(signal) {
+function classifyLossCategoryText(signal) {
   const reason = (signal.resolvedReason || '').toLowerCase();
   const errorVector = (signal.errorVector || '').toLowerCase();
   const combinedText = `${reason} ${errorVector}`;
@@ -43,81 +86,53 @@ function classifyLossCategory(signal) {
   // Priority-ordered classification rules
   
   // 1. Counter-trend detection
-  if (
-    combinedText.includes('counter-trend') ||
-    combinedText.includes('macro') ||
-    combinedText.includes('higher-timeframe') ||
-    combinedText.includes('1d trend') ||
-    combinedText.includes('4h trend') ||
-    combinedText.includes('meso') ||
-    combinedText.includes('directional bias') && combinedText.includes('against')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['counter-trend', 'macro', 'higher-timeframe', '1d trend', '4h trend', 'meso']) ||
+      (hasPositiveKeyword(combinedText, ['directional bias']) && hasPositiveKeyword(combinedText, ['against']))) {
     return 'COUNTER_TREND';
   }
 
   // 2. Liquidity trap / stop hunt
-  if (
-    combinedText.includes('liquidity') ||
-    combinedText.includes('sweep') ||
-    combinedText.includes('stop hunt') ||
-    combinedText.includes('wall') ||
-    combinedText.includes('institutional') ||
-    combinedText.includes('depth')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['liquidity', 'sweep', 'stop hunt', 'wall', 'institutional', 'depth'])) {
     return 'LIQUIDITY_TRAP';
   }
 
   // 3. Overextension
-  if (
-    combinedText.includes('overextend') ||
-    combinedText.includes('vwap') ||
-    combinedText.includes('mean revert') ||
-    combinedText.includes('pullback') ||
-    combinedText.includes('far from')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['overextend', 'vwap', 'mean revert', 'pullback', 'far from'])) {
     return 'OVEREXTENSION';
   }
 
   // 4. Volume fade
-  if (
-    combinedText.includes('volume') ||
-    combinedText.includes('momentum') ||
-    combinedText.includes('no follow') ||
-    combinedText.includes('dried') ||
-    combinedText.includes('stall')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['volume', 'momentum', 'no follow', 'dried', 'stall'])) {
     return 'VOLUME_FADE';
   }
 
   // 5. Expiration flat (expired without hitting TP or SL)
-  if (
-    combinedText.includes('expir') ||
-    combinedText.includes('failed to hold') ||
-    combinedText.includes('flat') ||
-    combinedText.includes('chop')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['expir', 'failed to hold', 'flat', 'chop'])) {
     return 'EXPIRATION_FLAT';
   }
 
   // 6. Regime shift
-  if (
-    combinedText.includes('regime') ||
-    combinedText.includes('hurst') ||
-    combinedText.includes('random walk') ||
-    combinedText.includes('structure')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['regime', 'hurst', 'random walk', 'structure'])) {
     return 'REGIME_SHIFT';
   }
 
   // 7. Check for duplicate pattern
-  if (
-    combinedText.includes('duplicate') ||
-    combinedText.includes('repeated')
-  ) {
+  if (hasPositiveKeyword(combinedText, ['duplicate', 'repeated'])) {
     return 'DUPLICATE_LOSS';
   }
 
   return 'UNKNOWN';
+}
+
+/**
+ * Main categorization function combining Tier 1 and Tier 2
+ */
+function classifyLossCategory(signal) {
+  const tier1Category = categorizeFromMetadata(signal);
+  if (tier1Category !== 'UNCATEGORIZED') {
+    return { category: tier1Category, source: 'METADATA' };
+  }
+  return { category: classifyLossCategoryText(signal), source: 'TEXT_FALLBACK' };
 }
 
 /**
@@ -135,9 +150,17 @@ export async function performAutopsy(signal) {
   }
 
   try {
-    const category = classifyLossCategory(signal);
+    const { category, source: categorySource } = classifyLossCategory(signal);
     const description = LOSS_CATEGORIES[category] || LOSS_CATEGORIES.UNKNOWN;
     const db = await getDb();
+
+    const quantitativeFactors = {
+      maxAdverseExcursion: signal.maxAdverseExcursion || null,
+      entryToStopDistance: signal.riskDistance || null,
+      scoreAtEntry: signal.score || null,
+      regimeAtEntry: signal.regime?.regime || null,
+      winRateAtScore: signal.scoreBreakdown?.historicalWinRate || null
+    };
 
     const autopsyDoc = {
       signalId: signal._id || signal.signalHash,
@@ -145,6 +168,8 @@ export async function performAutopsy(signal) {
       direction: signal.direction || 'UNKNOWN',
       regime: signal.regime?.regime || signal.regime || 'UNKNOWN',
       category,
+      categorySource,
+      quantitativeFactors,
       description,
       score: signal.calibratedConfidence || signal.rawConfidence || signal.score || 0,
       resolvedReason: signal.resolvedReason || null,
@@ -178,9 +203,9 @@ export async function performAutopsy(signal) {
       { upsert: true }
     );
 
-    console.log(`[AUTOPSY] 🔍 ${autopsyDoc.ticker} ${autopsyDoc.direction} loss categorized as: ${category} — "${description}"`);
+    console.log(`[AUTOPSY] 🔍 ${autopsyDoc.ticker} ${autopsyDoc.direction} loss categorized as: ${category} (${categorySource}) — "${description}"`);
 
-    return { category, description, ticker: autopsyDoc.ticker };
+    return { category, categorySource, description, ticker: autopsyDoc.ticker, quantitativeFactors };
   } catch (err) {
     console.error('[AUTOPSY] Failed to perform autopsy:', err.message);
     return null;

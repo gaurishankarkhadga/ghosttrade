@@ -14,12 +14,57 @@ const EARLY_DATA_THRESHOLD = 50; // Below this, label calibration as "early data
  * Each bucket: { label, min, max } (inclusive)
  */
 const CONFIDENCE_BUCKETS = [
-  { label: '50-59%', min: 50, max: 59 },
-  { label: '60-69%', min: 60, max: 69 },
-  { label: '70-79%', min: 70, max: 79 },
-  { label: '80-89%', min: 80, max: 89 },
-  { label: '90-99%', min: 90, max: 99 },
+  { label: '50-54%', min: 50, max: 54 },
+  { label: '55-59%', min: 55, max: 59 },
+  { label: '60-64%', min: 60, max: 64 },
+  { label: '65-69%', min: 65, max: 69 },
+  { label: '70-74%', min: 70, max: 74 },
+  { label: '75-79%', min: 75, max: 79 },
+  { label: '80-84%', min: 80, max: 84 },
+  { label: '85-89%', min: 85, max: 89 },
+  { label: '90-94%', min: 90, max: 94 },
+  { label: '95-99%', min: 95, max: 99 },
 ];
+
+// Isotonic Regression via Pool Adjacent Violators Algorithm
+// Ensures calibration curve is monotonically non-decreasing
+function isotonicRegression(points) {
+  // points = [{rawConf, actualWinRate, count}] sorted by rawConf
+  if (!points || points.length < 2) return points;
+  
+  const result = points.map(p => ({ ...p }));
+  let i = 0;
+  while (i < result.length - 1) {
+    if (result[i].actualWinRate > result[i + 1].actualWinRate) {
+      // Pool adjacent violators
+      const totalCount = result[i].count + result[i + 1].count;
+      const pooledRate = (result[i].actualWinRate * result[i].count + result[i + 1].actualWinRate * result[i + 1].count) / totalCount;
+      result[i] = { rawConf: result[i].rawConf, actualWinRate: pooledRate, count: totalCount };
+      result.splice(i + 1, 1);
+      if (i > 0) i--; // Step back to check previous pair
+    } else {
+      i++;
+    }
+  }
+  return result;
+}
+
+function getCalibratedFromIsotonic(rawConfidence, isotonicCurve) {
+  if (!isotonicCurve || isotonicCurve.length === 0) return rawConfidence;
+  
+  if (rawConfidence <= isotonicCurve[0].rawConf) return isotonicCurve[0].actualWinRate;
+  if (rawConfidence >= isotonicCurve[isotonicCurve.length - 1].rawConf) return isotonicCurve[isotonicCurve.length - 1].actualWinRate;
+  
+  for (let i = 0; i < isotonicCurve.length - 1; i++) {
+    const p1 = isotonicCurve[i];
+    const p2 = isotonicCurve[i + 1];
+    if (rawConfidence >= p1.rawConf && rawConfidence <= p2.rawConf) {
+      const t = (rawConfidence - p1.rawConf) / (p2.rawConf - p1.rawConf);
+      return p1.actualWinRate + t * (p2.actualWinRate - p1.actualWinRate);
+    }
+  }
+  return rawConfidence;
+}
 
 /**
  * Fetches all resolved signals from MongoDB within a given day range.
@@ -171,9 +216,10 @@ export async function generateCalibrationReport(days = 90) {
 }
 
 let cachedCurve = null;
+let cachedIsotonicCurve = null;
 let curveCacheTimestamp = 0;
 let cachedSignalCount = 0;
-const CURVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CURVE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Gets calibration-adjusted confidence for use in Kelly sizing.
@@ -186,10 +232,18 @@ export async function getCalibratedConfidence(rawConfidence) {
   try {
     const now = Date.now();
     let signals;
-    let cachedSignalCount;
     if (!cachedCurve || now - curveCacheTimestamp > CURVE_CACHE_TTL_MS) {
       signals = await fetchResolvedSignals(365);
       cachedCurve = buildCalibrationCurve(signals);
+      
+      const points = [];
+      for (const b of cachedCurve) {
+        if (b.n > 0 && b.actual !== null) {
+          points.push({ rawConf: b.predicted, actualWinRate: b.actual, count: b.n });
+        }
+      }
+      cachedIsotonicCurve = isotonicRegression(points);
+      
       cachedSignalCount = signals.length;
       curveCacheTimestamp = now;
     }
@@ -203,6 +257,16 @@ export async function getCalibratedConfidence(rawConfidence) {
         calibratedConfidence: Math.max(50, rawConfidence - 10),
         isCalibrated: false,
         note: `Early stage penalty: -10% until ${30 - totalResolvedSignals} more signals are verified (Total: ${totalResolvedSignals})`
+      };
+    }
+
+    // Use isotonic regression if we have sufficient data
+    if (totalResolvedSignals >= 100 && cachedIsotonicCurve && cachedIsotonicCurve.length >= 2) {
+      const smoothed = getCalibratedFromIsotonic(rawConfidence, cachedIsotonicCurve);
+      return {
+        calibratedConfidence: parseFloat(smoothed.toFixed(1)),
+        isCalibrated: true,
+        note: `Isotonic smoothed calibration based on ${totalResolvedSignals} total signals.`
       };
     }
 

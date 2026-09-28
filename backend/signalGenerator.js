@@ -34,6 +34,65 @@ const SCORE_WEIGHTS = {
   VOLUME_CONFIRMATION:   0.10,  // Above-average volume?
 };
 
+// Adaptive Score Weights — learns from actual performance
+let adaptiveWeights = null;
+let adaptiveWeightsUpdatedAt = 0;
+const WEIGHTS_CACHE_TTL = 30 * 60 * 1000; // Recalculate every 30 minutes
+
+async function getAdaptiveWeights() {
+  const now = Date.now();
+  if (adaptiveWeights && (now - adaptiveWeightsUpdatedAt) < WEIGHTS_CACHE_TTL) {
+    return adaptiveWeights;
+  }
+  
+  try {
+    const db = await getDb();
+    const recentSignals = await db.collection('signals').find({
+      resolvedOutcome: { $in: ['CORRECT', 'INCORRECT'] },
+      engineScoreBreakdown: { $exists: true },
+      timestamp: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
+    }).sort({ timestamp: -1 }).limit(200).toArray();
+    
+    if (recentSignals.length < 50) {
+      // Not enough data — use defaults
+      return { ...SCORE_WEIGHTS };
+    }
+    
+    // Calculate correlation of each factor with win/loss outcomes
+    const factors = ['regimeAlignment', 'technicalConfluence', 'orderFlow', 'volumeConfirmation', 'historicalWinRate'];
+    const factorCorrelations = {};
+    
+    for (const factor of factors) {
+      const wins = recentSignals.filter(s => s.resolvedOutcome === 'CORRECT');
+      const losses = recentSignals.filter(s => s.resolvedOutcome === 'INCORRECT');
+      
+      const avgWin = wins.reduce((sum, s) => sum + (s.engineScoreBreakdown?.[factor] || 0), 0) / (wins.length || 1);
+      const avgLoss = losses.reduce((sum, s) => sum + (s.engineScoreBreakdown?.[factor] || 0), 0) / (losses.length || 1);
+      
+      // Higher separation between winning and losing factor scores = more predictive
+      factorCorrelations[factor] = Math.max(0.05, (avgWin - avgLoss) / 100);
+    }
+    
+    // Normalize to sum to 1.0
+    const total = Object.values(factorCorrelations).reduce((s, v) => s + v, 0);
+    
+    adaptiveWeights = {
+      HISTORICAL_WIN_RATE: parseFloat((factorCorrelations.historicalWinRate / total).toFixed(3)),
+      REGIME_ALIGNMENT: parseFloat((factorCorrelations.regimeAlignment / total).toFixed(3)),
+      TECHNICAL_CONFLUENCE: parseFloat((factorCorrelations.technicalConfluence / total).toFixed(3)),
+      ORDER_FLOW: parseFloat((factorCorrelations.orderFlow / total).toFixed(3)),
+      VOLUME_CONFIRMATION: parseFloat((factorCorrelations.volumeConfirmation / total).toFixed(3)),
+    };
+    
+    adaptiveWeightsUpdatedAt = now;
+    console.log('[ADAPTIVE WEIGHTS] Updated from', recentSignals.length, 'signals:', JSON.stringify(adaptiveWeights));
+    return adaptiveWeights;
+  } catch (err) {
+    console.warn('[ADAPTIVE WEIGHTS] Failed to load:', err.message, '— using defaults');
+    return { ...SCORE_WEIGHTS };
+  }
+}
+
 // v3.0 ULTRA-SELECTIVE: Score 80 requires overwhelming confluence across ALL factors.
 // v3.0 PROFITABILITY CONSTANTS
 // ─────────────────────────────────────────────────────────────
@@ -153,12 +212,14 @@ export async function generateSignal(ticker, candles, options = {}) {
 
   // ─────────────────────────────────────────────────────
   // LAYER 5b: MESO TREND ALIGNMENT (4H Institutional Flow)
+  // Only synthesize 4H from 1H candles — NEVER from daily
   // ─────────────────────────────────────────────────────
   let mesoTrend = 'UNKNOWN';
   let candles4h = options.candles4h;
-  if ((!candles4h || candles4h.length < 20) && votingCandles && votingCandles.length >= 40) {
-    // FIXED: Slice backwards from the end so the latest (most critical) chunk always has 4 bars.
-    // Forward-slicing from index 0 caused the latest chunk to potentially have only 1-3 bars.
+  const isVotingHourly = options.candles1h && options.candles1h.length >= 50;
+  
+  if ((!candles4h || candles4h.length < 20) && isVotingHourly && votingCandles.length >= 40) {
+    // Synthesize 4H from 1H — slice backwards so latest chunk always has 4 bars
     candles4h = [];
     for (let i = votingCandles.length; i > 0; i -= 4) {
       const start = Math.max(0, i - 4);
@@ -382,12 +443,14 @@ export async function generateSignal(ticker, candles, options = {}) {
   scoreBreakdown.historicalWinRate = histScore;
 
   // ─── WEIGHTED COMPOSITE SCORE ───
+  const weights = await getAdaptiveWeights();
+  
   let compositeScore = Math.round(
-    scoreBreakdown.regimeAlignment * SCORE_WEIGHTS.REGIME_ALIGNMENT +
-    scoreBreakdown.technicalConfluence * SCORE_WEIGHTS.TECHNICAL_CONFLUENCE +
-    scoreBreakdown.orderFlow * SCORE_WEIGHTS.ORDER_FLOW +
-    scoreBreakdown.volumeConfirmation * SCORE_WEIGHTS.VOLUME_CONFIRMATION +
-    scoreBreakdown.historicalWinRate * SCORE_WEIGHTS.HISTORICAL_WIN_RATE
+    scoreBreakdown.regimeAlignment * weights.REGIME_ALIGNMENT +
+    scoreBreakdown.technicalConfluence * weights.TECHNICAL_CONFLUENCE +
+    scoreBreakdown.orderFlow * weights.ORDER_FLOW +
+    scoreBreakdown.volumeConfirmation * weights.VOLUME_CONFIRMATION +
+    scoreBreakdown.historicalWinRate * weights.HISTORICAL_WIN_RATE
   );
 
   // ─── MATHEMATICAL EXPECTED VALUE (EV) & ASYMMETRY (1:2.0 RRR) ───
@@ -398,13 +461,14 @@ export async function generateSignal(ticker, candles, options = {}) {
   const breakEvenWinRate = 33.33; // 1 / (1 + 2.0) = 33.33%
 
   // Factor points mapped to exact max weights: 25, 25, 20, 15, 15 (sum = compositeScore)
-  scoreBreakdown.regimePoints = Math.round(scoreBreakdown.regimeAlignment * SCORE_WEIGHTS.REGIME_ALIGNMENT);
-  scoreBreakdown.confluencePoints = Math.round(scoreBreakdown.technicalConfluence * SCORE_WEIGHTS.TECHNICAL_CONFLUENCE);
-  scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * SCORE_WEIGHTS.ORDER_FLOW);
-  scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * SCORE_WEIGHTS.VOLUME_CONFIRMATION);
-  scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * SCORE_WEIGHTS.HISTORICAL_WIN_RATE);
+  scoreBreakdown.regimePoints = Math.round(scoreBreakdown.regimeAlignment * weights.REGIME_ALIGNMENT);
+  scoreBreakdown.confluencePoints = Math.round(scoreBreakdown.technicalConfluence * weights.TECHNICAL_CONFLUENCE);
+  scoreBreakdown.orderFlowPoints = Math.round(scoreBreakdown.orderFlow * weights.ORDER_FLOW);
+  scoreBreakdown.volumePoints = Math.round(scoreBreakdown.volumeConfirmation * weights.VOLUME_CONFIRMATION);
+  scoreBreakdown.winRatePoints = Math.round(scoreBreakdown.historicalWinRate * weights.HISTORICAL_WIN_RATE);
   scoreBreakdown.totalScore = compositeScore;
   scoreBreakdown.ofiSource = ofiSource;
+  scoreBreakdown.weightsUsed = weights;
   scoreBreakdown.orderBookImbalance = depthData?.orderBookImbalance ?? null;
 
   // Add L2 order book depth insight to reasons if available

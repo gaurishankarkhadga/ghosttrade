@@ -19,14 +19,15 @@ PURE_CONVERSATION: The user is asking a general market, finance, or educational 
 
 Reply ONLY with the category name string. No other text.`;
 
+    const modelName = process.env.GROQ_INTENT_MODEL || 'llama-3.1-8b-instant';
     const requestBody = {
-      model: "openai/gpt-oss-120b",
+      model: modelName,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt }
       ],
       temperature: 0.1,
-      max_tokens: 300
+      max_tokens: 20
     };
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -38,7 +39,11 @@ Reply ONLY with the category name string. No other text.`;
       body: JSON.stringify(requestBody)
     });
 
-    if (!response.ok) return 'FULL_ANALYSIS';
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[INTENT CLASSIFIER] Groq API error: ${response.status} ${response.statusText}`, errorText);
+      return 'FULL_ANALYSIS';
+    }
 
     const data = await response.json();
     const intent = data.choices[0].message.content.trim().toUpperCase();

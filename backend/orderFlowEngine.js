@@ -18,6 +18,30 @@ export function isBinanceCrypto(ticker) {
   return cryptoList.some(c => upper.includes(c));
 }
 
+// Volume-Weighted Close Location Value (CLV) — more accurate than simple range ratio
+// Chaikin Money Flow variant: measures where the close sits in the range, weighted by volume
+function calculateCLV(candle) {
+  const range = candle.high - candle.low;
+  if (range === 0) return 0;
+  // CLV ranges from -1 (closed at low) to +1 (closed at high)
+  return ((candle.close - candle.low) - (candle.high - candle.close)) / range;
+}
+
+// Chaikin Money Flow (CMF) — institutional money flow indicator
+export function calculateCMF(candles, period = 14) {
+  if (!candles || candles.length < period) return 0;
+  const recent = candles.slice(-period);
+  let mfvSum = 0;
+  let volSum = 0;
+  for (const c of recent) {
+    const clv = calculateCLV(c);
+    const vol = c.volume || 0;
+    mfvSum += clv * vol;
+    volSum += vol;
+  }
+  return volSum > 0 ? mfvSum / volSum : 0; // Returns -1 to +1
+}
+
 /**
  * Calculates Net Delta Volume and Order Flow Imbalance (OFI) for a series of OHLCV bars.
  * OFI ranges from -1.0 (extreme seller aggression) to +1.0 (extreme buyer aggression).
@@ -52,10 +76,13 @@ export function calculateOrderFlowImbalance(candles, period = 14) {
   });
 
   const cumulativeDelta = deltas.reduce((a, b) => a + b, 0);
-  const rawOfi = totalVolume > 0 ? netDelta / totalVolume : 0;
+  const oldOFI = totalVolume > 0 ? netDelta / totalVolume : 0;
+
+  const cmf = calculateCMF(candles, period);
+  const combinedOFI = 0.4 * oldOFI + 0.6 * cmf;
 
   // Clamp OFI between -1.0 and +1.0
-  const ofi = Math.max(-1.0, Math.min(1.0, rawOfi));
+  const ofi = Math.max(-1.0, Math.min(1.0, combinedOFI));
 
   let flowBias = 'NEUTRAL';
   if (ofi > 0.35) flowBias = 'HEAVY_BUY_AGGRESSION';
@@ -67,7 +94,8 @@ export function calculateOrderFlowImbalance(candles, period = 14) {
     ofi: parseFloat(ofi.toFixed(4)),
     netDelta: Math.round(netDelta),
     flowBias,
-    cumulativeDelta: Math.round(cumulativeDelta)
+    cumulativeDelta: Math.round(cumulativeDelta),
+    cmf
   };
 }
 

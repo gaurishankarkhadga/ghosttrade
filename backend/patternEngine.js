@@ -5,7 +5,25 @@
 
 import { volumeAnalysis, vwap } from './technicalEngine.js';
 
-export function isHammer(prev, curr) {
+// Dynamic pattern tolerances based on ATR — adapts to any asset's volatility
+export function getDynamicTolerances(candles) {
+  if (!candles || candles.length < 20) {
+    return { dojiBodyRatio: 0.10, engulfMinRatio: 1.2, shadowMinRatio: 2.0 };
+  }
+  const recentCandles = candles.slice(-20);
+  const avgRange = recentCandles.reduce((sum, c) => sum + Math.abs(c.high - c.low), 0) / recentCandles.length;
+  const avgBody = recentCandles.reduce((sum, c) => sum + Math.abs(c.close - c.open), 0) / recentCandles.length;
+  const bodyToRange = avgBody / (avgRange || 1);
+  
+  // Scale tolerances dynamically: tighter when market is quiet, wider when volatile
+  return {
+    dojiBodyRatio: Math.max(0.05, Math.min(0.20, bodyToRange * 0.5)),  // ATR-scaled doji threshold
+    engulfMinRatio: Math.max(1.05, Math.min(1.5, 1.0 + bodyToRange)),   // How much bigger engulfing body must be
+    shadowMinRatio: Math.max(1.5, Math.min(3.0, 2.0 / bodyToRange)),    // Minimum wick:body ratio for hammers
+  };
+}
+
+export function isHammer(prev, curr, tol = { shadowMinRatio: 2.0 }) {
   const body = Math.abs(curr.close - curr.open);
   const range = curr.high - curr.low;
   const EPSILON = range * 0.001;
@@ -14,10 +32,10 @@ export function isHammer(prev, curr) {
 
   const lowerWick = Math.min(curr.open, curr.close) - curr.low;
   const upperWick = curr.high - Math.max(curr.open, curr.close);
-  return { detected: lowerWick >= 2 * body && upperWick <= body * 0.2 };
+  return { detected: lowerWick >= tol.shadowMinRatio * body && upperWick <= body * 0.2 };
 }
 
-export function isShootingStar(prev, curr) {
+export function isShootingStar(prev, curr, tol = { shadowMinRatio: 2.0 }) {
   const body = Math.abs(curr.close - curr.open);
   const range = curr.high - curr.low;
   const EPSILON = range * 0.001;
@@ -26,23 +44,27 @@ export function isShootingStar(prev, curr) {
 
   const lowerWick = Math.min(curr.open, curr.close) - curr.low;
   const upperWick = curr.high - Math.max(curr.open, curr.close);
-  return { detected: upperWick >= 2 * body && lowerWick <= body * 0.2 };
+  return { detected: upperWick >= tol.shadowMinRatio * body && lowerWick <= body * 0.2 };
 }
 
-export function isBullishEngulfing(prev, curr) {
-  return { detected: prev.close < prev.open && curr.close > curr.open && curr.open <= prev.close && curr.close >= prev.open };
+export function isBullishEngulfing(prev, curr, tol = { engulfMinRatio: 1.05 }) {
+  const prevBody = Math.abs(prev.close - prev.open);
+  const currBody = Math.abs(curr.close - curr.open);
+  return { detected: prev.close < prev.open && curr.close > curr.open && curr.open <= prev.close && curr.close >= prev.open && currBody >= prevBody * tol.engulfMinRatio };
 }
 
-export function isBearishEngulfing(prev, curr) {
-  return { detected: prev.close > prev.open && curr.close < curr.open && curr.open >= prev.close && curr.close <= prev.open };
+export function isBearishEngulfing(prev, curr, tol = { engulfMinRatio: 1.05 }) {
+  const prevBody = Math.abs(prev.close - prev.open);
+  const currBody = Math.abs(curr.close - curr.open);
+  return { detected: prev.close > prev.open && curr.close < curr.open && curr.open >= prev.close && curr.close <= prev.open && currBody >= prevBody * tol.engulfMinRatio };
 }
 
-export function isDoji(curr) {
+export function isDoji(curr, tol = { dojiBodyRatio: 0.10 }) {
   const body = Math.abs(curr.close - curr.open);
   const range = curr.high - curr.low;
   if (range === 0) return { detected: false, reason: 'flat_bar' };
   
-  return { detected: body < range * 0.10 };
+  return { detected: body < range * tol.dojiBodyRatio };
 }
 
 export function isMorningStar(candles) {
@@ -109,6 +131,8 @@ export function detectPatterns(candles) {
   const hasInstitutionalFootprintS = volAnal.isSpike || (vwapVal !== null && curr.high >= vwapVal && curr.close < vwapVal);
   const hasVolumeConfirmation = volAnal.relativeVolume > 1.2; // Above-average volume for multi-candle patterns
 
+  const tol = getDynamicTolerances(candles);
+
   // Multi-candle patterns (require volume confirmation instead of VWAP cross)
   // FIXED: Check multi-candle patterns first to prevent single-candle shadowing
   if (isMorningStar(candles).detected && (hasInstitutionalFootprintB || hasVolumeConfirmation)) return "morning_star";
@@ -116,15 +140,15 @@ export function detectPatterns(candles) {
   if (isThreeWhiteSoldiers(candles).detected && hasVolumeConfirmation) return "three_white_soldiers";
 
   // 2-candle patterns
-  if (isBullishEngulfing(prev, curr).detected && hasInstitutionalFootprintB) return "bullish_engulfing";
-  if (isBearishEngulfing(prev, curr).detected && hasInstitutionalFootprintS) return "bearish_engulfing";
+  if (isBullishEngulfing(prev, curr, tol).detected && hasInstitutionalFootprintB) return "bullish_engulfing";
+  if (isBearishEngulfing(prev, curr, tol).detected && hasInstitutionalFootprintS) return "bearish_engulfing";
 
   // Single-candle patterns (require institutional footprint)
-  if (isHammer(prev, curr).detected && hasInstitutionalFootprintB) return "hammer";
-  if (isShootingStar(prev, curr).detected && hasInstitutionalFootprintS) return "shooting_star";
+  if (isHammer(prev, curr, tol).detected && hasInstitutionalFootprintB) return "hammer";
+  if (isShootingStar(prev, curr, tol).detected && hasInstitutionalFootprintS) return "shooting_star";
 
   // Standalone indecision pattern (no footprint required — it's a warning signal)
-  if (isDoji(curr).detected) return "doji";
+  if (isDoji(curr, tol).detected) return "doji";
 
   return null;
 }
