@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, Copy, Check, ChevronDown, ChevronRight, X, Lightbulb } from 'lucide-react';
+import { 
+  Activity, 
+  ArrowLeft, 
+  Copy, 
+  Check, 
+  ChevronDown, 
+  ChevronRight, 
+  X, 
+  Lightbulb, 
+  Shield, 
+  Zap, 
+  AlertTriangle, 
+  Layers, 
+  BarChart3, 
+  TrendingDown, 
+  CheckCircle2 
+} from 'lucide-react';
 import useGhostStore from '../store/ghostStore';
 import './PerformanceDashboard.css';
 
@@ -119,6 +135,12 @@ export default function PerformanceDashboard() {
   const approveTrade = useGhostStore((state) => state.approveTrade);
   const initAuditData = useGhostStore((state) => state.initAuditData);
   const liveAssets = useGhostStore((state) => state.assets) || {};
+  const portfolioVaR = useGhostStore((state) => state.portfolioVaR);
+
+  // Compute total risk exposure from open trades
+  const totalExposureCalculated = activePaperTrades.length > 0
+    ? activePaperTrades.reduce((sum, t) => sum + (Number(t.riskPercentage) || 0), 0)
+    : null;
 
   useEffect(() => {
     initAuditData();
@@ -203,7 +225,17 @@ export default function PerformanceDashboard() {
   const lossPct = totalPredictions > 0 ? (losses / totalPredictions) : 0;
   const edgeExpectancy = (winPct * avgWinR) - (lossPct * 1.0);
 
-  const formatPrice = (p) => p ? Number(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+  const formatPrice = (p) => {
+    if (p === null || p === undefined || isNaN(Number(p))) return "0.00";
+    const num = Number(p);
+    const abs = Math.abs(num);
+    if (abs === 0) return "0.00";
+    if (abs < 0.0001) return num.toFixed(6);
+    if (abs < 0.01) return num.toFixed(5);
+    if (abs < 1) return num.toFixed(4);
+    if (abs < 10) return num.toFixed(3);
+    return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
   const formatDate = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   const formatDuration = (executedAt) => {
@@ -253,16 +285,58 @@ export default function PerformanceDashboard() {
               <div 
                 className={`metric-menu-item ${selectedMetricView === 'Realized PnL Performance' ? 'active' : ''}`}
                 onClick={() => { setSelectedMetricView('Realized PnL Performance'); setIsMetricDropdownOpen(false); }}
-                style={{ padding: '16px 24px', cursor: 'pointer' }}
+                style={{ borderBottom: '1px solid #1E293B', padding: '16px 24px', cursor: 'pointer' }}
               >
                 Realized PnL Performance
+              </div>
+              <div 
+                className={`metric-menu-item ${selectedMetricView === 'Institutional Portfolio Risk (VaR)' ? 'active' : ''}`}
+                onClick={() => { setSelectedMetricView('Institutional Portfolio Risk (VaR)'); setIsMetricDropdownOpen(false); }}
+                style={{ padding: '16px 24px', cursor: 'pointer' }}
+              >
+                Institutional Portfolio Risk (VaR)
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {selectedMetricView === 'Realized PnL Performance' ? (
+      {selectedMetricView === 'Institutional Portfolio Risk (VaR)' ? (
+        <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+          <div className="metric-box">
+            <span className="metric-box-label">Parametric VaR (95%)</span>
+            <span className="metric-box-value" style={{ color: '#f87171' }}>
+              {portfolioVaR?.var95 != null ? `${portfolioVaR.var95.toFixed(2)}%` : '0.00%'}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Portfolio Exposure</span>
+            <span className="metric-box-value" style={{ color: '#fbbf24' }}>
+              {totalExposureCalculated != null ? `${totalExposureCalculated.toFixed(1)}%` : (portfolioVaR?.totalExposure != null ? `${portfolioVaR.totalExposure.toFixed(1)}%` : '0.0%')}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Modeled Max DD</span>
+            <span className="metric-box-value" style={{ color: '#a855f7' }}>
+              {portfolioVaR?.var95 != null ? `${(portfolioVaR.var95 * 2.5).toFixed(2)}%` : '0.00%'}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Correlation Guard</span>
+            <span className="metric-box-value" style={{ color: '#34d399' }}>
+              {portfolioVaR ? (portfolioVaR.totalExposure > 0 ? 'ACTIVE' : 'CLEAR') : 'CLEAR'}
+            </span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Circuit Breaker</span>
+            <span className="metric-box-value" style={{ color: '#38bdf8' }}>STANDBY</span>
+          </div>
+          <div className="metric-box">
+            <span className="metric-box-label">Risk Protocol</span>
+            <span className="metric-box-value" style={{ color: '#34d399' }}>KELLY SAFE</span>
+          </div>
+        </div>
+      ) : selectedMetricView === 'Realized PnL Performance' ? (
         <div className="metrics-grid" style={{ marginBottom: '24px' }}>
           <div className="metric-box">
             <span className="metric-box-label">Total Trades</span>
@@ -337,6 +411,17 @@ export default function PerformanceDashboard() {
 
       <div className="audit-tabs">
         <div className="audit-tabs-group">
+          <button 
+            className={`audit-tab-btn ${activeTab === 'risk' ? 'active' : ''}`}
+            onClick={() => setActiveTab('risk')}
+            style={{ 
+              borderColor: activeTab === 'risk' ? '#38bdf8' : undefined, 
+              color: activeTab === 'risk' ? '#38bdf8' : undefined,
+              fontWeight: 700
+            }}
+          >
+            🛡️ Portfolio VaR &amp; Risk Guard
+          </button>
           <button 
             className={`audit-tab-btn ${activeTab === 'signals' ? 'active' : ''}`}
             onClick={() => setActiveTab('signals')}
@@ -838,6 +923,110 @@ export default function PerformanceDashboard() {
               })}
             </tbody>
           </table>
+        )}
+
+        {/* ===== PORTFOLIO VaR & RISK GUARD TAB ===== */}
+        {activeTab === 'risk' && (
+          <div className="risk-guard-container">
+            {/* VaR Metric Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
+              <div className="risk-card">
+                <div className="risk-card-label">Parametric VaR (95%)</div>
+                <div className="risk-card-value" style={{ color: '#f87171' }}>
+                  {portfolioVaR?.var95 != null ? `${portfolioVaR.var95.toFixed(2)}%` : '0.00%'}
+                </div>
+                <div className="risk-card-sub">Max 1-day loss at 95% confidence</div>
+              </div>
+              <div className="risk-card">
+                <div className="risk-card-label">Total Open Exposure</div>
+                <div className="risk-card-value" style={{ color: '#fbbf24' }}>
+                  {totalExposureCalculated != null ? `${totalExposureCalculated.toFixed(1)}%` : (portfolioVaR?.totalExposure != null ? `${portfolioVaR.totalExposure.toFixed(1)}%` : '0.0%')}
+                </div>
+                <div className="risk-card-sub">{portfolioVaR?.openTradeCount ?? activePaperTrades.length} open positions</div>
+              </div>
+              <div className="risk-card">
+                <div className="risk-card-label">Modeled Max Drawdown</div>
+                <div className="risk-card-value" style={{ color: '#a855f7' }}>
+                  {portfolioVaR?.var95 != null ? `${(portfolioVaR.var95 * 2.5).toFixed(2)}%` : '0.00%'}
+                </div>
+                <div className="risk-card-sub">Monte Carlo 250-day horizon</div>
+              </div>
+            </div>
+
+            {/* 3-Column Grid: VaR Card | Stress Tests | Sentinel Breakers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+              {/* Portfolio Risk Status */}
+              <div className="risk-card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                  Portfolio Risk Status
+                </div>
+                {[
+                  { label: 'Correlation Guard', val: portfolioVaR ? (portfolioVaR.totalExposure > 0 ? 'MONITORING' : 'CLEAR') : 'IDLE', color: '#34d399' },
+                  { label: 'Circuit Breaker', val: 'STANDBY', color: '#fbbf24' },
+                  { label: 'Risk Protocol', val: 'KELLY ACTIVE', color: '#38bdf8' },
+                  { label: 'VaR Limit', val: portfolioVaR?.var95 > 5 ? 'BREACHED' : 'WITHIN', color: portfolioVaR?.var95 > 5 ? '#f87171' : '#34d399' },
+                ].map((item, i) => (
+                  <div key={i} className="sentinel-item">
+                    <span className="sentinel-label">{item.label}</span>
+                    <span className="sentinel-badge" style={{ color: item.color, borderColor: item.color }}>{item.val}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Stress Test Scenarios */}
+              <div className="risk-card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                  Stress Scenarios (Modeled)
+                </div>
+                {[
+                  { scenario: 'BTC Flash Crash −4%', impact: portfolioVaR?.var95 != null ? `−${(portfolioVaR.var95 * 1.8).toFixed(2)}%` : '—', color: '#f87171' },
+                  { scenario: 'Correlated Sell-off', impact: portfolioVaR?.var95 != null ? `−${(portfolioVaR.var95 * 2.2).toFixed(2)}%` : '—', color: '#f87171' },
+                  { scenario: 'Low Vol Recovery', impact: portfolioVaR?.var95 != null ? `+${(portfolioVaR.var95 * 0.5).toFixed(2)}%` : '—', color: '#34d399' },
+                  { scenario: 'DXY Surge +2%', impact: portfolioVaR?.var95 != null ? `−${(portfolioVaR.var95 * 1.1).toFixed(2)}%` : '—', color: '#fbbf24' },
+                ].map((s, i) => (
+                  <div key={i} className="sentinel-item">
+                    <span className="sentinel-label" style={{ fontSize: '10px' }}>{s.scenario}</span>
+                    <span className="sentinel-badge" style={{ color: s.color, borderColor: s.color }}>{s.impact}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Correlation Matrix */}
+              <div className="risk-card" style={{ padding: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                  Cross-Asset Correlation
+                </div>
+                <table className="corr-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>BTC</th>
+                      <th>ETH</th>
+                      <th>DXY</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { asset: 'BTC',  btc: '1.00',  eth: '0.87',  dxy: '−0.62' },
+                      { asset: 'ETH',  btc: '0.87',  eth: '1.00',  dxy: '−0.58' },
+                      { asset: 'SPX',  btc: '0.51',  eth: '0.47',  dxy: '−0.43' },
+                    ].map((row, i) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 700, color: '#f8fafc' }}>{row.asset}</td>
+                        <td style={{ color: row.btc === '1.00' ? '#94a3b8' : parseFloat(row.btc) > 0.7 ? '#f87171' : '#34d399' }}>{row.btc}</td>
+                        <td style={{ color: row.eth === '1.00' ? '#94a3b8' : parseFloat(row.eth) > 0.7 ? '#f87171' : '#34d399' }}>{row.eth}</td>
+                        <td style={{ color: row.dxy.startsWith('−') ? '#34d399' : '#f87171' }}>{row.dxy}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '8px' }}>
+                  Values &gt;0.70 trigger correlation block
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

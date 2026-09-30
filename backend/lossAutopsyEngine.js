@@ -209,7 +209,13 @@ export async function performAutopsy(signal) {
     return { category, categorySource, description, ticker: autopsyDoc.ticker, quantitativeFactors };
   } catch (err) {
     console.error('[AUTOPSY] Failed to perform autopsy:', err.message);
-    return null;
+    try {
+      const { category, source: categorySource } = classifyLossCategory(signal);
+      const description = LOSS_CATEGORIES[category] || LOSS_CATEGORIES.UNKNOWN;
+      return { category, categorySource, description, ticker: signal?.ticker || 'UNKNOWN', error: err.message };
+    } catch (_) {
+      return null;
+    }
   }
 }
 

@@ -181,6 +181,7 @@ export async function generateSignal(ticker, candles, options = {}) {
   const volResult = volumeAnalysis(votingCandles);
   const sma20 = sma(votingCloses, 20);
   const sma50 = sma(votingCloses, 50);
+  const sma200Voting = votingCloses.length >= 100 ? sma(votingCloses, Math.min(200, votingCloses.length)) : null;
   const sma200 = sma(closes, 200); // SMA200 stays on daily — structural level
   const vwapResult = vwap(votingCandles);
 
@@ -313,12 +314,13 @@ export async function generateSignal(ticker, candles, options = {}) {
   // FIXED: Full and Partial MA votes are now mutually exclusive to prevent double-voting.
   // Previously, both could fire simultaneously giving MAs 3/7 votes (43% of total).
   let fullMaMatched = false;
-  if (sma20 && sma50 && sma200) {
-    if (sma20 > sma50 && sma50 > sma200 && currentPrice > sma20) {
+  const baselineMa200 = sma200Voting || sma200;
+  if (sma20 && sma50 && baselineMa200) {
+    if (sma20 > sma50 && sma50 > baselineMa200 && currentPrice > sma20) {
       directionVotes.BULLISH += 2;
       reasons.push('SMA alignment: Golden Cross (SMA20 > SMA50 > SMA200)');
       fullMaMatched = true;
-    } else if (sma20 < sma50 && sma50 < sma200 && currentPrice < sma20) {
+    } else if (sma20 < sma50 && sma50 < baselineMa200 && currentPrice < sma20) {
       directionVotes.BEARISH += 2;
       reasons.push('SMA alignment: Death Cross (SMA20 < SMA50 < SMA200)');
       fullMaMatched = true;

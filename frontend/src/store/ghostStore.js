@@ -140,6 +140,7 @@ const useGhostStore = create(
       promptLogs: [],
       aiSignals: [],
       systemPerformance: null,
+      portfolioVaR: null,
 
 
       initAuditData: async () => {
@@ -155,7 +156,8 @@ const useGhostStore = create(
               closedPaperTrades: data.closedPaperTrades || [],
               promptLogs: data.promptLogs || [],
               aiSignals: data.aiSignals || [],
-              systemPerformance: data.systemPerformance || null
+              systemPerformance: data.systemPerformance || null,
+              portfolioVaR: data.portfolioVaR || null
             });
           }
         } catch (e) {

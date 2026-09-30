@@ -214,13 +214,79 @@ export default function InstitutionalReport({ content, isStreaming }) {
         </div>
       )}
 
-      {/* 5.LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX CARD */}
+      {/* 5.LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX CARD — VISUAL DOM LADDER */}
       {orderBookText && (
         <div className="report-card order-book-card">
           <div className="report-card-header" style={{ color: '#fbbf24' }}>
             <Layers size={16} />
-            <span>LEVEL 2 ORDER BOOK & ORDER FLOW MATRIX</span>
+            <span>LEVEL 2 ORDER BOOK &amp; ORDER FLOW MATRIX</span>
           </div>
+
+          {/* Parse OBI % from the text for visual bar */}
+          {(() => {
+            const obiMatch = orderBookText.match(/OBI[^:]*:\s*([\+\-]?\d+\.?\d*)/i) || orderBookText.match(/([\+\-]?\d+\.?\d*)%/);
+            const rawObi = obiMatch ? parseFloat(obiMatch[1]) : 0;
+            const clampedObi = Math.min(100, Math.max(-100, isNaN(rawObi) ? 0 : rawObi));
+            const bidWidth = Math.max(0, (50 + clampedObi / 2)).toFixed(0);
+            const askWidth = Math.max(0, (50 - clampedObi / 2)).toFixed(0);
+            const isBidDominant = clampedObi >= 0;
+
+            const bidWallMatch = orderBookText.match(/Bid Wall[^@:]*[@:]\s*\$?([\d.,]+)/i) || orderBookText.match(/buy wall[^$]*\$?([\d.,]+)/i);
+            const askWallMatch = orderBookText.match(/Ask Wall[^@:]*[@:]\s*\$?([\d.,]+)/i) || orderBookText.match(/sell wall[^$]*\$?([\d.,]+)/i);
+
+            return (
+              <div style={{ padding: '10px 0', marginBottom: '8px' }}>
+                {/* Visual Depth Bar */}
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 2, background: '#34d399', display: 'inline-block' }}></span>
+                      BID DEPTH (BUY PRESSURE)
+                    </span>
+                    <span style={{ fontWeight: 700, color: isBidDominant ? '#34d399' : '#f87171', fontFamily: 'monospace' }}>
+                      OBI: {clampedObi >= 0 ? '+' : ''}{clampedObi.toFixed(1)}%
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      ASK DEPTH (SELL PRESSURE)
+                      <span style={{ width: 8, height: 8, borderRadius: 2, background: '#f87171', display: 'inline-block' }}></span>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', height: '10px', borderRadius: '5px', overflow: 'hidden', background: '#1e293b' }}>
+                    <div style={{ width: `${bidWidth}%`, background: 'linear-gradient(90deg, #10b981, #34d399)', transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }} />
+                    <div style={{ flex: 1, background: 'linear-gradient(90deg, #ef4444, #f87171)', transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#64748b', marginTop: '3px' }}>
+                    <span>{bidWidth}% Buyers</span>
+                    <span>{askWidth}% Sellers</span>
+                  </div>
+                </div>
+
+                {/* Bid Wall & Ask Wall callouts */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                  <div style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: '8px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#34d399', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                      Institutional Bid Wall
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', fontFamily: 'monospace' }}>
+                      {bidWallMatch ? `$${bidWallMatch[1]}` : 'Active Support'}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Whale Buy Floor</div>
+                  </div>
+                  <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#f87171', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                      Institutional Ask Wall
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', fontFamily: 'monospace' }}>
+                      {askWallMatch ? `$${askWallMatch[1]}` : 'Active Resistance'}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Whale Sell Ceiling</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Full L2 itemized details */}
           <ul className="report-list mono-list">
             {orderBookList.map((item, idx) => (
               <li key={idx} className="level-item stream-anim">

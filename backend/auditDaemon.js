@@ -344,19 +344,33 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
     if (isExpired) {
       // High-water mark check: if price achieved meaningful positive move during window
       const maxUpMove = ((maxObservedPrice - currentPrice) / currentPrice) * 100;
-      // FIXED: High-water mark threshold raised from 1.0% to 1.5%
       if (maxUpMove >= 0.8) {
-        return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% ($${maxObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
+        return { correct: true, reason: `Directional bias confirmed via high-water mark — price reached +${maxUpMove.toFixed(1)}% (${maxObservedPrice.toFixed(4)}) during the audit window (entry: ${currentPrice.toFixed(4)})` };
       }
-      // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
       if (percentChange >= 0.3) {
         return { correct: true, reason: `Directional bias confirmed at expiration — +${percentChange.toFixed(2)}% in the predicted direction` };
-      } else {
-        return { 
-          correct: false, 
-          reason: buildErrorContext(`${ticker} failed to hold bullish thesis by expiration — closed at $${actualPrice.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (${percentChange.toFixed(1)}%)`)
-        };
       }
+
+      // Check whether trade is still within maximum 48h lifecycle and hasn't hit Stop Loss
+      const tradeAgeMs = Date.now() - new Date(signal.timestamp || Date.now()).getTime();
+      const MAX_TRADE_LIFECYCLE_MS = 48 * 3600000; // 48 hours for swing setups
+      
+      if (tradeAgeMs < MAX_TRADE_LIFECYCLE_MS && (!invalidationLevel || minObservedPrice > invalidationLevel)) {
+        // Trade has NOT hit Stop Loss and still has lifecycle time to reach target — keep PENDING!
+        return { correct: 'PENDING', reason: `${ticker} is holding above Stop Loss (${invalidationLevel ? invalidationLevel.toFixed(4) : 'N/A'}) — continuing to track real-time price action` };
+      }
+      
+      // If 48h lifecycle completed without hitting SL:
+      if (!invalidationLevel || minObservedPrice > invalidationLevel) {
+        if (Math.abs(percentChange) <= 1.5) {
+          return { correct: 'SCRATCH', reason: `${ticker} completed full 48h window without hitting Stop Loss — consolidated flat (${percentChange.toFixed(2)}%)` };
+        }
+      }
+
+      return { 
+        correct: false, 
+        reason: buildErrorContext(`${ticker} failed bullish thesis — closed at ${actualPrice.toFixed(4)} vs entry ${currentPrice.toFixed(4)} (${percentChange.toFixed(1)}%)`)
+      };
     }
     
     // 5. Still Pending
@@ -393,19 +407,33 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
     if (isExpired) {
       // High-water mark check: if price achieved meaningful downward move during window
       const maxDownMove = ((currentPrice - minObservedPrice) / currentPrice) * 100;
-      // FIXED: High-water mark threshold raised from 1.0% to 1.5%
       if (maxDownMove >= 0.8) {
-        return { correct: true, reason: `Directional bias confirmed via high-water mark — price dropped -${maxDownMove.toFixed(1)}% ($${minObservedPrice.toFixed(4)}) during the audit window (entry: $${currentPrice.toFixed(4)})` };
+        return { correct: true, reason: `Directional bias confirmed via high-water mark — price dropped -${maxDownMove.toFixed(1)}% (${minObservedPrice.toFixed(4)}) during the audit window (entry: ${currentPrice.toFixed(4)})` };
       }
-      // FIXED: Require minimum 0.5% directional move to count as WIN on expiration
       if (percentChange <= -0.3) {
         return { correct: true, reason: `Directional bias confirmed at expiration — ${Math.abs(percentChange).toFixed(2)}% in the predicted direction` };
-      } else {
-        return { 
-          correct: false, 
-          reason: buildErrorContext(`${ticker} failed to hold bearish thesis by expiration — closed at $${actualPrice.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (+${percentChange.toFixed(1)}%)`)
-        };
       }
+
+      // Check whether trade is still within maximum 48h lifecycle and hasn't hit Stop Loss
+      const tradeAgeMs = Date.now() - new Date(signal.timestamp || Date.now()).getTime();
+      const MAX_TRADE_LIFECYCLE_MS = 48 * 3600000; // 48 hours for swing setups
+      
+      if (tradeAgeMs < MAX_TRADE_LIFECYCLE_MS && (!invalidationLevel || maxObservedPrice < invalidationLevel)) {
+        // Trade has NOT hit Stop Loss and still has lifecycle time to reach target — keep PENDING!
+        return { correct: 'PENDING', reason: `${ticker} is holding below Stop Loss (${invalidationLevel ? invalidationLevel.toFixed(4) : 'N/A'}) — continuing to track real-time price action` };
+      }
+      
+      // If 48h lifecycle completed without hitting SL:
+      if (!invalidationLevel || maxObservedPrice < invalidationLevel) {
+        if (Math.abs(percentChange) <= 1.5) {
+          return { correct: 'SCRATCH', reason: `${ticker} completed full 48h window without hitting Stop Loss — consolidated flat (+${percentChange.toFixed(2)}%)` };
+        }
+      }
+
+      return { 
+        correct: false, 
+        reason: buildErrorContext(`${ticker} failed bearish thesis — closed at ${actualPrice.toFixed(4)} vs entry ${currentPrice.toFixed(4)} (+${percentChange.toFixed(1)}%)`)
+      };
     }
 
     // 5. Still Pending
@@ -459,7 +487,7 @@ function evaluateSignal(signal, actualPrice, maxObservedPrice = actualPrice, min
 export async function verifySignalWithCandles(signal) {
   const ticker = signal.ticker || 'UNKNOWN';
   const startTime = new Date(signal.timestamp).getTime();
-  const fallbackDue = startTime + 4 * 60 * 60 * 1000;
+  const fallbackDue = startTime + 24 * 60 * 60 * 1000;
   const endTime = new Date(signal.auditDue || fallbackDue).getTime();
   
   let cleanTicker = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -619,10 +647,17 @@ export async function verifySignalWithCandles(signal) {
             reason: `Bullish thesis confirmed at window close (+${pct.toFixed(2)}%)`
           };
         }
+        if (!slBreached && Math.abs(pct) <= 1.5) {
+          return {
+            correct: 'SCRATCH',
+            actualPrice: finalClose,
+            reason: `${ticker} held above Stop Loss through entire candle playback window — ended flat (${pct.toFixed(2)}%) without invalidation`
+          };
+        }
         return {
           correct: false,
           actualPrice: finalClose,
-          reason: `Failed bullish thesis — closed at $${finalClose.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (${pct.toFixed(2)}%)`
+          reason: `Failed bullish thesis — closed at ${finalClose.toFixed(4)} vs entry ${currentPrice.toFixed(4)} (${pct.toFixed(2)}%)`
         };
       } else if (signal.direction === 'BEARISH') {
         const pct = ((currentPrice - finalClose) / currentPrice) * 100;
@@ -633,10 +668,17 @@ export async function verifySignalWithCandles(signal) {
             reason: `Bearish thesis confirmed at window close (+${pct.toFixed(2)}% directional gain)`
           };
         }
+        if (!slBreached && Math.abs(pct) <= 1.5) {
+          return {
+            correct: 'SCRATCH',
+            actualPrice: finalClose,
+            reason: `${ticker} held below Stop Loss through entire candle playback window — ended flat (+${pct.toFixed(2)}%) without invalidation`
+          };
+        }
         return {
           correct: false,
           actualPrice: finalClose,
-          reason: `Failed bearish thesis — closed at $${finalClose.toFixed(4)} vs entry $${currentPrice.toFixed(4)} (-${pct.toFixed(2)}%)`
+          reason: `Failed bearish thesis — closed at ${finalClose.toFixed(4)} vs entry ${currentPrice.toFixed(4)} (-${pct.toFixed(2)}%)`
         };
       }
     }
@@ -726,15 +768,21 @@ async function runAuditCycle() {
               await resolveSignal(signal._id, 'INCORRECT', evaluation.reason, actualPrice);
             } else if (evaluation.correct === true) {
               await resolveSignal(signal._id, 'CORRECT', evaluation.reason, actualPrice);
+            } else if (evaluation.correct === 'SCRATCH') {
+              await resolveSignal(signal._id, 'SCRATCH', evaluation.reason, actualPrice);
             } else {
               // Attempt candle playback before ever falling back
               const candleRes = await verifySignalWithCandles(signal);
               if (candleRes) {
                 if (candleRes.correct === true) {
                   await resolveSignal(signal._id, 'CORRECT', candleRes.reason, candleRes.actualPrice);
-                } else {
+                } else if (candleRes.correct === 'SCRATCH') {
+                  await resolveSignal(signal._id, 'SCRATCH', candleRes.reason, candleRes.actualPrice);
+                } else if (candleRes.correct === false) {
                   await writeErrorVector(signal.ticker, candleRes.reason, signal._id);
                   await resolveSignal(signal._id, 'INCORRECT', candleRes.reason, candleRes.actualPrice);
+                } else {
+                  await resolveSignal(signal._id, 'INCONCLUSIVE', candleRes.reason, candleRes.actualPrice);
                 }
               } else {
                 await resolveSignal(signal._id, 'INCONCLUSIVE', evaluation.reason, actualPrice);

@@ -810,7 +810,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
     const currentScore = signal.score || 0;
 
     // Auto-learning: Read adaptive threshold from recent trade performance
-    let adaptiveMinScore = 35; // Base minimum
+    let adaptiveMinScore = 35; // Base minimum — enables early base/reversal entry before trend is exhausted
     try {
       const db = await getDb();
       const recentTrades = await db.collection('paper_trades').find({
@@ -822,17 +822,17 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
         const winRate = wins / recentTrades.length;
         
         if (winRate < 0.40) {
-          adaptiveMinScore = 50; // Bad streak -> be very selective
-          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 40% → raising threshold to 50`);
+          adaptiveMinScore = 48; // Bad streak -> be more selective
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 40% → raising threshold to 48`);
         } else if (winRate < 0.50) {
-          adaptiveMinScore = 42; // Below average -> be more selective
-          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 50% → raising threshold to 42`);
+          adaptiveMinScore = 40; // Below average -> slightly stricter
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% < 50% → raising threshold to 40`);
         } else if (winRate >= 0.65) {
-          adaptiveMinScore = 30; // Great streak -> capture more trades
-          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% >= 65% → lowering threshold to 30`);
+          adaptiveMinScore = 32; // Good streak -> capture bottom turns early
+          console.log(`[AUTO-LEARN] Win rate ${(winRate*100).toFixed(0)}% >= 65% → baseline threshold 32`);
         }
 
-        // Check loss_autopsy for repeated loss patterns → increase threshold further
+        // Check loss_autopsy for repeated loss patterns → increase threshold slightly
         const recentAutopsies = await db.collection('loss_autopsy').find({
           timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24h
         }).toArray();
@@ -845,8 +845,8 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
           });
           const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0];
           if (topCategory && topCategory[1] >= 3) {
-            adaptiveMinScore = Math.min(60, adaptiveMinScore + 10); // Repeated same error → go stricter
-            console.log(`[AUTO-LEARN] Repeated ${topCategory[0]} losses (${topCategory[1]}x in 24h) → threshold raised to ${adaptiveMinScore}`);
+            adaptiveMinScore = Math.min(55, adaptiveMinScore + 8);
+            console.log(`[AUTO-LEARN] Repeated ${topCategory[0]} losses (${topCategory[1]}x in 24h) → threshold adjusted to ${adaptiveMinScore}`);
           }
         }
       }
@@ -854,20 +854,20 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       console.warn('[AUTO-LEARN] Could not read adaptive threshold:', autoLearnErr.message);
     }
 
-    // TIERED EXECUTION: Score determines trade/shield AND position size multiplier
+    // TIERED EXECUTION: Allows early base entries (35+) with micro sizing, scaling up with confluence
     let scoreTier = 'REJECT';
     let scoreSizeMultiplier = 0;
     
     if (currentScore >= adaptiveMinScore && signal.action !== 'SHIELD_MODE') {
-      if (currentScore >= 55) {
+      if (currentScore >= 60) {
         scoreTier = 'HIGH_CONFLUENCE';
         scoreSizeMultiplier = 1.25;
       } else if (currentScore >= 45) {
         scoreTier = 'STANDARD';
-        scoreSizeMultiplier = 0.75;
+        scoreSizeMultiplier = 0.85;
       } else {
-        scoreTier = 'MICRO';
-        scoreSizeMultiplier = 0.3;
+        scoreTier = 'EARLY_BASE'; // Catches bottom reversals / early base before breakout
+        scoreSizeMultiplier = 0.40;
       }
       
       if (!signal.kelly || signal.kelly.action === 'SHIELD_MODE') {
@@ -1116,7 +1116,7 @@ async function executePhase3Intercept(fullText, rawFullText, p3Context, clientWs
       }
     }
 
-    const auditWindowMs = tradeTimeframe === 'SWING' ? 48 * 3600000 : tradeTimeframe === 'POSITION' ? 7 * 24 * 3600000 : 4 * 3600000;
+    const auditWindowMs = tradeTimeframe === 'POSITION' ? 7 * 24 * 3600000 : tradeTimeframe === 'SWING' ? 48 * 3600000 : 24 * 3600000;
     const auditDue = new Date(Date.now() + auditWindowMs);
 
     const signalData = {

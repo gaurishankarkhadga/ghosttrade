@@ -705,3 +705,112 @@
 .verdict-card .clean-proof-list li::before { color: #34D399; }
 .levels-card .clean-proof-list li::before { color: #FBBF24; }
 .reasoning-card .clean-proof-list li::before { color: #818CF8; }
+
+/* ========================================================
+   INSTITUTIONAL RISK & CORRELATION GUARD STYLES
+   ======================================================== */
+
+.risk-guard-container {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px 20px;
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.risk-card:hover {
+  border-color: rgba(56, 189, 248, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.risk-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+
+.risk-card-value {
+  font-size: 26px;
+  font-weight: 800;
+  font-family: monospace;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.risk-card-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.sentinel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sentinel-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sentinel-label {
+  font-size: 12px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.sentinel-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: monospace;
+}
+
+.corr-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+
+.corr-table th,
+.corr-table td {
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.corr-table th {
+  color: #94a3b8;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.corr-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.corr-table td:first-child,
+.corr-table th:first-child {
+  text-align: left;
+  padding-left: 0;
+}
